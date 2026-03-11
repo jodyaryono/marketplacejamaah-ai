@@ -1,0 +1,5 @@
+@php
+if (!is_dir(resource_path('views/public'))) {
+    // ensure directory
+}
+@endphp
