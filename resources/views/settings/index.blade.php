@@ -104,39 +104,59 @@
                     <span style="font-weight:600;color:#111827;font-size:.9rem;"><i class="bi bi-key me-2" style="color:#92400e;"></i>Konfigurasi API</span>
                 </div>
                 <div class="card-body">
-                    <div class="mb-4">
+                    @php
+                        $hasWhacenter = !empty($settings['whacenter_device_id']) || !empty($settings['whacenter_url']);
+                        $hasGemini    = !empty($settings['gemini_key']);
+                        $hasAnyApi    = $hasWhacenter || $hasGemini;
+                    @endphp
+
+                    @if(!$hasAnyApi)
+                        <p style="color:#9ca3af;font-size:.82rem;margin:0;">Tidak ada konfigurasi API yang aktif.</p>
+                    @endif
+
+                    @if($hasWhacenter)
+                    <div class="{{ $hasGemini ? 'mb-4' : '' }}">
                         <div class="d-flex align-items-center gap-2 mb-2">
                             <i class="bi bi-whatsapp" style="color:#25d166;font-size:1rem;"></i>
                             <span style="font-weight:600;color:#111827;font-size:.875rem;">WhaCentre</span>
                         </div>
                         <div class="p-3 rounded" style="background:#f8fafc;">
-                            <div class="mb-2">
+                            @if(!empty($settings['whacenter_device_id']))
+                            <div class="{{ !empty($settings['whacenter_url']) ? 'mb-2' : '' }}">
                                 <div style="font-size:.7rem;color:#6b7280;text-transform:uppercase;">Device ID</div>
                                 <code style="font-size:.78rem;color:#374151;">{{ $settings['whacenter_device_id'] }}</code>
                             </div>
+                            @endif
+                            @if(!empty($settings['whacenter_url']))
                             <div>
                                 <div style="font-size:.7rem;color:#6b7280;text-transform:uppercase;">API URL</div>
                                 <code style="font-size:.78rem;color:#374151;">{{ $settings['whacenter_url'] }}</code>
                             </div>
+                            @endif
                         </div>
                     </div>
+                    @endif
 
+                    @if($hasGemini)
                     <div>
                         <div class="d-flex align-items-center gap-2 mb-2">
                             <i class="bi bi-stars" style="color:#818cf8;font-size:1rem;"></i>
                             <span style="font-weight:600;color:#111827;font-size:.875rem;">Google Gemini AI</span>
                         </div>
                         <div class="p-3 rounded" style="background:#f8fafc;">
-                            <div class="mb-2">
+                            <div class="{{ !empty($settings['gemini_model']) ? 'mb-2' : '' }}">
                                 <div style="font-size:.7rem;color:#6b7280;text-transform:uppercase;">API Key</div>
                                 <code style="font-size:.78rem;color:#374151;">{{ Str::mask($settings['gemini_key'], '*', 6, -4) }}</code>
                             </div>
+                            @if(!empty($settings['gemini_model']))
                             <div>
                                 <div style="font-size:.7rem;color:#6b7280;text-transform:uppercase;">Model</div>
                                 <code style="font-size:.78rem;color:#374151;">{{ $settings['gemini_model'] }}</code>
                             </div>
+                            @endif
                         </div>
                     </div>
+                    @endif
                 </div>
             </div>
 
