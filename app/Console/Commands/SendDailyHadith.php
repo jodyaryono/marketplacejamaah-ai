@@ -16,7 +16,8 @@ class SendDailyHadith extends Command
 
     public function handle(WhacenterService $wa): int
     {
-        if (Setting::get('hadith_enabled', 'true') !== 'true') {
+        $enabled = Setting::get('hadith_enabled', 'true');
+        if (!in_array($enabled, ['true', '1', 'yes'], true)) {
             $this->info('Hadith sending is disabled in settings.');
             return self::SUCCESS;
         }

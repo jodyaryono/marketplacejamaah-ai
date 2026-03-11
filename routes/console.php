@@ -9,3 +9,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('gateway:verify --quiet-ok')->everyThirtyMinutes();
+
+Schedule::command('hadith:send')->everyMinute();
