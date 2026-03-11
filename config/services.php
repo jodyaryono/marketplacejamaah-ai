@@ -33,6 +33,7 @@ return [
         'url' => env('WA_GATEWAY_URL', 'https://integrasi-wa.jodyaryono.id/api'),
         'token' => env('WA_GATEWAY_TOKEN', ''),
         'phone_id' => env('WA_GATEWAY_PHONE_ID', ''),
+        'group_id' => env('WA_GATEWAY_GROUP_ID', ''),
         'admin_phone' => env('WA_ADMIN_PHONE', '6285719195627'),
     ],
     'whatsapp' => [

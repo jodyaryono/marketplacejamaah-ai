@@ -171,6 +171,19 @@ class WhacenterService
         return $result['data']['results'] ?? [];
     }
 
+    /**
+     * Get all group members (phone numbers + roles) from the gateway.
+     * Returns array of ['number' => '628...', 'role' => 'member|admin|superadmin'].
+     */
+    public function getGroupMembers(string $groupId): array
+    {
+        $result = $this->gatewayGet('/group-members', [
+            'phone_id' => $this->phoneId,
+            'group_id' => $groupId,
+        ]);
+        return $result['data']['members'] ?? [];
+    }
+
     // ── Gateway HTTP helpers ──────────────────────────────────────────────
 
     private function gatewayGet(string $endpoint, array $params = []): array
