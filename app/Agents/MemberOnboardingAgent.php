@@ -478,10 +478,25 @@ class MemberOnboardingAgent
                 return true;
             }
 
+            // Build chat history and known data — same pattern as handleDirectMessage
+            $chatHistory = $this->buildChatHistory($message->sender_number);
+
+            $knownInfo = [];
+            if ($contact->name && $contact->name !== $message->sender_number) {
+                $knownInfo[] = "nama: {$contact->name}";
+            }
+            if ($contact->address) {
+                $knownInfo[] = "kota: {$contact->address}";
+            }
+            if ($contact->member_role) {
+                $knownInfo[] = "role: {$contact->member_role}";
+            }
+            $knownStr = !empty($knownInfo) ? "\nDATA YANG SUDAH DIKETAHUI: " . implode(', ', $knownInfo) . "\nJANGAN tanyakan ulang info yang sudah ada!" : '';
+
             $promptTemplate = Setting::get('prompt_onboarding_approval', 'Admin {groupName}. {senderName} mau gabung. Jawab JSON.');
             $prompt = str_replace(
-                ['{groupName}', '{senderName}', '{replyText}'],
-                [$groupName, $senderName, $replyText],
+                ['{groupName}', '{senderName}', '{replyText}', '{knownStr}', '{chatHistory}'],
+                [$groupName, $senderName, $replyText, $knownStr, $chatHistory],
                 $promptTemplate
             );
 
@@ -497,6 +512,39 @@ class MemberOnboardingAgent
             $name = trim($parsed['name'] ?? '') ?: null;
             $kota = trim($parsed['kota'] ?? '') ?: null;
             $role = $parsed['role'] ?? null;
+
+            // Merge with existing contact data — don't lose what we already know
+            $name = $name ?: (($contact->name && $contact->name !== $message->sender_number) ? $contact->name : null);
+            $kota = $kota ?: ($contact->address ?: null);
+            $role = $role ?: ($contact->member_role ?: null);
+
+            // Save partial data incrementally so next message remembers
+            $partialUpdate = [];
+            if ($name && $name !== $contact->name)
+                $partialUpdate['name'] = $name;
+            if ($kota && $kota !== $contact->address)
+                $partialUpdate['address'] = $kota;
+            if ($role && $role !== $contact->member_role)
+                $partialUpdate['member_role'] = $role;
+            if (!empty($partialUpdate)) {
+                $contact->update($partialUpdate);
+            }
+
+            // Check if registration is complete (name + role required at minimum)
+            if (!($parsed['valid'] ?? false) || !$name || !$role) {
+                $reply = $parsed['reply'] ?? '';
+                if (!$reply) {
+                    if (!$name)
+                        $reply = 'Btw, boleh tau namanya siapa nih? 😊';
+                    elseif (!$kota)
+                        $reply = "Salam kenal *{$name}*! Tinggal di kota mana nih? 😄";
+                    else
+                        $reply = "Oke *{$name}*! Di grup ini ada jual beli, kamu tertarik jualan, belanja, atau dua-duanya? 😊";
+                }
+                $this->whacenter->sendMessage($message->sender_number, $reply);
+                $log->update(['status' => 'skipped', 'output_payload' => ['reason' => 'partial_data', 'parsed' => $parsed]]);
+                return true;
+            }
 
             // Approve the membership request via gateway (pass requesterJid for @lid accounts)
             $approved = false;
