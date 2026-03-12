@@ -282,18 +282,20 @@
                 </button>
                 @endif
             </div>
-            <div class="card-body p-0" style="max-height:320px;overflow-y:auto;">
-                @forelse($pendingContacts->take(8) as $pc)
+            <div class="card-body p-0" style="max-height:420px;overflow-y:auto;">
+                @forelse($pendingContacts as $pc)
                 @php
-                    $sc = match($pc->onboarding_status) {
-                        'pending' => ['color'=>'#d97706','bg'=>'#fef3c7','label'=>'Tunggu Balas'],
-                        'pending_seller_products' => ['color'=>'#059669','bg'=>'#ecfdf5','label'=>'Produk (S)'],
-                        'pending_buyer_products' => ['color'=>'#0ea5e9','bg'=>'#f0f9ff','label'=>'Produk (B)'],
-                        'pending_both_products' => ['color'=>'#7c3aed','bg'=>'#f5f3ff','label'=>'Produk (S+B)'],
+                    $isPendingGroup = str_starts_with($pc->onboarding_status ?? '', 'pending_group_approval:');
+                    $sc = match(true) {
+                        $isPendingGroup => ['color'=>'#ea580c','bg'=>'#fff7ed','label'=>'Minta Gabung'],
+                        $pc->onboarding_status === 'pending' => ['color'=>'#d97706','bg'=>'#fef3c7','label'=>'Tunggu Balas'],
+                        $pc->onboarding_status === 'pending_seller_products' => ['color'=>'#059669','bg'=>'#ecfdf5','label'=>'Produk (S)'],
+                        $pc->onboarding_status === 'pending_buyer_products' => ['color'=>'#0ea5e9','bg'=>'#f0f9ff','label'=>'Produk (B)'],
+                        $pc->onboarding_status === 'pending_both_products' => ['color'=>'#7c3aed','bg'=>'#f5f3ff','label'=>'Produk (S+B)'],
                         default => ['color'=>'#6b7280','bg'=>'#f3f4f6','label'=>'Belum DM'],
                     };
                 @endphp
-                <div class="d-flex gap-2 align-items-center px-3 py-2" style="{{ !$loop->last ? 'border-bottom:1px solid #fef9ee;' : '' }}">
+                <div class="d-flex gap-2 align-items-center px-3 py-2" id="pending-row-{{ $pc->id }}" style="{{ !$loop->last ? 'border-bottom:1px solid #fef9ee;' : '' }}">
                     <div style="width:30px;height:30px;background:{{ $sc['bg'] }};border:2px solid {{ $sc['color'] }}44;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
                         <i class="bi bi-person-fill" style="color:{{ $sc['color'] }};font-size:.65rem;"></i>
                     </div>
@@ -304,9 +306,17 @@
                         </div>
                         <span style="font-size:.62rem;color:#9ca3af;">{{ $pc->phone_number }} · {{ $pc->created_at->diffForHumans() }}</span>
                     </div>
-                    <button onclick="resendOnboarding({{ $pc->id }})" title="Kirim ulang DM" style="background:none;border:1.5px solid #fcd34d;color:#d97706;border-radius:6px;padding:2px 7px;font-size:.65rem;cursor:pointer;flex-shrink:0;">
-                        <i class="bi bi-send"></i>
-                    </button>
+                    <div class="d-flex gap-1 flex-shrink-0">
+                        <button onclick="approveContact({{ $pc->id }})" title="Approve" style="background:#ecfdf5;border:1.5px solid #6ee7b7;color:#059669;border-radius:6px;padding:2px 7px;font-size:.65rem;cursor:pointer;">
+                            <i class="bi bi-check-lg"></i>
+                        </button>
+                        <button onclick="rejectContact({{ $pc->id }})" title="Reject" style="background:#fef2f2;border:1.5px solid #fca5a5;color:#dc2626;border-radius:6px;padding:2px 7px;font-size:.65rem;cursor:pointer;">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                        <button onclick="resendOnboarding({{ $pc->id }})" title="Kirim ulang DM" style="background:none;border:1.5px solid #fcd34d;color:#d97706;border-radius:6px;padding:2px 7px;font-size:.65rem;cursor:pointer;">
+                            <i class="bi bi-send"></i>
+                        </button>
+                    </div>
                 </div>
                 @empty
                 <div class="text-center py-5" style="color:#9ca3af;font-size:.78rem;">
@@ -510,6 +520,48 @@ function resendAllOnboarding() {
         else { alert('❌ ' + (d.message || 'Gagal kirim')); }
     })
     .catch(() => alert('❌ Gagal mengirim, coba lagi.'));
+}
+
+function approveContact(contactId) {
+    if (!confirm('Approve kontak ini dan masukkan ke grup?')) return;
+    const row = document.getElementById('pending-row-' + contactId);
+    if (row) row.style.opacity = '0.5';
+    fetch(`/contacts/${contactId}/approve`, {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json', 'Content-Type': 'application/json' },
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            if (row) row.remove();
+            alert('✅ ' + d.message);
+        } else {
+            if (row) row.style.opacity = '1';
+            alert('❌ ' + (d.message || 'Gagal approve'));
+        }
+    })
+    .catch(() => { if (row) row.style.opacity = '1'; alert('❌ Gagal approve, coba lagi.'); });
+}
+
+function rejectContact(contactId) {
+    if (!confirm('Reject kontak ini? Kontak akan diblokir.')) return;
+    const row = document.getElementById('pending-row-' + contactId);
+    if (row) row.style.opacity = '0.5';
+    fetch(`/contacts/${contactId}/reject`, {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json', 'Content-Type': 'application/json' },
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            if (row) row.remove();
+            alert('✅ ' + d.message);
+        } else {
+            if (row) row.style.opacity = '1';
+            alert('❌ ' + (d.message || 'Gagal reject'));
+        }
+    })
+    .catch(() => { if (row) row.style.opacity = '1'; alert('❌ Gagal reject, coba lagi.'); });
 }
 </script>
 @endpush
