@@ -75,15 +75,14 @@ class BroadcastAgent
         $date = now()->toDateString();
         $groupId = $message->whatsapp_group_id;
 
-        AnalyticsDaily::updateOrCreate(
-            ['date' => $date, 'whatsapp_group_id' => $groupId],
-            []
+        $analytics = AnalyticsDaily::firstOrCreate(
+            ['date' => $date, 'whatsapp_group_id' => $groupId]
         );
 
-        $analytics = AnalyticsDaily::where('date', $date)->where('whatsapp_group_id', $groupId)->first();
-        $analytics->total_messages = Message::whereDate('created_at', $date)->when($groupId, fn($q) => $q->where('whatsapp_group_id', $groupId))->count();
-        $analytics->total_ads = Message::whereDate('created_at', $date)->where('is_ad', true)->when($groupId, fn($q) => $q->where('whatsapp_group_id', $groupId))->count();
-        $analytics->total_listings = \App\Models\Listing::whereDate('created_at', $date)->when($groupId, fn($q) => $q->where('whatsapp_group_id', $groupId))->count();
-        $analytics->save();
+        // Use increment to avoid full table recounts on every message
+        $analytics->increment('total_messages');
+        if ($message->is_ad) {
+            $analytics->increment('total_ads');
+        }
     }
 }
