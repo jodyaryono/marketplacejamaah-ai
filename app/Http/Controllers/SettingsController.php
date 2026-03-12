@@ -11,10 +11,15 @@ class SettingsController extends Controller
 {
     public function index()
     {
+        $rawKey = config('services.gemini.api_key', '');
+        $maskedKey = strlen($rawKey) > 8
+            ? substr($rawKey, 0, 6) . str_repeat('*', strlen($rawKey) - 8) . substr($rawKey, -2)
+            : str_repeat('*', strlen($rawKey));
+
         $settings = [
             'whacenter_device_id' => config('services.whacenter.device_id'),
             'whacenter_url' => config('services.whacenter.api_url'),
-            'gemini_key' => config('services.gemini.api_key'),
+            'gemini_key' => $maskedKey,
             'gemini_model' => config('services.gemini.model'),
             'app_url' => config('app.url'),
             'webhook_url' => url('/api/webhook/whacenter'),

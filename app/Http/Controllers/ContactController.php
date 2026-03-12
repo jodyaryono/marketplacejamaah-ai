@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Agents\MemberOnboardingAgent;
+use App\Jobs\SendOnboardingDmJob;
 use App\Models\Contact;
 use App\Services\WhacenterService;
 use Illuminate\Http\Request;
@@ -184,24 +185,15 @@ class ContactController extends Controller
             ->where('is_blocked', false)
             ->get();
 
-        $agent = app(MemberOnboardingAgent::class);
-        $sent = 0;
-        $failed = 0;
-
-        foreach ($pending as $contact) {
-            try {
-                $agent->resendOnboarding($contact);
-                $sent++;
-                // Small delay to avoid WA rate limiting
-                usleep(500000);
-            } catch (\Exception $e) {
-                $failed++;
-            }
+        $count = $pending->count();
+        foreach ($pending as $index => $contact) {
+            // Stagger dispatches by 5 seconds per contact to avoid WA rate limits
+            SendOnboardingDmJob::dispatch($contact->id)->delay(now()->addSeconds($index * 5));
         }
 
         return response()->json([
             'success' => true,
-            'message' => "Berhasil kirim ke {$sent} kontak" . ($failed > 0 ? ", {$failed} gagal" : ''),
+            'message' => "Mengirim DM ke {$count} kontak di background (antrian aktif)",
         ]);
     }
 }

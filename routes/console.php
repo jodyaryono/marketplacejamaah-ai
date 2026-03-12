@@ -11,3 +11,7 @@ Artisan::command('inspire', function () {
 Schedule::command('gateway:verify --quiet-ok')->everyThirtyMinutes();
 
 Schedule::command('hadith:send')->everyMinute();
+
+Schedule::command('listings:expire --days=30')->dailyAt('02:00');
+
+Schedule::command('agent-logs:prune --days=30')->dailyAt('03:00');
