@@ -35,10 +35,17 @@ class DataExtractorAgent
             if (preg_match_all('/https?:\/\/[^\s\]>"\')]+/i', $text, $urlMatches)) {
                 foreach (array_slice($urlMatches[0], 0, 2) as $url) {
                     try {
+                        // SSRF prevention: block internal/private IP ranges
+                        $host = parse_url($url, PHP_URL_HOST);
+                        if ($host) {
+                            $ip = gethostbyname($host);
+                            if ($ip && (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false)) {
+                                continue; // skip internal/private IPs
+                            }
+                        }
                         $client = new \GuzzleHttp\Client([
                             'timeout' => 8,
                             'connect_timeout' => 5,
-                            'verify' => false,
                             'allow_redirects' => ['max' => 3],
                         ]);
                         $response = $client->get($url, [

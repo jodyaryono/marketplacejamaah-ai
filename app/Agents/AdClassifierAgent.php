@@ -29,7 +29,7 @@ class AdClassifierAgent
             $wordCount = $parsed['word_count'] ?? str_word_count($text);
             if (strlen($text) < 10 || $wordCount < 4) {
                 $result = ['is_ad' => false, 'confidence' => 0.0, 'reason' => 'one_liner_guard', 'word_count' => $wordCount];
-                $message->update(['is_ad' => false, 'ad_confidence' => 0.0, 'is_processed' => true]);
+                $message->update(['is_ad' => false, 'ad_confidence' => 0.0]);
                 $log->update(['status' => 'success', 'output_payload' => $result]);
                 return $result;
             }
@@ -55,8 +55,6 @@ class AdClassifierAgent
             $message->update([
                 'is_ad' => $isAd,
                 'ad_confidence' => $confidence,
-                'is_processed' => true,
-                'processed_at' => now(),
             ]);
 
             if ($isAd) {
