@@ -69,12 +69,19 @@ class WhatsAppListenerAgent
                         default => 'jpg',
                     };
                     $filename = 'messages/' . uniqid('wa_') . '.' . $ext;
-                    Storage::disk('public')->put($filename, base64_decode($mediaData));
-                    $mediaUrl = Storage::disk('public')->url($filename);
+                    $decoded = base64_decode($mediaData);
+                    $written = Storage::disk('public')->put($filename, $decoded);
+                    if ($written && Storage::disk('public')->exists($filename)) {
+                        $mediaUrl = Storage::disk('public')->url($filename);
+                    } else {
+                        Log::warning('WhatsAppListenerAgent: media file write failed or not found after put', ['filename' => $filename]);
+                    }
                 } catch (\Exception $e) {
                     Log::warning('WhatsAppListenerAgent: media save failed', ['error' => $e->getMessage()]);
                 }
             }
+            // Strip bulky base64 media_data from payload before storing in DB
+            unset($payload['media_data']);
 
             $sentAt = isset($payload['timestamp'])
                 ? \Carbon\Carbon::createFromTimestamp($payload['timestamp'])
