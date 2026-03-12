@@ -57,10 +57,31 @@ class ProcessMessageJob implements ShouldQueue
 
         try {
             // ── Master command: perintah dari nomor owner diproses sebelum semua pipeline ──
+            $masterForwarded = false;
             if (MasterCommandAgent::isMaster($message)) {
-                $master->handle($message);
-                $message->update(['is_processed' => true, 'processed_at' => now()]);
-                return;
+                // Forwarded message from master DM → inject into ad pipeline as WAG message
+                $isForwarded = $message->raw_payload['isForwarded'] ?? false;
+                if ($isForwarded && is_null($message->whatsapp_group_id)) {
+                    $mainGroup = \App\Models\WhatsappGroup::where('is_active', true)->first();
+                    if ($mainGroup) {
+                        $message->update(['whatsapp_group_id' => $mainGroup->id]);
+                        $message->refresh();
+                        $masterForwarded = true;
+                        Log::info("ProcessMessageJob: master forwarded ad → assigned to group {$mainGroup->group_name}");
+                        // Fall through to group ad pipeline below
+                    } else {
+                        app(WhacenterService::class)->sendMessage(
+                            config('services.wa_gateway.master_phone'),
+                            '⚠️ Tidak ada grup aktif untuk mencatatkan iklan forwarded.'
+                        );
+                        $message->update(['is_processed' => true, 'processed_at' => now()]);
+                        return;
+                    }
+                } else {
+                    $master->handle($message);
+                    $message->update(['is_processed' => true, 'processed_at' => now()]);
+                    return;
+                }
             }
 
             // Silently ignore messages from blocked contacts (3-warning threshold reached)
@@ -119,7 +140,9 @@ class ProcessMessageJob implements ShouldQueue
             }
 
             // Step 1: Member onboarding check — send registration DM if new contact
-            $onboarding->handleGroupMessage($message);
+            if (!$masterForwarded) {
+                $onboarding->handleGroupMessage($message);
+            }
 
             // Step 2: Detect @label prefix — labeled content (edukasi, info, pengumuman, dll)
             // is explicitly allowed in the group without needing to be an ad.
@@ -143,7 +166,7 @@ class ProcessMessageJob implements ShouldQueue
             $classification = $classifier->handle($message, $parsed);
 
             // Step 5: Moderate — categorise & detect violations (all non-ad messages)
-            $moderation = $moderator->handle($message);
+            $moderation = $masterForwarded ? ['is_violation' => false] : $moderator->handle($message);
 
             $listing = null;
 
@@ -186,8 +209,10 @@ class ProcessMessageJob implements ShouldQueue
                         $listing = $this->tryCreateListingFromImageOnly($message, $imageAnalyzer, $extractor);
                     } else {
                         // Media received but not downloadable — delete from group + ask sender to resend
-                        $this->deleteNonAdGroupMessage($message);
-                        $this->sendImageClarificationDm($message, $message->message_type === 'video' ? 'video' : 'image');
+                        if (!$masterForwarded) {
+                            $this->deleteNonAdGroupMessage($message);
+                            $this->sendImageClarificationDm($message, $message->message_type === 'video' ? 'video' : 'image');
+                        }
                         $message->update(['is_processed' => true, 'processed_at' => now()]);
                         return;
                     }
@@ -206,7 +231,7 @@ class ProcessMessageJob implements ShouldQueue
             // may have updated it directly on the model after AdClassifier's initial decision.
             $message->refresh();
             $isAd = $message->is_ad ?? false;
-            if (!$listing && !$isAd && !$isViolation && $message->whatsapp_group_id) {
+            if (!$listing && !$isAd && !$isViolation && $message->whatsapp_group_id && !$masterForwarded) {
                 $this->deleteNonAdGroupMessage($message);
             }
 
@@ -228,7 +253,18 @@ class ProcessMessageJob implements ShouldQueue
             $broadcaster->handle($message, $listing);
 
             // Step 9: Send WA group/DM replies (confirmation & violation warnings)
-            $groupAdmin->handle($message, $listing, $moderation);
+            if ($masterForwarded) {
+                // For master-forwarded ads, send result summary to master instead
+                $masterPhone = config('services.wa_gateway.master_phone');
+                $wa = app(WhacenterService::class);
+                if ($listing) {
+                    $wa->sendMessage($masterPhone, "✅ Iklan forwarded berhasil dicatat!\n\n📋 *{$listing->title}*\n💰 {$listing->price_formatted}\n🏷️ {$listing->category?->name}");
+                } else {
+                    $wa->sendMessage($masterPhone, "⚠️ Pesan forwarded diterima tapi tidak terdeteksi sebagai iklan. Pastikan pesan berisi iklan lengkap (nama barang, harga, kontak).");
+                }
+            } else {
+                $groupAdmin->handle($message, $listing, $moderation);
+            }
 
             // Mark message as processed after full pipeline completes
             $message->update(['is_processed' => true, 'processed_at' => now()]);

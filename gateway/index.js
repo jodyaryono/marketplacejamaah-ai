@@ -378,6 +378,14 @@ async function forwardToWebhook(msg, phoneId, groupCache) {
     const wUrl = sessObj?.webhookUrl || WEBHOOK_URL;
     const wEnabled = sessObj?.webhookEnabled !== undefined ? sessObj.webhookEnabled : WEBHOOK_ENABLED;
     if (!wUrl || !wEnabled) return;
+    // Download media (image/video/doc) as base64 for webhook
+    let mediaData = null, mediaMimetype = null;
+    if (msg.hasMedia) {
+        try {
+            const media = await msg.downloadMedia();
+            if (media && media.data) { mediaData = media.data; mediaMimetype = media.mimetype || 'application/octet-stream'; }
+        } catch (e) { console.error('[MediaDL][' + phoneId + ']', e.message); }
+    }
     try {
         const payload = {
             phone_id: phoneId, message_id: msg.id?._serialized, message: textContent,
@@ -385,6 +393,8 @@ async function forwardToWebhook(msg, phoneId, groupCache) {
             timestamp: msg.timestamp || Math.floor(Date.now() / 1000),
             sender: fromNum, sender_name: pushName, from: isGroup ? cleanJid(jid) : fromNum,
             pushname: pushName,
+            isForwarded: !!msg.isForwarded,
+            ...(mediaData ? { media_data: mediaData, media_mimetype: mediaMimetype } : {}),
             ...(msg.location ? { location: { latitude: msg.location.latitude, longitude: msg.location.longitude, description: msg.location.description || '', url: msg.location.url || '' } } : {}),
             ...(isGroup ? { group_id: jid, from_group: jid, group_name: groupCache.get(jid)?.subject || jid } : {}),
             _key: { remoteJid: jid, id: msg.id?._serialized, fromMe: msg.fromMe || false, participant: msg.author || undefined },
