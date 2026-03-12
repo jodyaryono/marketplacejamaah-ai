@@ -5,6 +5,7 @@ namespace App\Agents;
 use App\Jobs\ProcessMessageJob;
 use App\Models\AgentLog;
 use App\Models\Contact;
+use App\Models\Listing;
 use App\Models\Message;
 use App\Models\Setting;
 use App\Models\SystemMessage;
@@ -131,18 +132,8 @@ class MemberOnboardingAgent
             // Build chat history for context
             $chatHistory = $this->buildChatHistory($message->sender_number);
 
-            // Check what info we already have from contact record
-            $knownInfo = [];
-            if ($contact->name && $contact->name !== $message->sender_number) {
-                $knownInfo[] = "nama: {$contact->name}";
-            }
-            if ($contact->address) {
-                $knownInfo[] = "kota: {$contact->address}";
-            }
-            if ($contact->member_role) {
-                $knownInfo[] = "role: {$contact->member_role}";
-            }
-            $knownStr = !empty($knownInfo) ? "\nDATA YANG SUDAH DIKETAHUI: " . implode(', ', $knownInfo) . "\nJANGAN tanyakan ulang info yang sudah ada!" : '';
+            // Build known data including contact info, listings, and group messages
+            $knownStr = $this->buildKnownDataString($contact);
 
             // Use AI to understand the message AND respond naturally
             $promptTemplate = Setting::get('prompt_onboarding_chat', 'Admin Marketplace Jamaah. Member {senderName} baru gabung. Jawab JSON.');
@@ -418,6 +409,71 @@ class MemberOnboardingAgent
     }
 
     /**
+     * Build a comprehensive "known data" string for AI context.
+     * Includes contact info, listings posted, and recent group messages.
+     */
+    private function buildKnownDataString(Contact $contact): string
+    {
+        $parts = [];
+
+        // 1. Contact profile data
+        if ($contact->name && $contact->name !== $contact->phone_number) {
+            $parts[] = "nama: {$contact->name}";
+        }
+        if ($contact->address) {
+            $parts[] = "kota/domisili: {$contact->address}";
+        }
+        if ($contact->member_role) {
+            $roleLabels = ['seller' => 'penjual', 'buyer' => 'pembeli', 'both' => 'penjual & pembeli'];
+            $parts[] = "role: " . ($roleLabels[$contact->member_role] ?? $contact->member_role);
+        }
+        if ($contact->sell_products) {
+            $parts[] = "produk dijual: {$contact->sell_products}";
+        }
+        if ($contact->buy_products) {
+            $parts[] = "produk dicari: {$contact->buy_products}";
+        }
+
+        // 2. Listings this contact has posted
+        $listings = Listing::where('contact_id', $contact->id)
+            ->whereIn('status', ['active', 'pending'])
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get(['title', 'price_label', 'location', 'status']);
+
+        if ($listings->isNotEmpty()) {
+            $listingLines = $listings->map(function ($l) {
+                $info = $l->title;
+                if ($l->price_label) $info .= " ({$l->price_label})";
+                if ($l->location) $info .= " - {$l->location}";
+                return "  • {$info}";
+            })->join("\n");
+            $parts[] = "iklan yang pernah diposting:\n{$listingLines}";
+        }
+
+        // 3. Recent group messages from this sender (to infer intent)
+        $groupMsgs = Message::where('sender_number', $contact->phone_number)
+            ->whereNotNull('whatsapp_group_id')
+            ->whereNotNull('raw_body')
+            ->where('raw_body', '!=', '')
+            ->orderByDesc('created_at')
+            ->limit(3)
+            ->get(['raw_body']);
+
+        if ($groupMsgs->isNotEmpty()) {
+            $msgLines = $groupMsgs->map(fn($m) => '  • ' . mb_substr($m->raw_body, 0, 150))->join("\n");
+            $parts[] = "pesan di grup:\n{$msgLines}";
+        }
+
+        if (empty($parts)) {
+            return '';
+        }
+
+        return "\nDATA YANG SUDAH DIKETAHUI TENTANG MEMBER INI:\n" . implode("\n", $parts)
+            . "\n\nGUNAKAN data di atas! JANGAN tanyakan ulang info yang sudah ada. Jika dari data sudah jelas role-nya (misal sudah posting iklan = seller), langsung pakai.";
+    }
+
+    /**
      * Re-queue group messages that were held with message_category='pending_onboarding'
      * so they can be classified as ads now that the user has completed registration.
      */
@@ -478,20 +534,10 @@ class MemberOnboardingAgent
                 return true;
             }
 
-            // Build chat history and known data — same pattern as handleDirectMessage
+            // Build chat history and known data
             $chatHistory = $this->buildChatHistory($message->sender_number);
 
-            $knownInfo = [];
-            if ($contact->name && $contact->name !== $message->sender_number) {
-                $knownInfo[] = "nama: {$contact->name}";
-            }
-            if ($contact->address) {
-                $knownInfo[] = "kota: {$contact->address}";
-            }
-            if ($contact->member_role) {
-                $knownInfo[] = "role: {$contact->member_role}";
-            }
-            $knownStr = !empty($knownInfo) ? "\nDATA YANG SUDAH DIKETAHUI: " . implode(', ', $knownInfo) . "\nJANGAN tanyakan ulang info yang sudah ada!" : '';
+            $knownStr = $this->buildKnownDataString($contact);
 
             $promptTemplate = Setting::get('prompt_onboarding_approval', 'Admin {groupName}. {senderName} mau gabung. Jawab JSON.');
             $prompt = str_replace(
