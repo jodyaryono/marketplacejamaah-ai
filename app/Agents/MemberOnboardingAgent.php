@@ -58,16 +58,16 @@ class MemberOnboardingAgent
             $greeting = $senderName ? "Assalamu'alaikum *{$senderName}*! 🙏" : "Assalamu'alaikum wa rahmatullahi wa barakatuh! 🙏";
 
             $intro = "{$greeting}\n\n"
-                . '✨ *Selamat datang di Marketplace Jamaah!* ✨\n\n'
-                . 'Satu hal penting yang perlu kamu tahu dulu:\n\n'
-                . '🚀 *Cara pasang iklan itu GAMPANG banget!*\n'
-                . 'Cukup *kirim foto / video + deskripsi + harga* di grup WhatsApp ini — '
-                . 'iklanmu akan *otomatis muncul di website kami* dalam hitungan detik! 🌐\n\n'
-                . '🌐 *marketplacejamaah-ai.jodyaryono.id*\n\n'
-                . 'Tidak perlu daftar, tidak perlu login, tidak perlu aplikasi lain. '
-                . 'Cukup chat di grup seperti biasa 😊\n\n'
-                . 'Nah, supaya aku bisa daftarin kamu resmi sebagai anggota, '
-                . 'boleh aku kenalan dulu dong? Nama Kakak siapa? 😊';
+                . "✨ *Selamat datang di Marketplace Jamaah!* ✨\n\n"
+                . "Satu hal penting yang perlu kamu tahu dulu:\n\n"
+                . "🚀 *Cara pasang iklan itu GAMPANG banget!*\n"
+                . "Cukup *kirim foto / video + deskripsi + harga* di grup WhatsApp ini — "
+                . "iklanmu akan *otomatis muncul di website kami* dalam hitungan detik! 🌐\n\n"
+                . "🌐 *marketplacejamaah-ai.jodyaryono.id*\n\n"
+                . "Tidak perlu daftar, tidak perlu login, tidak perlu aplikasi lain. "
+                . "Cukup chat di grup seperti biasa 😊\n\n"
+                . "Nah, supaya aku bisa daftarin kamu resmi sebagai anggota, "
+                . "boleh aku kenalan dulu dong? Nama Kakak siapa? 😊";
 
             $this->whacenter->sendMessage($message->sender_number, $intro);
 
