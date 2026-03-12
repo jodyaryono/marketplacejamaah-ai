@@ -22,9 +22,6 @@ use Illuminate\Support\Facades\Queue;
  */
 class MasterCommandAgent
 {
-    // Nomor master yang diizinkan — tanpa +
-    const MASTER_PHONE = '6285719195627';
-
     public function __construct(
         private WhacenterService $whacenter,
         private GeminiService $gemini,
@@ -35,7 +32,8 @@ class MasterCommandAgent
      */
     public static function isMaster(Message $message): bool
     {
-        return $message->sender_number === self::MASTER_PHONE;
+        $masterPhone = config('services.wa_gateway.master_phone', '');
+        return $masterPhone !== '' && $message->sender_number === $masterPhone;
     }
 
     /**
@@ -409,7 +407,7 @@ class MasterCommandAgent
 
     private function reply(string $text): void
     {
-        $this->whacenter->sendMessage(self::MASTER_PHONE, $text);
+        $this->whacenter->sendMessage(config('services.wa_gateway.master_phone', ''), $text);
     }
 
     private function normalizePhone(string $phone): string

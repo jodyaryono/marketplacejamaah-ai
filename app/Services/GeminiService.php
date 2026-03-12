@@ -32,7 +32,7 @@ class GeminiService
             ],
         ];
 
-        // Retry up to 3 times on 429 rate-limit, backing off 65s each attempt
+        // Retry up to 3 times on 429 rate-limit with short delay (let queue handle longer backoff)
         $maxAttempts = 3;
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             try {
@@ -46,7 +46,7 @@ class GeminiService
                         'status' => 429,
                     ]);
                     if ($attempt < $maxAttempts) {
-                        sleep(65);  // wait for free-tier per-minute window to reset
+                        sleep(5);  // short pause, then retry
                         continue;
                     }
                     Log::error('GeminiService::generateContent failed', [

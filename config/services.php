@@ -34,7 +34,9 @@ return [
         'token' => env('WA_GATEWAY_TOKEN', ''),
         'phone_id' => env('WA_GATEWAY_PHONE_ID', ''),
         'group_id' => env('WA_GATEWAY_GROUP_ID', ''),
-        'admin_phone' => env('WA_ADMIN_PHONE', '6285719195627'),
+        'admin_phone' => env('WA_ADMIN_PHONE', ''),
+        'master_phone' => env('WA_MASTER_PHONE', ''),
+        'webhook_secret' => env('WEBHOOK_SECRET', ''),
     ],
     'whatsapp' => [
         'group_link' => env('WHATSAPP_GROUP_LINK', ''),
