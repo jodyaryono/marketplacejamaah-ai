@@ -96,6 +96,79 @@ class ContactController extends Controller
         }
     }
 
+    public function approve(Contact $contact)
+    {
+        try {
+            $wa = app(WhacenterService::class);
+            $status = $contact->onboarding_status ?? '';
+
+            // Parse group approval status: pending_group_approval:{groupJid}:{requesterJid}
+            if (str_starts_with($status, 'pending_group_approval:')) {
+                $suffix = substr($status, strlen('pending_group_approval:'));
+                $parts = explode(':', $suffix, 2);
+                $groupJid = $parts[0] ?? '';
+                $requesterJid = $parts[1] ?? '';
+
+                if ($groupJid) {
+                    $wa->approveMembership($groupJid, $contact->phone_number, $requesterJid);
+                }
+            }
+
+            $contact->update([
+                'is_registered' => true,
+                'onboarding_status' => 'completed',
+            ]);
+
+            // Send welcome DM
+            $name = $contact->name ?: 'Anggota';
+            $wa->sendMessage($contact->phone_number, "✅ Selamat datang *{$name}*! Anda telah disetujui masuk grup MarketplaceJamaah. Silakan mulai pasang iklan.");
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Berhasil approve ' . ($contact->name ?: $contact->phone_number),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal approve: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function reject(Contact $contact)
+    {
+        try {
+            $wa = app(WhacenterService::class);
+            $status = $contact->onboarding_status ?? '';
+
+            if (str_starts_with($status, 'pending_group_approval:')) {
+                $suffix = substr($status, strlen('pending_group_approval:'));
+                $parts = explode(':', $suffix, 2);
+                $groupJid = $parts[0] ?? '';
+                $requesterJid = $parts[1] ?? '';
+
+                if ($groupJid) {
+                    $wa->rejectMembership($groupJid, $contact->phone_number, $requesterJid);
+                }
+            }
+
+            $contact->update([
+                'onboarding_status' => 'rejected',
+                'is_blocked' => true,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Berhasil reject ' . ($contact->name ?: $contact->phone_number),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal reject: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function resendOnboardingAll()
     {
         $pending = Contact::where(function ($q) {

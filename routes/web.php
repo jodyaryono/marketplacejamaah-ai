@@ -91,6 +91,8 @@ Route::middleware(['auth', 'check.active'])->group(function () {
     Route::delete('/contacts/{contact}', [ContactController::class, 'destroy'])->name('contacts.destroy');
     Route::post('/contacts/{contact}/send-message', [ContactController::class, 'sendMessage'])->name('contacts.send-message');
     Route::post('/contacts/{contact}/resend-onboarding', [ContactController::class, 'resendOnboarding'])->name('contacts.resend-onboarding');
+    Route::post('/contacts/{contact}/approve', [ContactController::class, 'approve'])->name('contacts.approve');
+    Route::post('/contacts/{contact}/reject', [ContactController::class, 'reject'])->name('contacts.reject');
 
     // Agent Monitor
     Route::get('/agents', [AgentLogController::class, 'index'])->name('agents.index');
