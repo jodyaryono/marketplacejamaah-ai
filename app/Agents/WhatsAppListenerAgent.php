@@ -66,6 +66,21 @@ class WhatsAppListenerAgent
                 ];
                 foreach ($botSignatures as $sig) {
                     if (str_contains($rawBody, $sig)) {
+                        // Delete the forwarded bot message from the group
+                        try {
+                            $wa = app(WhacenterService::class);
+                            $msgKey = $payload['_key'] ?? null;
+                            if ($msgKey) {
+                                $wa->deleteMessage($msgKey);
+                            } else {
+                                $mid = $payload['message_id'] ?? $payload['id'] ?? null;
+                                if ($mid && $groupId) {
+                                    $wa->deleteGroupMessage($groupId, $mid, $senderNum);
+                                }
+                            }
+                        } catch (\Exception $e) {
+                            Log::warning('WhatsAppListenerAgent: failed to delete forwarded bot msg', ['error' => $e->getMessage()]);
+                        }
                         $log->update(['status' => 'skipped', 'output_payload' => ['reason' => 'forwarded_bot_notification']]);
                         return null;
                     }
