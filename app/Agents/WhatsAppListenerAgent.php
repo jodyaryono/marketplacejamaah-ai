@@ -45,6 +45,21 @@ class WhatsAppListenerAgent
                 return null;
             }
             $senderName = $payload['sender_name'] ?? $payload['pushname'] ?? null;
+
+            // Skip forwarded bot notifications — when a group member forwards the bot's own
+            // confirmation message back into the group, it must not be re-processed as a new ad.
+            $rawBody = $payload['message'] ?? $payload['text'] ?? null;
+            $isForwarded = !empty($payload['isForwarded']);
+            if ($isForwarded && $rawBody && $groupId) {
+                $botSignatures = ['✅ *Iklan Diterima!*', '✅ *Iklan kamu sudah tayang!*', '📢 *Iklan Baru!*', '🔄 *Iklan Lama Dihapus & Diganti*'];
+                foreach ($botSignatures as $sig) {
+                    if (str_contains($rawBody, $sig)) {
+                        $log->update(['status' => 'skipped', 'output_payload' => ['reason' => 'forwarded_bot_notification']]);
+                        return null;
+                    }
+                }
+            }
+
             // Normalize WhaCentre type: 'conversation' is a plain text message
             $rawType = $payload['type'] ?? 'text';
             $messageType = match (true) {
@@ -52,7 +67,6 @@ class WhatsAppListenerAgent
                 in_array($rawType, ['location', 'locationMessage']) => 'other',
                 default => $rawType,
             };
-            $rawBody = $payload['message'] ?? $payload['text'] ?? null;
             $mediaUrl = $payload['media_url'] ?? $payload['url'] ?? null;
 
             // If gateway sent base64 media_data (no public URL), save to storage
