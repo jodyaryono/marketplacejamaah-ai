@@ -51,7 +51,19 @@ class WhatsAppListenerAgent
             $rawBody = $payload['message'] ?? $payload['text'] ?? null;
             $isForwarded = !empty($payload['isForwarded']);
             if ($isForwarded && $rawBody && $groupId) {
-                $botSignatures = ['✅ *Iklan Diterima!*', '✅ *Iklan kamu sudah tayang!*', '📢 *Iklan Baru!*', '🔄 *Iklan Lama Dihapus & Diganti*'];
+                $botSignatures = [
+                    '✅ *Iklan Diterima!*',
+                    '✅ *Iklan kamu sudah tayang!*',
+                    '📢 *Iklan Baru!*',
+                    '🔄 *Iklan Lama Dihapus & Diganti*',
+                    '*Iklan Kamu (', // "Iklan Kamu (2 terakhir)" listing summary
+                    '📋 *Iklan Kamu',
+                    'Selamat datang di Marketplace Jamaah',
+                    '*Peringatan dari Admin MarketplaceJamaah*',
+                    'Mau edit? Ketik edit #',
+                    '*Koreksi Info Sebelumnya*',
+                    'ID Iklan: #',
+                ];
                 foreach ($botSignatures as $sig) {
                     if (str_contains($rawBody, $sig)) {
                         $log->update(['status' => 'skipped', 'output_payload' => ['reason' => 'forwarded_bot_notification']]);
