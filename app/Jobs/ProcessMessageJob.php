@@ -182,7 +182,8 @@ class ProcessMessageJob implements ShouldQueue
                 // Only merge for text-only messages. If the new message has its own image,
                 // it is a different product (e.g. seller posts two products in a row) and
                 // must always create a separate listing.
-                if (!$message->media_url) {
+                // Skip merge for master-forwarded: each forward is a distinct ad from a different seller.
+                if (!$message->media_url && !$masterForwarded) {
                     $listing = $this->tryMergeIntoExistingListing($message, $extractor);
                 }
 
@@ -198,7 +199,10 @@ class ProcessMessageJob implements ShouldQueue
                     }
 
                     // Step 6b: Find companion image message (same sender, same group, ±15 min)
-                    $this->mergeCompanionMedia($message, $listing, $imageAnalyzer);
+                    // Skip for master-forwarded: each forward is a separate ad, not a multi-message ad.
+                    if (!$masterForwarded) {
+                        $this->mergeCompanionMedia($message, $listing, $imageAnalyzer);
+                    }
                 }
             } elseif (!$isAd && in_array($message->message_type, ['image', 'video', 'document', 'audio']) && $message->whatsapp_group_id) {
                 // Step 6b: Image/video/doc/audio — try to attach to a companion text ad
