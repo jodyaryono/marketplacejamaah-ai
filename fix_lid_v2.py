@@ -34,20 +34,20 @@ else:
 if 'senderLid' not in code:
     # Find the section: "const contact = await msg.getContact();" ... "sender: fromNum,"
     # and inject LID resolution between contact fetch and payload construction
-    
+
     # Step 2a: Inject LID resolution block after contact fetch
     contact_line = "const contact = await msg.getContact();"
     idx = code.find(contact_line)
     if idx < 0:
         print('PATCH 2 FAIL: contact fetch line not found')
         sys.exit(1)
-    
+
     # Find next "const payload = {" after this point
     payload_idx = code.find('const payload = {', idx)
     if payload_idx < 0:
         print('PATCH 2 FAIL: payload construction not found')
         sys.exit(1)
-    
+
     # Get the indentation (spaces before "const payload")
     line_start = code.rfind('\n', 0, payload_idx) + 1
     indent = ''
@@ -56,7 +56,7 @@ if 'senderLid' not in code:
             indent += ch
         else:
             break
-    
+
     lid_block = f"""{indent}// Resolve LID -> real phone via contact.number (WhatsApp knows the mapping)
 {indent}let senderPhone = fromNum;
 {indent}let senderLid = null;
@@ -86,7 +86,7 @@ if 'senderLid' not in code:
     code = code[:payload_idx] + lid_block + code[payload_idx:]
     changes += 1
     print('PATCH 2a OK: LID resolution block injected')
-    
+
     # Step 2b: Replace "sender: fromNum" with "sender: senderPhone" in payload
     # Find it within forwardToWebhook function
     fwd_start = code.find('async function forwardToWebhook')
@@ -100,7 +100,7 @@ if 'senderLid' not in code:
             print('PATCH 2b OK: sender field now uses senderPhone')
         else:
             print('PATCH 2b FAIL: sender: fromNum not found in payload')
-    
+
     # Step 2c: Add sender_lid to payload (after _key line)
     key_line_pattern = r"(_key:\s*\{[^}]+\},)"
     m_key = re.search(key_line_pattern, code[code.find('async function forwardToWebhook'):])
@@ -114,7 +114,7 @@ if 'senderLid' not in code:
             code = code[:rel_pos] + new_key + code[rel_pos+len(old_key):]
             changes += 1
             print('PATCH 2c OK: sender_lid added to payload')
-    
+
     # Step 2d: Update log line to show resolved phone
     old_log = "console.log('[Webhook][' + phoneId + '] ' + resp.status);"
     new_log = "console.log('[Webhook][' + phoneId + '] ' + resp.status + ' sender=' + senderPhone + (senderLid ? ' (LID:' + senderLid + ')' : ''));"

@@ -81,7 +81,8 @@ class ListingController extends Controller
             'keep_media' => 'nullable|array',
             'keep_media.*' => 'nullable|string|max:500',
             'new_photos' => 'nullable|array|max:5',
-            'new_photos.*' => 'file|mimes:jpg,jpeg,png,webp,mp4,webm,mov|max:20480',
+            'new_photos.*' => 'file|mimes:jpg,jpeg,png,webp,mp4,webm,mov|max:51200',
+            'gdrive_url' => 'nullable|url|max:500',
         ]);
 
         // price / price_label mutual exclusion

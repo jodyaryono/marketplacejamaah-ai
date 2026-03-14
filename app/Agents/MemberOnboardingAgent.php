@@ -121,7 +121,7 @@ class MemberOnboardingAgent
 
         try {
             $replyText = $message->raw_body ?? '';
-            $senderName = $contact->name ?? $message->sender_name ?? 'Kak';
+            $senderName = $contact->getSapaan($message->sender_name);
 
             // Handle sticker/media without text — describe it for AI context
             if (empty(trim($replyText))) {
@@ -143,12 +143,21 @@ class MemberOnboardingAgent
                 $promptTemplate
             );
 
+            // Ask AI to also infer the appropriate honorific from name/writing style
+            $prompt .= "\n\nTambahan wajib: sertakan field \"honorific\" di JSON. Nilai: \"pak\" (pria, paruh baya/tua), \"bu\" (wanita, paruh baya/tua), \"mas\" (pria, muda), \"mbak\" (wanita, muda), \"kak\" (tidak diketahui). Perkirakan dari nama dan cara bicara.";
+
             $parsed = $this->gemini->generateJson($prompt);
 
-            // AI failed → use a warm generic fallback
+            // AI failed → use a warm generic fallback, but only if we haven't just sent the same message
             if (!$parsed) {
                 $fallback = 'Hehe maaf ya, aku agak lemot nih 😅 Bisa cerita sedikit tentang diri kamu? Aku mau kenalan aja kok 😊';
-                $this->whacenter->sendMessage($message->sender_number, $fallback);
+                $lastBotMsg = \App\Models\Message::where('sender_number', 'bot')
+                    ->where('recipient_number', $message->sender_number)
+                    ->orderBy('created_at', 'desc')
+                    ->value('raw_body');
+                if ($lastBotMsg !== $fallback) {
+                    $this->whacenter->sendMessage($message->sender_number, $fallback);
+                }
                 $log->update(['status' => 'skipped', 'output_payload' => ['reason' => 'ai_failed']]);
                 return true;
             }
@@ -182,6 +191,7 @@ class MemberOnboardingAgent
             $role = $role ?: ($contact->member_role ?: null);
 
             // Save partial data incrementally
+            $honorific = $parsed['honorific'] ?? null;
             $partialUpdate = [];
             if ($name)
                 $partialUpdate['name'] = $name;
@@ -189,6 +199,8 @@ class MemberOnboardingAgent
                 $partialUpdate['address'] = $kota;
             if ($role)
                 $partialUpdate['member_role'] = $role;
+            if ($honorific && in_array($honorific, ['pak', 'bu', 'mas', 'mbak', 'kak']))
+                $partialUpdate['honorific'] = $honorific;
             if (!empty($partialUpdate)) {
                 $contact->update($partialUpdate);
             }
@@ -196,14 +208,15 @@ class MemberOnboardingAgent
             if (!($parsed['valid'] ?? false) || !$name || !$role) {
                 // Still missing info — AI already included natural follow-up in conversation reply
                 $reply = $parsed['reply'] ?? '';
+                $sapaan = $contact->fresh()->getSapaan($message->sender_name);
                 if (!$reply) {
                     // Fallback: ask for the ONE missing thing naturally
                     if (!$name)
                         $reply = 'Btw, boleh tau namanya siapa nih? 😊';
                     elseif (!$kota)
-                        $reply = "Salam kenal *{$name}*! Tinggal di kota mana nih? 😄";
+                        $reply = "Salam kenal *{$sapaan}*! Tinggal di kota mana nih? 😄";
                     else
-                        $reply = "Oke *{$name}*! Di grup ini ada jual beli, kamu tertarik jualan, belanja, atau dua-duanya? 😊";
+                        $reply = "Oke *{$sapaan}*! Di grup ini ada jual beli, kamu tertarik jualan, belanja, atau dua-duanya? 😊";
                 }
                 $this->whacenter->sendMessage($message->sender_number, $reply);
                 $log->update(['status' => 'skipped', 'output_payload' => ['reason' => 'partial_data', 'parsed' => $parsed]]);
@@ -219,12 +232,14 @@ class MemberOnboardingAgent
                 $updateData['address'] = $kota;
             if ($role)
                 $updateData['member_role'] = $role;
+            if ($honorific && in_array($honorific, ['pak', 'bu', 'mas', 'mbak', 'kak']))
+                $updateData['honorific'] = $honorific;
             $contact->update($updateData);
 
             // Natural confirmation
             $roleLabelMap = ['seller' => 'Penjual 🏪', 'buyer' => 'Pembeli 🛍️', 'both' => 'Penjual & Pembeli 🏪🛍️'];
             $roleLabel = $roleLabelMap[$role] ?? 'Anggota';
-            $displayName = $name ?? $contact->phone_number;
+            $displayName = $contact->fresh()->getSapaan();
             $kotaLine = $kota ? " dari {$kota}" : '';
 
             $confirm = "Alhamdulillah, *{$displayName}*{$kotaLine} udah terdaftar sebagai {$roleLabel} di Marketplace Jamaah! 🎉\n\n"
@@ -266,11 +281,11 @@ class MemberOnboardingAgent
 
         $contact->update(['is_registered' => false, 'onboarding_status' => $nextStatus]);
 
-        $name = $contact->name ?? 'Kak';
+        $sapaan = $contact->getSapaan();
         $msg = match ($role) {
-            'seller' => "Oh iya *{$name}*, penasaran nih — jualan apa aja di sini? 😊",
-            'buyer' => "Btw *{$name}*, lagi nyari produk apa nih di marketplace? Siapa tau aku bisa bantu cariin 😊",
-            default => "Oh iya *{$name}*, ceritain dong — jualan apa dan lagi nyari produk apa? 😊",
+            'seller' => "Oh iya *{$sapaan}*, penasaran nih — jualan apa aja di sini? 😊",
+            'buyer' => "Btw *{$sapaan}*, lagi nyari produk apa nih di marketplace? Siapa tau aku bisa bantu cariin 😊",
+            default => "Oh iya *{$sapaan}*, ceritain dong — jualan apa dan lagi nyari produk apa? 😊",
         };
         $this->whacenter->sendMessage($phone, $msg);
     }
@@ -288,7 +303,7 @@ class MemberOnboardingAgent
 
         try {
             $replyText = trim($message->raw_body ?? '');
-            $senderName = $contact->name ?? 'Kak';
+            $senderName = $contact->getSapaan();
             $status = $contact->onboarding_status;
 
             if (empty($replyText)) {
@@ -315,7 +330,7 @@ class MemberOnboardingAgent
             $parsed = $this->gemini->generateJson($prompt);
 
             if (!$parsed || ($parsed['type'] ?? '') === 'conversation') {
-                $reply = $parsed['reply'] ?? "Boleh cerita dong, {$roleContext} apa nih? 😊";
+                $reply = $parsed['reply'] ?? "Boleh cerita dong *{$senderName}*, {$roleContext} apa nih? 😊";
                 $this->whacenter->sendMessage($message->sender_number, $reply);
                 $log->update(['status' => 'skipped', 'output_payload' => ['reason' => 'conversation', 'parsed' => $parsed]]);
                 return true;
@@ -419,6 +434,9 @@ class MemberOnboardingAgent
         // 1. Contact profile data
         if ($contact->name && $contact->name !== $contact->phone_number) {
             $parts[] = "nama: {$contact->name}";
+        }
+        if ($contact->honorific) {
+            $parts[] = "panggilan: {$contact->getHonorific()}";
         }
         if ($contact->address) {
             $parts[] = "kota/domisili: {$contact->address}";
@@ -525,7 +543,7 @@ class MemberOnboardingAgent
 
         try {
             $replyText = trim($message->raw_body ?? '');
-            $senderName = $contact->name ?? $message->sender_name ?? 'Kak';
+            $senderName = $contact->getSapaan($message->sender_name);
             $groupName = \App\Models\WhatsappGroup::where('group_id', $groupJid)->value('group_name') ?? 'Marketplace Jamaah';
 
             if (empty($replyText)) {

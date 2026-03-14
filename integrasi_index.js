@@ -3,11 +3,12 @@ import express from 'express';
 import session from 'express-session';
 process.on('unhandledRejection', (err) => { console.error('[UNHANDLED]', err?.message || err); });
 import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth, MessageMedia } = pkg;
+const { Client, LocalAuth, MessageMedia, Location, Buttons, List, Poll } = pkg;
 import QRCode from 'qrcode';
 import fs from 'fs';
 import path from 'path';
 import https from 'https';
+import os from 'os';
 import { randomBytes } from 'crypto';
 import pg from 'pg';
 const { Pool } = pg;
@@ -190,6 +191,26 @@ async function forwardToWebhook(msg, phoneId, groupCache) {
             ...(isGroup ? { group_id: jid, from_group: jid, group_name: groupCache.get(jid)?.subject || jid } : {}),
             _key: { remoteJid: jid, id: msg.id?._serialized, fromMe: msg.fromMe || false, participant: msg.author || undefined },
         };
+        // Download and attach media when the message has media (images, video, audio, sticker, document)
+        if (msg.hasMedia) {
+            try {
+                const media = await msg.downloadMedia({ unsafeMime: true });
+                if (media && media.data) {
+                    // Cap at ~20MB base64 (~15MB actual) to avoid oversized webhook payloads
+                    if (media.data.length < 20 * 1024 * 1024) {
+                        payload.media_data = media.data;
+                        payload.media_mimetype = media.mimetype;
+                    } else {
+                        // Too large to inline — just flag so Laravel knows media exists
+                        payload.has_media = true;
+                        payload.media_mimetype = media.mimetype;
+                        console.warn('[Webhook][' + phoneId + '] media too large to inline (' + Math.round(media.data.length / 1024 / 1024) + 'MB), skipping base64');
+                    }
+                }
+            } catch (me) {
+                console.error('[Webhook][' + phoneId + '] media download failed:', me.message);
+            }
+        }
         const resp = await fetch(wUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         console.log('[Webhook][' + phoneId + '] ' + resp.status);
     } catch (e) { console.error('[Webhook][' + phoneId + ']', e.message); }
@@ -1025,6 +1046,56 @@ app.post('/web/session/:id/restart', requireLogin, async (req, res) => {
     try { fs.rmSync(getSessionAuthDir(id), { recursive: true, force: true }); } catch { }
     startSession(id, sess.label, sess.apiToken, sess.webhookUrl, sess.webhookEnabled);
     res.json({ ok: true, status: 'restarting' });
+});
+
+app.post('/web/session/:id/reconnect', requireLogin, async (req, res) => {
+    try {
+        const id = sanitizeId(req.params.id);
+        const sess = sessions.get(id);
+        if (!sess) return res.status(404).json({ error: 'Session not found' });
+        if (sess._reconnectTimer) { clearTimeout(sess._reconnectTimer); sess._reconnectTimer = null; }
+        if (sess.client) {
+            try { await Promise.race([sess.client.destroy(), new Promise(r => setTimeout(r, 5000))]); } catch { }
+            sess.client = null;
+        }
+        sess.status = 'disconnected';
+        sess._failCount = 0;
+        startSession(id, sess.label, sess.apiToken, sess.webhookUrl, sess.webhookEnabled);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/web/session/:id/health', requireLogin, async (req, res) => {
+    const id = sanitizeId(req.params.id);
+    const sess = sessions.get(id);
+    if (!sess) return res.status(404).json({ error: 'Session not found' });
+    const data = { phone_id: id, label: sess.label, status: sess.status, groups: sess.groupCache.size, failCount: sess._failCount || 0, webhookUrl: sess.webhookUrl || '', webhookEnabled: sess.webhookEnabled || false };
+    try { data.waState = await sess.client.getState(); } catch { data.waState = sess.status === 'open' ? 'CONNECTED' : 'DISCONNECTED'; }
+    try { const info = sess.client.info; if (info) { data.wid = info.wid ? (info.wid.user || '') : ''; data.pushname = info.pushname || ''; } } catch { }
+    try {
+        const msgRes = await db.query('SELECT created_at FROM messages_log WHERE session_id=$1 ORDER BY created_at DESC LIMIT 1', [id]);
+        data.lastMessageAt = msgRes.rows.length ? msgRes.rows[0].created_at : null;
+        const cntRes = await db.query('SELECT direction, COUNT(*)::int as cnt FROM messages_log WHERE session_id=$1 GROUP BY direction', [id]);
+        data.msgIn = 0; data.msgOut = 0;
+        cntRes.rows.forEach(r => { if (r.direction === 'in') data.msgIn = r.cnt; else data.msgOut = r.cnt; });
+    } catch { data.lastMessageAt = null; data.msgIn = 0; data.msgOut = 0; }
+    res.json(data);
+});
+
+app.get('/web/session/:id/get-token', requireLogin, (req, res) => {
+    const id = sanitizeId(req.params.id);
+    const s = sessions.get(id);
+    if (!s) return res.status(404).json({ error: 'Session not found' });
+    res.json({ phone_id: id, api_token: s.apiToken || '' });
+});
+
+app.get('/web/session/:id/ai-instructions', requireLogin, (req, res) => {
+    const id = sanitizeId(req.params.id);
+    const s = sessions.get(id);
+    if (!s) return res.status(404).json({ error: 'Session not found' });
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const token = s.apiToken || 'TOKEN_BELUM_ADA';
+    res.json({ phone_id: id, base_url: baseUrl, api_token: token, instructions_url: baseUrl + '/API.md' });
 });
 
 app.post('/web/session/:id/pairing-code', requireLogin, async (req, res) => {
@@ -2056,11 +2127,137 @@ app.post('/api/leave-group', apiAuth, async (req, res) => {
         if (!s || s.status !== 'open') return res.status(503).json({ error: 'Session not connected' });
         const groupId = (req.body.group_id || '').trim();
         if (!groupId) return res.status(400).json({ error: 'group_id required' });
-        const chat = await s.client.getChatById(groupId);
+        const jid = resolveGroupJid(groupId, s.groupCache) || groupId;
+        const chat = await s.client.getChatById(jid);
         await chat.leave();
-        s.groupCache.delete(groupId);
-        res.json({ success: true, phone_id: pid, group_id: groupId });
+        s.groupCache.delete(jid);
+        res.json({ success: true, phone_id: pid, left_group: jid });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+app.post('/api/send-location', apiAuth, async (req, res) => {
+    try {
+        const pid = sanitizeId(req.body.phone_id || '') || getFirstOpenSession();
+        const s = sessions.get(pid);
+        if (!s || s.status !== 'open') return res.status(503).json({ error: 'Session not connected', phone_id: pid });
+        const { number, latitude, longitude, description } = req.body;
+        if (!number || latitude == null || longitude == null) return res.status(400).json({ error: 'number, latitude, and longitude required' });
+        const loc = new Location(parseFloat(latitude), parseFloat(longitude), description || '');
+        const result = await s.client.sendMessage(numberToJid(number), loc);
+        try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), description || '[location]', 'location', 'sent', result.id?._serialized || '']); } catch { }
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+app.post('/api/send-buttons', apiAuth, async (req, res) => {
+    try {
+        const pid = sanitizeId(req.body.phone_id || '') || getFirstOpenSession();
+        const s = sessions.get(pid);
+        if (!s || s.status !== 'open') return res.status(503).json({ error: 'Session not connected', phone_id: pid });
+        const { number, message, footer, buttons } = req.body;
+        if (!number || !message || !buttons || !Array.isArray(buttons) || buttons.length === 0) return res.status(400).json({ error: 'number, message, and buttons[] required' });
+        if (buttons.length > 3) return res.status(400).json({ error: 'Maximum 3 buttons allowed' });
+        const btnList = buttons.map((b, i) => ({ id: b.id || ('btn' + (i + 1)), body: b.text || b.body || ('Button ' + (i + 1)) }));
+        const btnMsg = new Buttons(message, btnList, '', footer || '');
+        const result = await s.client.sendMessage(numberToJid(number), btnMsg);
+        try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), message + ' [buttons]', 'buttons', 'sent', result.id?._serialized || '']); } catch { }
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+app.post('/api/send-list', apiAuth, async (req, res) => {
+    try {
+        const pid = sanitizeId(req.body.phone_id || '') || getFirstOpenSession();
+        const s = sessions.get(pid);
+        if (!s || s.status !== 'open') return res.status(503).json({ error: 'Session not connected', phone_id: pid });
+        const { number, message, footer, title, buttonText, sections } = req.body;
+        if (!number || !message || !buttonText || !sections || !Array.isArray(sections) || sections.length === 0) return res.status(400).json({ error: 'number, message, buttonText, and sections[] required' });
+        const listMsg = new List(message, buttonText, sections, title || '', footer || '');
+        const result = await s.client.sendMessage(numberToJid(number), listMsg);
+        try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), message + ' [list]', 'list', 'sent', result.id?._serialized || '']); } catch { }
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+app.post('/api/send-poll', apiAuth, async (req, res) => {
+    try {
+        const pid = sanitizeId(req.body.phone_id || '') || getFirstOpenSession();
+        const s = sessions.get(pid);
+        if (!s || s.status !== 'open') return res.status(503).json({ error: 'Session not connected', phone_id: pid });
+        const { number, question, options, allowMultiple } = req.body;
+        if (!number || !question || !options || !Array.isArray(options) || options.length < 2) return res.status(400).json({ error: 'number, question, and options[] (min 2) required' });
+        if (options.length > 12) return res.status(400).json({ error: 'Maximum 12 poll options allowed' });
+        const poll = new Poll(question, options, { allowMultipleAnswers: allowMultiple !== false });
+        const result = await s.client.sendMessage(numberToJid(number), poll);
+        try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), question + ' [poll]', 'poll', 'sent', result.id?._serialized || '']); } catch { }
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+app.post('/api/create-group', apiAuth, async (req, res) => {
+    try {
+        const pid = sanitizeId(req.body.phone_id || '') || getFirstOpenSession();
+        const s = sessions.get(pid);
+        if (!s || s.status !== 'open') return res.status(503).json({ error: 'Session not connected', phone_id: pid });
+        const { name, participants } = req.body;
+        if (!name) return res.status(400).json({ error: 'Group name required' });
+        const nums = (Array.isArray(participants) ? participants : (participants || '').split(',')).map(n => String(n).trim()).filter(Boolean).map(n => numberToJid(n));
+        if (!nums.length) return res.status(400).json({ error: 'At least one participant required' });
+        const result = await s.client.createGroup(name, nums);
+        await refreshGroupCacheForSession(pid);
+        res.json({ success: true, phone_id: pid, data: { gid: result.gid?._serialized || '', title: result.title || name } });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+app.post('/api/approve-membership', apiAuth, async (req, res) => {
+    try {
+        const pid = sanitizeId(req.body.phone_id || '') || getFirstOpenSession();
+        const s = sessions.get(pid);
+        if (!s || s.status !== 'open') return res.status(503).json({ error: 'Session not connected', phone_id: pid });
+        const { group_id, requester } = req.body;
+        if (!group_id || !requester) return res.status(400).json({ error: 'group_id and requester required' });
+        const jid = resolveGroupJid(group_id, s.groupCache) || group_id;
+        const chat = await s.client.getChatById(jid);
+        const result = await chat.approveGroupMembershipRequests([{ id: numberToJid(requester) }]);
+        res.json({ success: true, phone_id: pid, data: result });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+app.post('/api/reject-membership', apiAuth, async (req, res) => {
+    try {
+        const pid = sanitizeId(req.body.phone_id || '') || getFirstOpenSession();
+        const s = sessions.get(pid);
+        if (!s || s.status !== 'open') return res.status(503).json({ error: 'Session not connected', phone_id: pid });
+        const { group_id, requester } = req.body;
+        if (!group_id || !requester) return res.status(400).json({ error: 'group_id and requester required' });
+        const jid = resolveGroupJid(group_id, s.groupCache) || group_id;
+        const chat = await s.client.getChatById(jid);
+        const result = await chat.rejectGroupMembershipRequests([{ id: numberToJid(requester) }]);
+        res.json({ success: true, phone_id: pid, data: result });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+app.get('/api/debug/:id', apiAuth, async (req, res) => {
+    try {
+        const id = sanitizeId(req.params.id);
+        const s = sessions.get(id);
+        if (!s) return res.status(404).json({ error: 'Session not found' });
+        const result = { phone_id: id, status: s.status, results: {} };
+        if (s.client && s.status === 'open') {
+            try { result.results.getState = await s.client.getState(); } catch { result.results.getState = 'error'; }
+            try { result.results.waStore = !!s.client.pupPage; } catch { result.results.waStore = false; }
+            try { result.results.isRegistered = !!(s.client.info && s.client.info.wid); } catch { result.results.isRegistered = false; }
+            try { result.results.pageTitle = await s.client.pupPage?.title(); } catch { result.results.pageTitle = ''; }
+        }
+        res.json(result);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get('/api/agent/status', apiAuth, (req, res) => {
+    const sessStatus = {};
+    for (const [id, sess] of sessions.entries()) {
+        sessStatus[id] = { label: sess.label, status: sess.status, failCount: sess._failCount || 0 };
+    }
+    res.json({
+        agent: { note: 'Basic status — monitoring agent not active in this build' },
+        sessions: sessStatus,
+        ram: { total: (os.totalmem() / 1024 / 1024).toFixed(0) + 'MB', used: ((os.totalmem() - os.freemem()) / 1024 / 1024).toFixed(0) + 'MB', percent: ((os.totalmem() - os.freemem()) / os.totalmem() * 100).toFixed(1) + '%' },
+        recentLogs: [],
+    });
+});
+app.get('/api/agent/logs', apiAuth, (req, res) => {
+    res.json({ logs: [] });
 });
 
 // ─── START ────────────────────────────────────────────────────────────────────

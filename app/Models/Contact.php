@@ -10,6 +10,7 @@ class Contact extends Model
     protected $fillable = [
         'phone_number',
         'name',
+        'honorific',
         'avatar',
         'message_count',
         'ad_count',
@@ -34,6 +35,26 @@ class Contact extends Model
         'last_warning_at' => 'datetime',
         'is_registered' => 'boolean',
     ];
+
+    /**
+     * Returns the honorific title: pak, bu, mas, mbak, or kak (default).
+     */
+    public function getHonorific(): string
+    {
+        return $this->honorific ?? 'Kak';
+    }
+
+    /**
+     * Returns "Pak Ahmad", "Mbak Siti", or just "Kak" when name is unknown.
+     */
+    public function getSapaan(?string $fallbackName = null): string
+    {
+        $rawName = $this->name ?? $fallbackName;
+        $isPhone = !$rawName || preg_match('/^\+?[\d\s\-]{7,}$/', $rawName);
+        $name = $isPhone ? null : $rawName;
+        $honorific = ucfirst($this->getHonorific());
+        return $name ? "{$honorific} {$name}" : $honorific;
+    }
 
     public function messages(): HasMany
     {

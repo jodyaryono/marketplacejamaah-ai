@@ -20,24 +20,94 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
 const WEBHOOK_URL = process.env.WEBHOOK_URL || '';
 const WEBHOOK_ENABLED = process.env.WEBHOOK_ENABLED === 'true';
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'integrasi-wa-secret-2026';
 const CHROME_PATH = process.env.CHROME_PATH || '';
 const APP_VERSION = '2026.03-10';
 
+// ─── ANTI-SPAM: per-session send rate limiter ─────────────────────────────────
+const SEND_DELAY_MS = parseInt(process.env.SEND_DELAY_MS || '5000', 10); // min delay between sends per session (ms)
+const SEND_HOURLY_LIMIT = parseInt(process.env.SEND_HOURLY_LIMIT || '150', 10); // max sends per session per hour
+
+// ─── ANTI-BAN: human behaviour simulation ─────────────────────────────────────
+const ANTI_BAN_TYPING = process.env.ANTI_BAN_TYPING !== 'false';               // simulate typing indicator before text sends (default: true)
+const ANTI_BAN_JITTER_MS = parseInt(process.env.ANTI_BAN_JITTER_MS || '2000', 10); // max extra random delay added per send (ms)
+const ANTI_BAN_TYPING_CPS = parseInt(process.env.ANTI_BAN_TYPING_CPS || '15', 10); // typing speed chars/sec for duration calc
+
+const _sendLastTime = new Map();   // phoneId → timestamp of last send
+const _sendHourCount = new Map();  // phoneId → { count, resetAt }
+
+/**
+ * Per-session send throttle. Ensures minimum gap between outgoing messages
+ * and enforces hourly limit. Returns { ok, jitterMs, error }.
+ */
+async function acquireSendSlot(phoneId) {
+    // ── hourly limit ──
+    const now = Date.now();
+    let hc = _sendHourCount.get(phoneId);
+    if (!hc || now >= hc.resetAt) {
+        hc = { count: 0, resetAt: now + 3600000 };
+        _sendHourCount.set(phoneId, hc);
+    }
+    if (hc.count >= SEND_HOURLY_LIMIT) {
+        const minsLeft = Math.ceil((hc.resetAt - now) / 60000);
+        return { ok: false, error: `Batas kirim ${SEND_HOURLY_LIMIT} pesan/jam tercapai. Coba lagi dalam ${minsLeft} menit.`, retryAfterSec: minsLeft * 60 };
+    }
+
+    // ── minimum delay between sends ──
+    const last = _sendLastTime.get(phoneId) || 0;
+    const elapsed = now - last;
+    if (elapsed < SEND_DELAY_MS) {
+        const waitMs = SEND_DELAY_MS - elapsed;
+        console.log(`[RateLimit][${phoneId}] Throttle: waiting ${waitMs}ms before send`);
+        await new Promise(r => setTimeout(r, waitMs));
+    }
+
+    // ── random jitter (anti-ban: avoid machine-perfect interval detection) ──
+    const jitterMs = ANTI_BAN_JITTER_MS > 0 ? Math.floor(Math.random() * ANTI_BAN_JITTER_MS) : 0;
+    if (jitterMs > 0) {
+        console.log(`[AntiBan][${phoneId}] Jitter: +${jitterMs}ms`);
+        await new Promise(r => setTimeout(r, jitterMs));
+    }
+
+    // Reserve slot
+    _sendLastTime.set(phoneId, Date.now());
+    hc.count++;
+    return { ok: true, jitterMs };
+}
+
+/**
+ * Simulate human typing by sending composing presence for a duration
+ * proportional to message length, then pausing. Errors are silently ignored.
+ */
+async function simulateTyping(client, jid, message) {
+    try {
+        const typingMs = Math.min(Math.max(Math.ceil(message.length * (1000 / ANTI_BAN_TYPING_CPS)), 500), 5000);
+        await client.sendPresenceUpdate('composing', jid);
+        await new Promise(r => setTimeout(r, typingMs));
+        await client.sendPresenceUpdate('paused', jid);
+    } catch { /* presence errors are non-fatal */ }
+}
+
+function safeApiError(e) {
+    console.error('[API Error]', e?.message || e);
+    return 'Terjadi kesalahan internal. Silakan coba lagi.';
+}
+
 // ─── ADMIN NOTIFICATION ───────────────────────────────────────────────────────
 const NOTIFY_WA = process.env.NOTIFY_WA || '6281317647379';   // nomor WA admin (penerima notif)
 const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL || 'me@jodyaryono.id';
 const SMTP_HOST = process.env.SMTP_HOST || 'srv180.niagahoster.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465');
-const SMTP_USER = process.env.SMTP_USER || 'me@jodyaryono.id';
-const SMTP_PASS = process.env.SMTP_PASS || '***REDACTED***';
+const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_PASS = process.env.SMTP_PASS || '';
 
 const mailer = nodemailer.createTransport({
     host: SMTP_HOST, port: SMTP_PORT, secure: true,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
-    tls: { rejectUnauthorized: false },
+    tls: { rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== 'false' },
 });
 
 // Debounce per session: avoid spam when WA reconnects quickly
@@ -116,7 +186,7 @@ const db = new Pool({
     database: process.env.DB_NAME || 'integrasi_wa',
     user: process.env.DB_USER || 'integrasi_wa',
     password: process.env.DB_PASS || 'integrasi2026',
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' } : false,
 });
 
 async function initDb() {
@@ -176,14 +246,45 @@ async function initDb() {
         INSERT INTO app_settings (key, value) VALUES ('device_name', 'Integrasi-wa.jodyaryono.id') ON CONFLICT (key) DO NOTHING;
         INSERT INTO app_settings (key, value) VALUES ('browser_name', 'Google Chrome') ON CONFLICT (key) DO NOTHING;
     `);
+    // Create indexes for performance (safe to run multiple times)
+    await db.query(`
+        CREATE INDEX IF NOT EXISTS idx_messages_log_session_created ON messages_log(session_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_messages_log_created ON messages_log(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_broadcast_jobs_status ON broadcast_jobs(status, created_at DESC);
+    `);
+    // Retention: delete messages_log rows older than 30 days
+    const deleted = await db.query(`DELETE FROM messages_log WHERE created_at < NOW() - INTERVAL '30 days'`);
+    if (deleted.rowCount > 0) console.log('[DB] Retention: pruned ' + deleted.rowCount + ' old message_log rows');
     console.log('[DB] Tables ready');
 }
+
+// ─── LOGIN BRUTE-FORCE PROTECTION ─────────────────────────────────────────────
+const _loginFailMap = new Map(); // ip → { count, lockedUntil }
+function checkLoginRateLimit(ip) {
+    const now = Date.now();
+    let entry = _loginFailMap.get(ip);
+    if (!entry) { entry = { count: 0, lockedUntil: 0 }; _loginFailMap.set(ip, entry); }
+    if (now < entry.lockedUntil) {
+        const secsLeft = Math.ceil((entry.lockedUntil - now) / 1000);
+        return { allowed: false, secsLeft };
+    }
+    return { allowed: true };
+}
+function recordLoginFail(ip) {
+    const now = Date.now();
+    let entry = _loginFailMap.get(ip);
+    if (!entry) { entry = { count: 0, lockedUntil: 0 }; _loginFailMap.set(ip, entry); }
+    entry.count++;
+    if (entry.count >= 5) { entry.lockedUntil = now + 5 * 60 * 1000; entry.count = 0; } // lock 5 min after 5 failures
+}
+function recordLoginSuccess(ip) { _loginFailMap.delete(ip); }
 
 // ─── MULTI-SESSION STATE ──────────────────────────────────────────────────────
 const sessions = new Map();
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 function sanitizeId(id) { return String(id).replace(/[^a-zA-Z0-9_-]/g, ''); }
+const withTimeout = (p, ms, msg = 'timeout') => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
 function escHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
@@ -197,8 +298,6 @@ function numberToJid(number) {
     num = num.replace(/\D/g, '');
     if (num.startsWith('0')) num = '62' + num.slice(1);
     else if (num.startsWith('8') && num.length >= 9 && num.length <= 13) num = '62' + num;
-    // LID numbers are 14+ digits - route to @lid instead of @c.us
-    if (num.length >= 14) return num + '@lid';
     return num + '@c.us';
 }
 function resolveGroupJid(nameOrJid, groupCache) {
@@ -226,6 +325,7 @@ function handleDeadSession(pid, sess, err) {
     if (!isChromeDeadError(err)) return false;
     console.log('[WA][' + pid + '] Chrome dead detected (' + (err?.message || '') + '), triggering reconnect...');
     if (sess) {
+        killZombieChrome(pid);
         sess.status = 'disconnected';
         sess.client = null;
         sess.connectedAt = null;
@@ -262,11 +362,24 @@ function getContentType(msg) {
 // ─── WEBHOOK ──────────────────────────────────────────────────────────────────
 async function forwardToWebhook(msg, phoneId, groupCache) {
     const jid = msg.from;
+    if (jid === "status@broadcast" || jid?.endsWith("@broadcast")) return; // skip WA Status updates
     const isGroup = jid?.endsWith('@g.us');
     const contentType = getContentType(msg);
     const textContent = msg.body || '';
     const cleanJid = (j) => j ? j.replace(/@(c\.us|s\.whatsapp\.net|lid|newsletter|broadcast|g\.us)$/i, '') : '';
-    const fromNum = isGroup ? cleanJid(msg.author || '') : cleanJid(jid);
+
+    // Resolve the real phone number — contact.number is always a phone number
+    // even when WhatsApp uses LID (@lid) format for the JID.
+    let fromNum;
+    let pushName = null;
+    try {
+        const contact = await msg.getContact();
+        pushName = contact?.pushname || contact?.name || null;
+        fromNum = contact?.number || (isGroup ? cleanJid(msg.author || '') : cleanJid(jid));
+    } catch {
+        fromNum = isGroup ? cleanJid(msg.author || '') : cleanJid(jid);
+    }
+
     // Log to DB
     try {
         await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
@@ -280,7 +393,7 @@ async function forwardToWebhook(msg, phoneId, groupCache) {
             if (sess?.client && sess.status === 'open') {
                 for (const rule of rules) {
                     let matched = false;
-                    if (rule.is_regex) { try { matched = new RegExp(rule.keyword, 'i').test(textContent); } catch { } }
+                    if (rule.is_regex) { try { if (rule.keyword.length <= 200) { const _re = new RegExp(rule.keyword, 'i'); matched = _re.test(textContent.slice(0, 2000)); } } catch { } }
                     else { matched = textContent.toLowerCase().includes(rule.keyword.toLowerCase()); }
                     if (matched) {
                         await sess.client.sendMessage(jid, rule.reply);
@@ -298,52 +411,95 @@ async function forwardToWebhook(msg, phoneId, groupCache) {
     const wEnabled = sessObj?.webhookEnabled !== undefined ? sessObj.webhookEnabled : WEBHOOK_ENABLED;
     if (!wUrl || !wEnabled) return;
     try {
-        const contact = await msg.getContact();
-        const pushName = contact?.pushname || null;
-                // Resolve LID -> real phone via contact.number (WhatsApp knows the mapping)
-        let senderPhone = fromNum;
-        let senderLid = null;
-        const authorJid = isGroup ? (msg.author || '') : (jid || '');
-        if (authorJid.endsWith('@lid') || (fromNum.length >= 14 && /^\d+$/.test(fromNum))) {
-            senderLid = fromNum;
-            if (contact && contact.number) {
-                let realNum = String(contact.number).replace(/\D/g, '');
-                if (realNum.startsWith('0')) realNum = '62' + realNum.slice(1);
-                if (realNum.length >= 10 && realNum.length <= 15) {
-                    senderPhone = realNum;
-                    console.log('[LID->Phone] Resolved ' + senderLid + ' -> ' + senderPhone);
-                }
-            } else {
-                console.warn('[LID->Phone] contact.number unavailable for LID ' + senderLid);
-            }
-        } else if (contact && contact.number) {
-            // Even for non-LID, prefer contact.number when available (more reliable)
-            let realNum = String(contact.number).replace(/\D/g, '');
-            if (realNum.startsWith('0')) realNum = '62' + realNum.slice(1);
-            if (realNum.length >= 10 && realNum.length <= 15) {
-                senderPhone = realNum;
-            }
-        }
-const payload = {
+        const payload = {
             phone_id: phoneId, message_id: msg.id?._serialized, message: textContent,
             type: contentType?.replace('Message', '') || 'text',
             timestamp: msg.timestamp || Math.floor(Date.now() / 1000),
-            sender: senderPhone, sender_name: pushName, from: jid.replace('@c.us', '').replace('@g.us', ''),
+            sender: fromNum, sender_name: pushName, from: isGroup ? cleanJid(jid) : fromNum,
             pushname: pushName,
             ...(msg.location ? { location: { latitude: msg.location.latitude, longitude: msg.location.longitude, description: msg.location.description || '', url: msg.location.url || '' } } : {}),
             ...(isGroup ? { group_id: jid, from_group: jid, group_name: groupCache.get(jid)?.subject || jid } : {}),
             _key: { remoteJid: jid, id: msg.id?._serialized, fromMe: msg.fromMe || false, participant: msg.author || undefined },
-            ...(senderLid ? { sender_lid: senderLid } : {}),
         };
-        const resp = await fetch(wUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        console.log('[Webhook][' + phoneId + '] ' + resp.status + ' sender=' + senderPhone + (senderLid ? ' (LID:' + senderLid + ')' : ''));
+        // Download and attach media when the message has media (images, video, audio, sticker, document)
+        if (msg.hasMedia) {
+            try {
+                const media = await msg.downloadMedia({ unsafeMime: true });
+                if (media && media.data) {
+                    // Cap at ~20MB base64 (~15MB actual) to avoid oversized webhook payloads
+                    if (media.data.length < 20 * 1024 * 1024) {
+                        payload.media_data = media.data;
+                        payload.media_mimetype = media.mimetype;
+                    } else {
+                        // Too large to inline — just flag so Laravel knows media exists
+                        payload.has_media = true;
+                        payload.media_mimetype = media.mimetype;
+                        console.warn('[Webhook][' + phoneId + '] media too large to inline (' + Math.round(media.data.length / 1024 / 1024) + 'MB), skipping base64');
+                    }
+                }
+            } catch (me) {
+                console.error('[Webhook][' + phoneId + '] media download failed:', me.message);
+            }
+        }
+        const resp = await fetch(wUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(WEBHOOK_SECRET ? { 'X-Webhook-Secret': WEBHOOK_SECRET } : {}) }, body: JSON.stringify(payload) });
+        console.log('[Webhook][' + phoneId + '] ' + resp.status);
     } catch (e) { console.error('[Webhook][' + phoneId + ']', e.message); }
 }
 
 // ─── SESSION MANAGEMENT ───────────────────────────────────────────────────────
+function killZombieChrome(sessionId) {
+    const dataDir = path.resolve('./auth_info', 'session-' + sessionId);
+    try {
+        // Step 1: Find PIDs holding files in the session directory
+        let pids = new Set();
+        try {
+            const fuserOut = execSync(`fuser -v "${dataDir}/SingletonLock" 2>/dev/null || true`, { timeout: 5000, encoding: 'utf8' });
+            for (const m of fuserOut.matchAll(/(\d+)/g)) pids.add(m[1]);
+        } catch { }
+        // Step 2: Find PIDs via command-line match (catches renderer processes too)
+        try {
+            const pgrepOut = execSync(`pgrep -f 'user-data-dir=${dataDir.replace(/'/g, "'\\''")}'`, { timeout: 5000, encoding: 'utf8' });
+            for (const line of pgrepOut.trim().split('\n')) { if (line.trim()) pids.add(line.trim()); }
+        } catch { /* pgrep returns 1 if no match */ }
+        // Step 3: Kill all found PIDs — SIGTERM first (let Chrome flush data), then SIGKILL
+        if (pids.size > 0) {
+            console.log('[WA][' + sessionId + '] Killing ' + pids.size + ' zombie Chrome PIDs: ' + [...pids].join(','));
+            // Graceful SIGTERM first — Chrome can save LevelDB/IndexedDB session data
+            for (const pid of pids) { try { execSync('kill -15 ' + pid + ' 2>/dev/null', { timeout: 2000 }); } catch { } }
+            // Wait 3 seconds for graceful shutdown
+            try { execSync('sleep 3', { timeout: 5000 }); } catch { }
+            // SIGKILL any survivors
+            for (const pid of pids) { try { execSync('kill -9 ' + pid + ' 2>/dev/null', { timeout: 2000 }); } catch { } }
+        }
+        // Step 4: Always clean lock files even if no PIDs found
+        for (const f of ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'DevToolsActivePort']) {
+            try { fs.unlinkSync(path.join(dataDir, f)); } catch { }
+        }
+    } catch (e) { console.error('[WA][' + sessionId + '] killZombieChrome error:', e.message); }
+}
+async function safeDestroy(client, id, timeoutMs = 8000) {
+    if (!client) return;
+    try {
+        await Promise.race([client.destroy(), new Promise(r => setTimeout(r, timeoutMs))]);
+    } catch { }
+    // Always kill zombie after destroy attempt — client.destroy() often leaves orphans
+    killZombieChrome(id);
+}
+const _sessionStartLocks = new Set(); // prevent concurrent startSession for same id
+
 async function startSession(phoneId, label = '', apiToken = '', webhookUrl = '', webhookEnabled = false, createdAt = null) {
     const id = sanitizeId(phoneId);
     if (!id) return;
+    // ── Race condition guard: skip if already starting ──
+    if (_sessionStartLocks.has(id)) { console.log('[WA][' + id + '] startSession already in progress, skipping'); return; }
+    _sessionStartLocks.add(id);
+    try {
+        await _startSessionInternal(id, label, apiToken, webhookUrl, webhookEnabled, createdAt);
+    } finally {
+        _sessionStartLocks.delete(id);
+    }
+}
+async function _startSessionInternal(id, label, apiToken, webhookUrl, webhookEnabled, createdAt) {
     const existing = sessions.get(id);
     if (existing?.status === 'open') return;
     // Allow retry if connecting for too long (stuck > 2 min)
@@ -351,13 +507,13 @@ async function startSession(phoneId, label = '', apiToken = '', webhookUrl = '',
         const stuckMs = existing._connectingSince ? Date.now() - existing._connectingSince : 0;
         if (stuckMs < 120000) return;
         console.log('[WA][' + id + '] Stuck connecting for ' + Math.round(stuckMs / 1000) + 's, force retry');
-        try { await existing.client.destroy(); } catch { }
+        await safeDestroy(existing.client, id);
         existing.client = null;
     }
     if (existing?._reconnectTimer) { clearTimeout(existing._reconnectTimer); existing._reconnectTimer = null; }
-    if (existing?.client) { try { await existing.client.destroy(); } catch { } existing.client = null; }
+    if (existing?.client) { await safeDestroy(existing.client, id); existing.client = null; } else { killZombieChrome(id); }
 
-    const sess = { client: null, qrCode: null, qrDataUrl: null, status: 'connecting', _connectingSince: Date.now(), groupCache: existing?.groupCache || new Map(), label: label || existing?.label || id, apiToken: apiToken || existing?.apiToken || '', webhookUrl: webhookUrl || existing?.webhookUrl || '', webhookEnabled: webhookEnabled !== undefined ? webhookEnabled : (existing?.webhookEnabled || false), _reconnectTimer: null, _failCount: existing?._failCount || 0, createdAt: createdAt || existing?.createdAt || null, connectedAt: null };
+    const sess = { client: null, qrCode: null, qrDataUrl: null, status: 'connecting', _connectingSince: Date.now(), groupCache: existing?.groupCache || new Map(), label: label || existing?.label || id, apiToken: apiToken || existing?.apiToken || '', webhookUrl: webhookUrl || existing?.webhookUrl || '', webhookEnabled: webhookEnabled !== undefined ? webhookEnabled : (existing?.webhookEnabled || false), _reconnectTimer: null, _failCount: existing?._failCount || 0, _qrTimeoutCount: existing?._qrTimeoutCount || 0, _qrCount: existing?._qrCount || 0, createdAt: createdAt || existing?.createdAt || null, connectedAt: null };
     sessions.set(id, sess);
 
     const puppeteerArgs = [
@@ -365,7 +521,7 @@ async function startSession(phoneId, label = '', apiToken = '', webhookUrl = '',
         '--disable-gpu', '--no-first-run', '--no-zygote',
         '--disk-cache-size=1', '--media-cache-size=1',
         '--disable-extensions', '--disable-plugins', '--disable-sync', '--disable-translate',
-        '--js-flags=--max-old-space-size=128', '--aggressive-cache-discard', '--disable-cache',
+        '--js-flags=--max-old-space-size=384', '--aggressive-cache-discard', '--disable-cache',
         '--disable-software-rasterizer',
         '--disable-logging', '--disable-background-networking',
         '--disable-default-apps', '--disable-hang-monitor',
@@ -377,7 +533,7 @@ async function startSession(phoneId, label = '', apiToken = '', webhookUrl = '',
     const appSettings = await getAppSettings();
     const client = new Client({
         authStrategy: new LocalAuth({ clientId: id, dataPath: './auth_info' }),
-        puppeteer: { headless: true, args: puppeteerArgs, ...(CHROME_PATH ? { executablePath: CHROME_PATH } : {}) },
+        puppeteer: { headless: true, args: puppeteerArgs, protocolTimeout: 300000, timeout: 120000, ...(CHROME_PATH ? { executablePath: CHROME_PATH } : {}) },
         deviceName: appSettings.device_name || 'Integrasi-wa.jodyaryono.id',
         browserName: appSettings.browser_name || 'Google Chrome',
     });
@@ -388,25 +544,31 @@ async function startSession(phoneId, label = '', apiToken = '', webhookUrl = '',
         sess.qrDataUrl = await QRCode.toDataURL(qr);
         sess.status = 'connecting';
         sess._qrCount = (sess._qrCount || 0) + 1;
-        const qrLimit = 10;
+        // If QR appears but .paired exists, auth is stale — remove .paired marker
+        if (sess._qrCount === 1) {
+            const pairedFile = path.join('./auth_info', 'session-' + id, '.paired');
+            if (fs.existsSync(pairedFile)) {
+                console.log('[WA][' + id + '] QR muncul tapi .paired ada — auth stale, hapus .paired');
+                try { fs.unlinkSync(pairedFile); } catch { }
+            }
+        }
+        const qrLimit = 15;
         console.log('[WA][' + id + '] QR ready (' + sess._qrCount + '/' + qrLimit + ')');
         // Kill Chrome if QR not scanned after qrLimit cycles (~5 min) to save RAM
         if (sess._qrCount >= qrLimit) {
-            console.log('[WA][' + id + '] QR timeout — destroying Chrome to save memory');
+            sess._qrTimeoutCount = (sess._qrTimeoutCount || 0) + 1;
+            console.log('[WA][' + id + '] QR timeout #' + sess._qrTimeoutCount + ' — destroying Chrome to save memory');
             sess._qrTimeout = true; // prevent disconnected event from auto-reconnecting
             sess.status = 'disconnected';
             sess.qrCode = null;
             sess.qrDataUrl = null;
             sess._qrCount = 0;
-            try { await client.destroy(); } catch { }
+            await safeDestroy(client, id);
             sess.client = null;
-            // Auto-restart QR after 2 min so dashboard always has fresh QR available
+            // QR session expired without scan — STOP and release Chrome to save RAM.
+            // User must click Reconnect from dashboard to try again.
             if (!sess._removing && !_shuttingDown) {
-                sess._reconnectTimer = setTimeout(() => {
-                    sess._reconnectTimer = null;
-                    console.log('[WA][' + id + '] Auto-restart QR for pairing');
-                    startSession(id, sess.label, sess.apiToken, sess.webhookUrl, sess.webhookEnabled);
-                }, 2 * 60 * 1000);
+                console.log('[WA][' + id + '] QR expired tanpa scan — Chrome dihentikan. User harus klik Reconnect dari dashboard.');
             }
         }
     });
@@ -417,26 +579,43 @@ async function startSession(phoneId, label = '', apiToken = '', webhookUrl = '',
         sess._failCount = 0;
         sess._hbFails = 0;
         sess._qrCount = 0;
+        sess._qrTimeoutCount = 0;
+        if (sess._readyTimer) { clearTimeout(sess._readyTimer); sess._readyTimer = null; }
         sess.connectedAt = new Date();
         // Mark session as successfully paired
         try { fs.writeFileSync(path.join('./auth_info', 'session-' + id, '.paired'), new Date().toISOString()); } catch { }
-        console.log('[WA][' + id + '] Connected');
+        console.log('[WA][' + id + '] Connected ✅ (ready event fired)');
         refreshGroupCacheForSession(id);
     });
-    client.on('authenticated', () => { console.log('[WA][' + id + '] Authenticated'); });
+    client.on('authenticated', () => { console.log('[WA][' + id + '] Authenticated (loading WA Web data...)'); sess._authenticated = true; });
     client.on('auth_failure', (msg) => {
         console.error('[WA][' + id + '] Auth failure:', msg);
         sess.status = 'disconnected'; sess.client = null; sess.connectedAt = null;
         notifyDisconnect(id, sess.label, 'Auth failure: ' + msg);
-        // Clear invalid auth and restart with QR for re-pair
         if (!sess._removing && !sess._userDisconnecting) {
-            const sessionDir = path.join('./auth_info', 'session-' + id);
-            try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch { }
             sess._failCount = (sess._failCount || 0) + 1;
-            const delay = sess._failCount >= 3 ? 60000 : 15000;
-            console.log('[WA][' + id + '] Auth failed — will start QR for re-pair in ' + (delay / 1000) + 's');
-            if (!sess._reconnectTimer) {
-                sess._reconnectTimer = setTimeout(() => { sess._reconnectTimer = null; startSession(id, sess.label, sess.apiToken, sess.webhookUrl, sess.webhookEnabled); }, delay);
+            const sessionDir = path.join('./auth_info', 'session-' + id);
+            const wasPaired = fs.existsSync(path.join(sessionDir, '.paired'));
+            // If was paired before, DON'T delete auth yet — LevelDB corruption may self-heal on retry
+            // Only delete after 3+ consecutive auth failures
+            if (wasPaired && sess._failCount < 3) {
+                const delay = 20000;
+                console.log('[WA][' + id + '] Auth failed but was previously paired — retry with existing auth in ' + (delay / 1000) + 's (attempt ' + sess._failCount + '/3)');
+                if (!sess._reconnectTimer) {
+                    sess._reconnectTimer = setTimeout(() => { sess._reconnectTimer = null; startSession(id, sess.label, sess.apiToken, sess.webhookUrl, sess.webhookEnabled); }, delay);
+                }
+            } else {
+                // Auth truly invalid — clear and show QR
+                try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch { }
+                if (wasPaired) {
+                    console.log('[WA][' + id + '] ⚠️ Auth deleted after ' + sess._failCount + ' failures — USER HARUS HAPUS LINKED DEVICE "' + (sess.label || id) + '" DI HP, lalu scan QR baru');
+                }
+                const delay = 15000;
+                console.log('[WA][' + id + '] Auth failed — will start QR for re-pair in ' + (delay / 1000) + 's');
+                sess._failCount = 0;
+                if (!sess._reconnectTimer) {
+                    sess._reconnectTimer = setTimeout(() => { sess._reconnectTimer = null; startSession(id, sess.label, sess.apiToken, sess.webhookUrl, sess.webhookEnabled); }, delay);
+                }
             }
         }
     });
@@ -484,17 +663,122 @@ async function startSession(phoneId, label = '', apiToken = '', webhookUrl = '',
     client.on('message', async (msg) => {
         if (!msg.fromMe) await forwardToWebhook(msg, id, sess.groupCache);
     });
+    client.on('message_ack', async (msg, ack) => {
+        if (!msg?.id?._serialized) return;
+        const statusMap = { '1': 'sent', '2': 'delivered', '3': 'read', '4': 'played', '-1': 'failed' };
+        const newStatus = statusMap[String(ack)];
+        if (!newStatus) return;
+        try { await db.query('UPDATE messages_log SET status=$1 WHERE wa_msg_id=$2 AND direction=\'out\'', [newStatus, msg.id._serialized]); } catch { }
+    });
     client.on('group_update', async (notification) => {
         try {
             const chat = await client.getChatById(notification.chatId);
             if (chat.isGroup) sess.groupCache.set(notification.chatId, { subject: chat.name, participants: chat.participants });
         } catch { }
     });
+    client.on('group_join', async (notification) => {
+        try {
+            // Update group cache with new participant list
+            const chat = await notification.getChat();
+            if (chat.isGroup) sess.groupCache.set(chat.id._serialized, { subject: chat.name, participants: chat.participants });
+        } catch { }
+        // Forward to webhook
+        const wUrl = sess.webhookUrl || WEBHOOK_URL;
+        const wEnabled = sess.webhookEnabled !== undefined ? sess.webhookEnabled : WEBHOOK_ENABLED;
+        if (!wUrl || !wEnabled) return;
+        try {
+            const payload = {
+                phone_id: id, type: 'group_join',
+                group_id: notification.chatId, group_name: sess.groupCache.get(notification.chatId)?.subject || notification.chatId,
+                who: notification.recipientIds || [], invitedBy: notification.author || null,
+                timestamp: notification.timestamp || Math.floor(Date.now() / 1000),
+            };
+            const resp = await fetch(wUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(WEBHOOK_SECRET ? { 'X-Webhook-Secret': WEBHOOK_SECRET } : {}) }, body: JSON.stringify(payload) });
+            console.log('[Webhook][' + id + '] group_join ' + resp.status);
+        } catch (e) { console.error('[Webhook][' + id + '] group_join error:', e.message); }
+    });
+    client.on('group_leave', async (notification) => {
+        try {
+            const chat = await notification.getChat();
+            if (chat.isGroup) sess.groupCache.set(chat.id._serialized, { subject: chat.name, participants: chat.participants });
+        } catch { }
+        const wUrl = sess.webhookUrl || WEBHOOK_URL;
+        const wEnabled = sess.webhookEnabled !== undefined ? sess.webhookEnabled : WEBHOOK_ENABLED;
+        if (!wUrl || !wEnabled) return;
+        try {
+            const payload = {
+                phone_id: id, type: 'group_leave',
+                group_id: notification.chatId, group_name: sess.groupCache.get(notification.chatId)?.subject || notification.chatId,
+                who: notification.recipientIds || [],
+                timestamp: notification.timestamp || Math.floor(Date.now() / 1000),
+            };
+            const resp = await fetch(wUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(WEBHOOK_SECRET ? { 'X-Webhook-Secret': WEBHOOK_SECRET } : {}) }, body: JSON.stringify(payload) });
+            console.log('[Webhook][' + id + '] group_leave ' + resp.status);
+        } catch (e) { console.error('[Webhook][' + id + '] group_leave error:', e.message); }
+    });
+    client.on('group_membership_request', async (notification) => {
+        const wUrl = sess.webhookUrl || WEBHOOK_URL;
+        const wEnabled = sess.webhookEnabled !== undefined ? sess.webhookEnabled : WEBHOOK_ENABLED;
+        if (!wUrl || !wEnabled) return;
+        try {
+            const payload = {
+                phone_id: id, type: 'group_membership_request',
+                group_id: notification.chatId, group_name: sess.groupCache.get(notification.chatId)?.subject || notification.chatId,
+                requester: notification.author || null, requester_ids: notification.recipientIds || [],
+                timestamp: notification.timestamp || Math.floor(Date.now() / 1000),
+            };
+            const resp = await fetch(wUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(WEBHOOK_SECRET ? { 'X-Webhook-Secret': WEBHOOK_SECRET } : {}) }, body: JSON.stringify(payload) });
+            console.log('[Webhook][' + id + '] group_membership_request ' + resp.status);
+        } catch (e) { console.error('[Webhook][' + id + '] group_membership_request error:', e.message); }
+    });
     try {
-        const initTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT: initialize took too long (120s)')), 120000));
+        const initTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT: initialize took too long (180s)')), 180000));
         await Promise.race([client.initialize(), initTimeout]);
+        console.log('[WA][' + id + '] Initialize resolved — waiting for ready event...');
+        // Post-init guard: if ready event doesn't fire after initialize, force restart
+        // Wait longer (300s) if authenticated fired (auth valid, WA Web slow to sync)
+        // Wait shorter (120s) if not authenticated (something wrong)
+        if (sess.status !== 'open') {
+            const readyWaitMs = 120000; // first check at 120s
+            sess._readyTimer = setTimeout(async () => {
+                sess._readyTimer = null;
+                if (sess.status === 'open' || sess._removing || _shuttingDown) return;
+                // Skip if QR is actively showing — QR timeout handles that separately
+                if (sess._qrCount > 0) return;
+                if (sess._authenticated) {
+                    // Authenticated but ready not fired — WA Web may be slow. Give 180s more.
+                    console.log('[WA][' + id + '] Authenticated but ready not fired after 120s — waiting 180s more...');
+                    sess._readyTimer = setTimeout(async () => {
+                        sess._readyTimer = null;
+                        if (sess.status === 'open' || sess._removing || _shuttingDown) return;
+                        console.log('[WA][' + id + '] Ready NOT fired after 300s total — auth mungkin stale, hapus auth dan restart');
+                        await safeDestroy(client, id);
+                        sess.client = null;
+                        sess.status = 'disconnected';
+                        sess.connectedAt = null;
+                        // Delete stale auth — will need QR re-scan
+                        const sessionDir = path.join('./auth_info', 'session-' + id);
+                        try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch { }
+                        console.log('[WA][' + id + '] Auth dihapus — perlu scan QR ulang dari dashboard');
+                        sess._failCount = 0;
+                    }, 180000);
+                } else {
+                    console.log('[WA][' + id + '] Ready event not fired 120s after initialize (no auth) — force restart');
+                    await safeDestroy(client, id);
+                    sess.client = null;
+                    sess.status = 'disconnected';
+                    sess.connectedAt = null;
+                    sess._failCount = (sess._failCount || 0) + 1;
+                    const delay = sess._failCount >= 3 ? 5 * 60 * 1000 : 30000;
+                    if (!sess._reconnectTimer) {
+                        sess._reconnectTimer = setTimeout(() => { sess._reconnectTimer = null; startSession(id, sess.label, sess.apiToken, sess.webhookUrl, sess.webhookEnabled); }, delay);
+                    }
+                }
+            }, readyWaitMs);
+        }
     } catch (e) {
         console.error('[WA][' + id + '] Initialize error:', e.message);
+        await safeDestroy(client, id);
         sess.status = 'disconnected';
         sess.client = null;
         sess.connectedAt = null;
@@ -520,15 +804,21 @@ async function startSession(phoneId, label = '', apiToken = '', webhookUrl = '',
             notifyDisconnect(id, sess.label, 'Init error: ' + e.message);
         }
     }
-}
+} // end _startSessionInternal
 
-async function refreshGroupCacheForSession(phoneId) {
+async function refreshGroupCacheForSession(phoneId, force = false) {
     const sess = sessions.get(phoneId);
     if (!sess?.client) return;
+    const DEBOUNCE_MS = 5 * 60 * 1000;
+    if (!force && sess._groupCacheRefreshedAt && (Date.now() - sess._groupCacheRefreshedAt) < DEBOUNCE_MS) {
+        console.log('[WA][' + phoneId + '] Group cache fresh — skipping refresh');
+        return;
+    }
     try {
-        const chats = await sess.client.getChats();
+        const chats = await withTimeout(sess.client.getChats(), 30000, 'getChats timeout');
         const groups = chats.filter(c => c.isGroup);
         for (const g of groups) sess.groupCache.set(g.id._serialized, { subject: g.name, participants: g.participants || [] });
+        sess._groupCacheRefreshedAt = Date.now();
         console.log('[WA][' + phoneId + '] Cached ' + sess.groupCache.size + ' groups');
     } catch (e) { console.error('[WA][' + phoneId + '] Group fetch:', e.message); }
 }
@@ -541,8 +831,8 @@ async function removeSession(phoneId) {
     if (sess?._reconnectTimer) { clearTimeout(sess._reconnectTimer); sess._reconnectTimer = null; }
     if (sess?.client) {
         if (sess.status === 'open') { try { await withTimeout(sess.client.logout(), 8000); } catch { } }
-        try { await withTimeout(sess.client.destroy(), 8000); } catch { }
-    }
+        await safeDestroy(sess.client, id);
+    } else { killZombieChrome(id); }
     sessions.delete(id);
     try { fs.rmSync(path.join('./auth_info', 'session-' + id), { recursive: true, force: true }); } catch { }
     try { fs.rmSync(getSessionAuthDir(id), { recursive: true, force: true }); } catch { }
@@ -577,30 +867,28 @@ async function loadSessionsFromDb() {
             console.log('[Gateway] Restoring (' + (i + 1) + '/' + toRestore.length + '): ' + row.phone_id);
             startSession(row.phone_id, row.label, row.api_token, row.webhook_url || '', row.webhook_enabled || false, row.created_at);
         }
-        // Auto-start QR for sessions needing pairing (after authenticated sessions are up)
-        for (let i = 0; i < needPairing.length; i++) {
-            const row = needPairing[i];
-            await new Promise(r => setTimeout(r, 10000));
-            console.log('[Gateway] Starting QR for pairing (' + (i + 1) + '/' + needPairing.length + '): ' + row.phone_id + ' (' + (row.label || '') + ')');
-            startSession(row.phone_id, row.label, row.api_token, row.webhook_url || '', row.webhook_enabled || false, row.created_at);
+        // Don't auto-start QR sessions at boot — they waste RAM (each Chrome ~500MB).
+        // User must click Reconnect from dashboard to start QR pairing.
+        if (needPairing.length > 0) {
+            console.log('[Gateway] ' + needPairing.length + ' session(s) need pairing — waiting for user to start QR from dashboard: ' + needPairing.map(r => r.phone_id).join(', '));
         }
     } catch (e) { console.error('[DB] Load sessions failed:', e.message); }
 }
 
 // ─── EXPRESS ──────────────────────────────────────────────────────────────────
 const app = express();
+app.set('trust proxy', 1); // trust Nginx reverse proxy (X-Forwarded-Proto)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(session({ secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: false, maxAge: 1000 * 60 * 60 * 8 } }));
+app.use(session({ secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: true, sameSite: 'lax', maxAge: 1000 * 60 * 60 * 8 } }));
 
 function apiAuth(req, res, next) {
     const header = req.headers.authorization || '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : req.body?.token || req.query?.token;
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
     if (AUTH_TOKEN && token === AUTH_TOKEN) return next();
-    if (token) {
-        for (const [, s] of sessions) {
-            if (s.apiToken === token) return next();
-        }
+    for (const [, s] of sessions) {
+        if (s.apiToken && s.apiToken === token) return next();
     }
     return res.status(401).json({ error: 'Unauthorized' });
 }
@@ -779,12 +1067,24 @@ function layout(title, breadcrumb, body, page) {
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 app.get('/login', (req, res) => {
     if (req.session?.loggedIn) return res.redirect('/dashboard');
-    const err = req.query.error ? '<div class="alert-err">❌ Username atau password salah.</div>' : '';
+    let err = '';
+    if (req.query.error === '2') err = '<div class="alert-err">⛔ Terlalu banyak percobaan. Coba lagi dalam ' + (req.query.wait || 300) + ' detik.</div>';
+    else if (req.query.error) err = '<div class="alert-err">❌ Username atau password salah.</div>';
     res.send('<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — Integrasi WA</title><style>' + CSS + '</style></head><body><div class="lp"><div class="lcard"><div class="llogo"><span class="ico">📱</span><h1>Integrasi WA</h1><p>WhatsApp Gateway — Multi Nomor</p></div>' + err + '<form method="POST" action="/login"><div class="form-group"><label>Username</label><input class="input" type="text" name="username" placeholder="admin" autocomplete="username" required autofocus></div><div class="form-group"><label>Password</label><input class="input" type="password" name="password" placeholder="••••••••" autocomplete="current-password" required></div><button class="btn btn-primary" style="width:100%;padding:11px;font-size:.95rem;justify-content:center;" type="submit">Masuk</button></form></div></div></body></html>');
 });
 app.post('/login', (req, res) => {
+    const ip = req.ip || req.connection.remoteAddress || 'unknown';
+    const rl = checkLoginRateLimit(ip);
+    if (!rl.allowed) return res.redirect('/login?error=2&wait=' + rl.secsLeft);
     const { username, password } = req.body;
-    if (username === ADMIN_USER && password === ADMIN_PASS) { req.session.loggedIn = true; return res.redirect('/dashboard'); }
+    if (username === ADMIN_USER && password === ADMIN_PASS) {
+        recordLoginSuccess(ip);
+        req.session.loggedIn = true;
+        console.log('[AUDIT] LOGIN_SUCCESS ip=' + ip + ' user=' + username);
+        return res.redirect('/dashboard');
+    }
+    console.log('[AUDIT] LOGIN_FAIL ip=' + ip + ' user=' + username);
+    recordLoginFail(ip);
     return res.redirect('/login?error=1');
 });
 app.get('/logout', (req, res) => { req.session.destroy(() => res.redirect('/login')); });
@@ -855,7 +1155,7 @@ app.get('/dashboard', requireLogin, (req, res) => {
         '      +"<button class=\'btn btn-ghost btn-sm\' style=\'background:#fefce8;color:#854d0e;border-color:#fde68a;\' data-histid=\'"+esc(s.phone_id)+"\' onclick=\'openHistory(this.dataset.histid)\'>📜 History</button>"' +
         '      +"<button class=\'btn btn-ghost btn-sm\' style=\'background:#f0fdf4;color:#065f46;border-color:#bbf7d0;\' onclick=\'openWebhook(\\""+esc(s.phone_id)+"\\",\\""+esc(s.webhook_url||"")+"\\",\\""+s.webhook_enabled+"\\")\'>🔗 Webhook</button>"' +
         '      +"<button class=\'btn btn-ghost btn-sm\' style=\'background:#ede9fe;color:#6d28d9;border-color:#c4b5fd;\' data-aiid=\'"+esc(s.phone_id)+"\' onclick=\'copyAI(this.dataset.aiid)\'>🤖 AI</button>"' +
-        '      +(s.status==="open"?"<button class=\'btn btn-ghost btn-sm\' style=\'background:#ecfdf5;color:#047857;border-color:#a7f3d0;\' data-testid=\'"+esc(s.phone_id)+"\' data-testtok=\'"+esc(s.api_token)+"\' onclick=\'openTestSend(this.dataset.testid,this.dataset.testtok)\'>📤 Test Kirim</button>":"")' +
+        '      +(s.status==="open"?"<button class=\'btn btn-ghost btn-sm\' style=\'background:#ecfdf5;color:#047857;border-color:#a7f3d0;\' data-testid=\'"+esc(s.phone_id)+"\' onclick=\'openTestSend(this.dataset.testid)\'>📤 Test Kirim</button>":"")' +
         '      +"<button class=\'btn btn-ghost btn-sm\' style=\'background:#f0f9ff;color:#0369a1;border-color:#bae6fd;\' data-healthid=\'"+esc(s.phone_id)+"\' onclick=\'openHealth(this.dataset.healthid)\'>🩺 Health</button>"' +
         '      +"<button class=\'btn btn-danger btn-sm\' onclick=\'del(\\""+esc(s.phone_id)+"\\")\'>🗑 Hapus</button></td>"' +
         '      +"</tr>";' +
@@ -937,7 +1237,7 @@ app.get('/dashboard', requireLogin, (req, res) => {
         'function copyNum(num){navigator.clipboard.writeText(num).then(()=>toast("Nomor disalin! \u2713")).catch(()=>{const el=document.createElement("textarea");el.value=num;document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);toast("Nomor disalin! \u2713");});}' +
         'async function copyAI(pid){try{const r=await fetch("/web/session/"+encodeURIComponent(pid)+"/ai-instructions");const d=await r.json();if(d.text){await navigator.clipboard.writeText(d.text);toast("\ud83e\udd16 Instruksi AI disalin! ("+(d.text.length)+" chars)");}else toast(d.error||"Gagal","err");}catch(e){toast("Error: "+e.message,"err");}}' +
         'let _tsId=null,_tsTok=null;' +
-        'function openTestSend(id,tok){_tsId=id;_tsTok=tok;document.getElementById("ts-modal-id").textContent=id;document.getElementById("ts-number").value="";document.getElementById("ts-message").value="";document.getElementById("ts-result").innerHTML="";document.getElementById("ts-modal").classList.add("open");document.getElementById("ts-number").focus();}' +
+        'async function openTestSend(id){_tsId=id;_tsTok=null;document.getElementById("ts-modal-id").textContent=id;document.getElementById("ts-number").value="";document.getElementById("ts-message").value="";document.getElementById("ts-result").innerHTML="";document.getElementById("ts-modal").classList.add("open");document.getElementById("ts-number").focus();try{const r=await fetch("/web/session/"+encodeURIComponent(id)+"/get-token");const d=await r.json();if(d.token)_tsTok=d.token;}catch(e){console.error(e);}}' +
         'function closeTestSend(){document.getElementById("ts-modal").classList.remove("open");_tsId=null;_tsTok=null;}' +
         'async function openHealth(id){' +
         '  const m=document.getElementById("health-modal");const b=document.getElementById("health-body");' +
@@ -1418,6 +1718,13 @@ app.post('/web/session/:id/create-group', requireLogin, async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+app.get('/web/session/:id/get-token', requireLogin, async (req, res) => {
+    const id = sanitizeId(req.params.id);
+    const sess = sessions.get(id);
+    if (!sess) return res.status(404).json({ error: 'Sesi tidak ditemukan' });
+    return res.json({ token: sess.apiToken || '' });
+});
+
 app.get('/web/session/:id/health', requireLogin, async (req, res) => {
     const id = sanitizeId(req.params.id);
     const sess = sessions.get(id);
@@ -1445,13 +1752,16 @@ app.post('/web/session/add', requireLogin, async (req, res) => {
         const apiToken = randomBytes(16).toString('hex');
         await db.query('INSERT INTO wa_sessions(phone_id,label,api_token) VALUES($1,$2,$3) ON CONFLICT(phone_id) DO UPDATE SET label=$2', [phoneId, label, apiToken]);
         sessions.set(phoneId, { client: null, qrCode: null, qrDataUrl: null, status: 'disconnected', groupCache: new Map(), label: label, apiToken: apiToken, webhookUrl: '', webhookEnabled: false, _reconnectTimer: null, createdAt: new Date(), connectedAt: null });
+        console.log('[AUDIT] SESSION_ADD phone_id=' + phoneId + ' label=' + label + ' ip=' + (req.ip || 'unknown'));
         res.json({ success: true, phone_id: phoneId });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/web/session/:id/delete', requireLogin, async (req, res) => {
     try {
-        await removeSession(sanitizeId(req.params.id));
+        const sid = sanitizeId(req.params.id);
+        console.log('[AUDIT] SESSION_DELETE phone_id=' + sid + ' ip=' + (req.ip || 'unknown'));
+        await removeSession(sid);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1522,16 +1832,26 @@ app.post('/web/session/:id/reconnect', requireLogin, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+const _PRIVATE_IP_RE = /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.0\.0\.0|localhost|\[::1\])/i;
+function isPrivateUrl(urlStr) {
+    try {
+        const u = new URL(urlStr);
+        return _PRIVATE_IP_RE.test(u.hostname);
+    } catch { return true; }
+}
 app.post('/web/session/:id/webhook', requireLogin, async (req, res) => {
     try {
         const id = sanitizeId(req.params.id);
         const webhookUrl = String(req.body.webhook_url || '').trim().substring(0, 500);
         const webhookEnabled = req.body.webhook_enabled === true || req.body.webhook_enabled === 'true';
+        if (webhookUrl && (!/^https?:\/\//i.test(webhookUrl) || isPrivateUrl(webhookUrl)))
+            return res.status(400).json({ ok: false, error: 'URL webhook tidak valid atau mengarah ke jaringan internal' });
         const sess = sessions.get(id);
         if (!sess) return res.status(404).json({ ok: false, error: 'Session not found' });
         sess.webhookUrl = webhookUrl;
         sess.webhookEnabled = webhookEnabled;
         await db.query('UPDATE wa_sessions SET webhook_url=$1, webhook_enabled=$2 WHERE phone_id=$3', [webhookUrl, webhookEnabled, id]);
+        console.log('[AUDIT] WEBHOOK_UPDATE phone_id=' + id + ' enabled=' + webhookEnabled + ' ip=' + (req.ip || 'unknown'));
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -1604,7 +1924,7 @@ app.post('/web/session/:id/pairing-code', requireLogin, async (req, res) => {
             '--disable-gpu', '--no-first-run', '--no-zygote',
             '--disk-cache-size=1', '--media-cache-size=1',
             '--disable-extensions', '--disable-plugins', '--disable-sync', '--disable-translate',
-            '--js-flags=--max-old-space-size=128', '--aggressive-cache-discard', '--disable-cache',
+            '--js-flags=--max-old-space-size=384', '--aggressive-cache-discard', '--disable-cache',
         ];
         const appSettings = await getAppSettings();
         // Use pairWithPhoneNumber so WA Web enters the correct ALT_DEVICE_LINKING
@@ -2560,9 +2880,27 @@ app.get('/release-notes', requireLogin, (req, res) => {
         '</div></div>' +
 
         '<div class="card" style="margin-bottom:16px;border-left:4px solid #10b981">' +
+        '<div class="card-header" style="padding-bottom:4px"><span class="card-title" style="font-size:1rem">v2026.03-11</span>' +
+        '<span style="font-size:.75rem;color:#6b7280;margin-left:10px">11 Maret 2026</span>' +
+        '<span style="font-size:.7rem;font-weight:700;background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:4px;margin-left:8px">Latest</span></div>' +
+        '<div class="card-body" style="padding-top:4px">' +
+        '<div style="font-weight:600;font-size:.85rem;color:#065f46;margin-bottom:6px">✨ Fitur Baru</div>' +
+        '<ul style="padding-left:20px;font-size:.85rem;line-height:1.8;margin:0 0 12px">' +
+        '<li><strong>Kirim Pesan + Tombol (Buttons)</strong> — Endpoint <code>POST /api/send-buttons</code>. Kirim pesan interaktif dengan reply buttons (maks 3 tombol) langsung ke nomor personal.</li>' +
+        '<li><strong>Kirim List Menu</strong> — Endpoint <code>POST /api/send-list</code>. Kirim pesan dengan daftar pilihan menu bertingkat (sections + rows) yang bisa dipilih penerima.</li>' +
+        '<li><strong>Kirim Polling</strong> — Endpoint <code>POST /api/send-poll</code>. Buat polling/voting dengan min 2 dan maks 12 pilihan. Support single/multi choice.</li>' +
+        '</ul>' +
+        '<div style="font-weight:600;font-size:.85rem;color:#0369a1;margin-bottom:6px">⚡ Perbaikan Stabilitas</div>' +
+        '<ul style="padding-left:20px;font-size:.85rem;line-height:1.8;margin:0 0 12px">' +
+        '<li><strong>Heartbeat lebih toleran</strong> — Timeout ping dinaikkan dari 8 detik ke 20 detik. Perlu 2 kali gagal berturut-turut (±4 menit) baru reconnect. Mencegah false reconnect saat Chrome lambat karena memory pressure.</li>' +
+        '<li><strong>Error Chrome crash lebih informatif</strong> — API mengembalikan pesan &quot;Sesi terputus, sedang reconnect&hellip;&quot; + tombol Coba Lagi di modal Test Kirim saat Chrome crash terdeteksi.</li>' +
+        '</ul>' +
+        '</div></div>' +
+
+        '<div class="card" style="margin-bottom:16px;border-left:4px solid #6b7280">' +
         '<div class="card-header" style="padding-bottom:4px"><span class="card-title" style="font-size:1rem">v2026.03-10</span>' +
         '<span style="font-size:.75rem;color:#6b7280;margin-left:10px">10 Maret 2026</span>' +
-        '<span style="font-size:.7rem;font-weight:700;background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:4px;margin-left:8px">Latest</span></div>' +
+        '</div>' +
         '<div class="card-body" style="padding-top:4px">' +
         '<div style="font-weight:600;font-size:.85rem;color:#065f46;margin-bottom:6px">✨ Fitur Baru</div>' +
         '<ul style="padding-left:20px;font-size:.85rem;line-height:1.8;margin:0 0 12px">' +
@@ -2763,7 +3101,7 @@ a{color:inherit;text-decoration:none;}
       <a href="/api-manual" class="btn btn-ghost">📖 Dokumentasi API</a>
     </div>
     <div class="hero-stats">
-      <div class="hero-stat"><div class="hero-stat-val">15+</div><div class="hero-stat-lbl">REST API Endpoints</div></div>
+      <div class="hero-stat"><div class="hero-stat-val">18+</div><div class="hero-stat-lbl">REST API Endpoints</div></div>
       <div class="hero-stat"><div class="hero-stat-val">∞</div><div class="hero-stat-lbl">Multi Nomor WA</div></div>
       <div class="hero-stat"><div class="hero-stat-val">24/7</div><div class="hero-stat-lbl">Always Connected</div></div>
       <div class="hero-stat"><div class="hero-stat-val">🤖</div><div class="hero-stat-lbl">AI-Powered</div></div>
@@ -2868,14 +3206,28 @@ a{color:inherit;text-decoration:none;}
       <div class="ft-icon ft-icon-red">🔔</div>
       <h3>Notifikasi Disconnect Otomatis</h3>
       <p>Saat sesi WA terputus, sistem otomatis mengirim notifikasi ke admin via <strong>WhatsApp</strong> dan <strong>Email</strong>. Dilengkapi debounce 60 detik untuk mencegah spam saat auto-reconnect.</p>
-      <div class="ft-tags"><span class="ft-tag tag-auto">Otomasi</span><span class="ft-tag tag-new">🔥 Baru</span></div>
+      <div class="ft-tags"><span class="ft-tag tag-auto">Otomasi</span></div>
     </div>
 
     <div class="ft-card">
       <div class="ft-icon ft-icon-purple">📊</div>
       <h3>Register Date &amp; Uptime Koneksi</h3>
       <p>Setiap nomor WA di dashboard menampilkan tanggal pertama kali didaftarkan dan durasi sesi koneksi berjalan (uptime) secara real-time.</p>
-      <div class="ft-tags"><span class="ft-tag tag-ui">Dashboard</span><span class="ft-tag tag-new">🔥 Baru</span></div>
+      <div class="ft-tags"><span class="ft-tag tag-ui">Dashboard</span></div>
+    </div>
+
+    <div class="ft-card">
+      <div class="ft-icon ft-icon-blue">📲</div>
+      <h3>Pesan Interaktif — Buttons &amp; List</h3>
+      <p>Kirim pesan dengan <strong>reply buttons</strong> (maks 3 tombol) atau <strong>list menu</strong> bertingkat. Penerima bisa tap untuk memilih langsung dari WhatsApp.</p>
+      <div class="ft-tags"><span class="ft-tag tag-api">REST API</span><span class="ft-tag tag-new">🔥 Baru</span></div>
+    </div>
+
+    <div class="ft-card">
+      <div class="ft-icon ft-icon-amber">📊</div>
+      <h3>Polling / Voting</h3>
+      <p>Buat polling interaktif dengan min 2 maks 12 pilihan. Support single choice maupun multi choice. Penerima vote langsung dari dalam WhatsApp.</p>
+      <div class="ft-tags"><span class="ft-tag tag-api">REST API</span><span class="ft-tag tag-new">🔥 Baru</span></div>
     </div>
 
   </div>
@@ -2887,7 +3239,7 @@ a{color:inherit;text-decoration:none;}
   <div class="section-title">
     <span class="section-tag">Developer Friendly</span>
     <h2>⚡ REST API Endpoints</h2>
-    <p>15+ endpoint siap pakai dengan autentikasi Bearer Token dan response JSON.</p>
+    <p>18+ endpoint siap pakai dengan autentikasi Bearer Token dan response JSON.</p>
   </div>
   <div class="api-grid">
     <div class="api-item"><span class="api-method api-get">GET</span><div class="api-item-body"><span class="api-path">/api/status</span><h4>Status Session</h4><p>Cek status semua session WA yang aktif</p></div></div>
@@ -3370,6 +3722,40 @@ app.get('/api/qr/:id', apiAuth, (req, res) => {
     if (!s.qrDataUrl) return res.json({ status: 'waiting', qr: null });
     res.json({ status: s.status, qr: s.qrDataUrl });
 });
+// Temporary debug endpoint — diagnose Chrome responsiveness
+app.get('/api/debug/:id', apiAuth, async (req, res) => {
+    const id = sanitizeId(req.params.id);
+    const s = sessions.get(id);
+    if (!s || !s.client) return res.status(404).json({ error: 'Session not found or no client' });
+    const results = {};
+    // Test 1: basic page.evaluate
+    try {
+        const t0 = Date.now();
+        const title = await Promise.race([s.client.pupPage.evaluate(() => document.title), new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 15000))]);
+        results.pageTitle = { ok: true, value: title, ms: Date.now() - t0 };
+    } catch (e) { results.pageTitle = { ok: false, error: e.message }; }
+    // Test 2: getState
+    try {
+        const t0 = Date.now();
+        const st = await Promise.race([s.client.getState(), new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 15000))]);
+        results.getState = { ok: true, value: st, ms: Date.now() - t0 };
+    } catch (e) { results.getState = { ok: false, error: e.message }; }
+    // Test 3: WA store check
+    try {
+        const t0 = Date.now();
+        const info = await Promise.race([s.client.pupPage.evaluate(() => {
+            return { hasStore: typeof window.Store !== 'undefined', hasChat: typeof window.Store?.Chat !== 'undefined', hasMsgSend: typeof window.Store?.SendMessage !== 'undefined' || typeof window.Store?.Msg?.send !== 'undefined', readyState: document.readyState };
+        }), new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 15000))]);
+        results.waStore = { ok: true, value: info, ms: Date.now() - t0 };
+    } catch (e) { results.waStore = { ok: false, error: e.message }; }
+    // Test 4: simple number check (isRegisteredUser)
+    try {
+        const t0 = Date.now();
+        const reg = await Promise.race([s.client.isRegisteredUser('6285719195627@c.us'), new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 15000))]);
+        results.isRegistered = { ok: true, value: reg, ms: Date.now() - t0 };
+    } catch (e) { results.isRegistered = { ok: false, error: e.message }; }
+    res.json({ phone_id: id, status: s.status, results });
+});
 app.post('/api/send', apiAuth, async (req, res) => {
     try {
         const pid = sanitizeId(req.body.phone_id || '') || getFirstOpenSession();
@@ -3377,10 +3763,14 @@ app.post('/api/send', apiAuth, async (req, res) => {
         if (!s || s.status !== 'open') return res.status(503).json({ error: 'Session not connected', phone_id: pid });
         const { number, message } = req.body;
         if (!number || !message) return res.status(400).json({ error: 'number and message required' });
-        const result = await s.client.sendMessage(numberToJid(number), message);
+        const slot = await acquireSendSlot(pid);
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
+        const _jid = numberToJid(number);
+        if (ANTI_BAN_TYPING) await simulateTyping(s.client, _jid, message);
+        const result = await withTimeout(s.client.sendMessage(_jid, message), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), message, 'text', 'sent', result.id?._serialized || '']); } catch { }
-        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
-    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized }, anti_ban: { simulated_typing: ANTI_BAN_TYPING, jitter_ms: slot.jitterMs } });
+    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : safeApiError(e), reconnecting: _dead || undefined }); }
 });
 app.post('/api/sendGroup', apiAuth, async (req, res) => {
     try {
@@ -3391,10 +3781,13 @@ app.post('/api/sendGroup', apiAuth, async (req, res) => {
         if (!group || !message) return res.status(400).json({ error: 'group and message required' });
         const jid = resolveGroupJid(group, s.groupCache);
         if (!jid) return res.status(404).json({ error: 'Group not found: ' + group });
-        const result = await s.client.sendMessage(jid, message);
+        const slot = await acquireSendSlot(pid);
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
+        if (ANTI_BAN_TYPING) await simulateTyping(s.client, jid, message);
+        const result = await withTimeout(s.client.sendMessage(jid, message), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, jid.replace(/@g\.us$/, ''), message, 'text', 'sent', result.id?._serialized || '']); } catch { }
-        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized, group_jid: jid } });
-    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized, group_jid: jid }, anti_ban: { simulated_typing: ANTI_BAN_TYPING, jitter_ms: slot.jitterMs } });
+    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : safeApiError(e), reconnecting: _dead || undefined }); }
 });
 app.post('/api/send-image', apiAuth, async (req, res) => {
     try {
@@ -3404,10 +3797,12 @@ app.post('/api/send-image', apiAuth, async (req, res) => {
         const { number, message, image } = req.body;
         if (!number || !image) return res.status(400).json({ error: 'number and image required' });
         const media = await MessageMedia.fromUrl(image);
-        const result = await s.client.sendMessage(numberToJid(number), media, { caption: message || '' });
+        const slot = await acquireSendSlot(pid);
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
+        const result = await withTimeout(s.client.sendMessage(numberToJid(number), media, { caption: message || '' }), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), message || '[image]', 'image', 'sent', result.id?._serialized || '']); } catch { }
-        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
-    } catch (e) { const _dead = handleDeadSession(pid, s, e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized }, anti_ban: { simulated_typing: false, jitter_ms: slot.jitterMs } });
+    } catch (e) { const _dead = handleDeadSession(pid, s, e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : safeApiError(e), reconnecting: _dead || undefined }); }
 });
 app.post('/api/send-location', apiAuth, async (req, res) => {
     try {
@@ -3417,10 +3812,12 @@ app.post('/api/send-location', apiAuth, async (req, res) => {
         const { number, latitude, longitude, description } = req.body;
         if (!number || latitude == null || longitude == null) return res.status(400).json({ error: 'number, latitude, and longitude required' });
         const loc = new Location(parseFloat(latitude), parseFloat(longitude), description || '');
-        const result = await s.client.sendMessage(numberToJid(number), loc);
+        const slot = await acquireSendSlot(pid);
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
+        const result = await withTimeout(s.client.sendMessage(numberToJid(number), loc), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), description || '[location]', 'location', 'sent', result.id?._serialized || '']); } catch { }
-        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
-    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized }, anti_ban: { simulated_typing: false, jitter_ms: slot.jitterMs } });
+    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : safeApiError(e), reconnecting: _dead || undefined }); }
 });
 app.post('/api/send-buttons', apiAuth, async (req, res) => {
     try {
@@ -3432,10 +3829,13 @@ app.post('/api/send-buttons', apiAuth, async (req, res) => {
         if (buttons.length > 3) return res.status(400).json({ error: 'Maximum 3 buttons allowed' });
         const btnList = buttons.map((b, i) => ({ id: b.id || ('btn' + (i + 1)), body: b.text || b.body || ('Button ' + (i + 1)) }));
         const btnMsg = new Buttons(message, btnList, '', footer || '');
-        const result = await s.client.sendMessage(numberToJid(number), btnMsg);
+        const slot = await acquireSendSlot(pid);
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
+        if (ANTI_BAN_TYPING) await simulateTyping(s.client, numberToJid(number), message);
+        const result = await withTimeout(s.client.sendMessage(numberToJid(number), btnMsg), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), message + ' [buttons]', 'buttons', 'sent', result.id?._serialized || '']); } catch { }
-        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
-    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized }, anti_ban: { simulated_typing: ANTI_BAN_TYPING, jitter_ms: slot.jitterMs } });
+    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : safeApiError(e), reconnecting: _dead || undefined }); }
 });
 app.post('/api/send-list', apiAuth, async (req, res) => {
     try {
@@ -3445,10 +3845,12 @@ app.post('/api/send-list', apiAuth, async (req, res) => {
         const { number, message, footer, title, buttonText, sections } = req.body;
         if (!number || !message || !buttonText || !sections || !Array.isArray(sections) || sections.length === 0) return res.status(400).json({ error: 'number, message, buttonText, and sections[] required' });
         const listMsg = new List(message, buttonText, sections, title || '', footer || '');
-        const result = await s.client.sendMessage(numberToJid(number), listMsg);
+        const slot = await acquireSendSlot(pid);
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
+        const result = await withTimeout(s.client.sendMessage(numberToJid(number), listMsg), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), message + ' [list]', 'list', 'sent', result.id?._serialized || '']); } catch { }
-        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
-    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized }, anti_ban: { simulated_typing: false, jitter_ms: slot.jitterMs } });
+    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : safeApiError(e), reconnecting: _dead || undefined }); }
 });
 app.post('/api/send-poll', apiAuth, async (req, res) => {
     try {
@@ -3459,10 +3861,12 @@ app.post('/api/send-poll', apiAuth, async (req, res) => {
         if (!number || !question || !options || !Array.isArray(options) || options.length < 2) return res.status(400).json({ error: 'number, question, and options[] (min 2) required' });
         if (options.length > 12) return res.status(400).json({ error: 'Maximum 12 poll options allowed' });
         const poll = new Poll(question, options, { allowMultipleAnswers: allowMultiple !== false });
-        const result = await s.client.sendMessage(numberToJid(number), poll);
+        const slot = await acquireSendSlot(pid);
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
+        const result = await withTimeout(s.client.sendMessage(numberToJid(number), poll), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), question + ' [poll]', 'poll', 'sent', result.id?._serialized || '']); } catch { }
-        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
-    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized }, anti_ban: { simulated_typing: false, jitter_ms: slot.jitterMs } });
+    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : safeApiError(e), reconnecting: _dead || undefined }); }
 });
 app.post('/api/delete', apiAuth, async (req, res) => {
     try {
@@ -3483,7 +3887,7 @@ app.post('/api/delete', apiAuth, async (req, res) => {
         const target = msgs.find(m => m.id._serialized === mk.id || m.id.id === mk.id);
         if (target) { await target.delete(true); res.json({ success: true, deleted: mk.id }); }
         else { res.status(404).json({ success: false, error: 'Message not found in recent messages' }); }
-    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
+    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : safeApiError(e), reconnecting: _dead || undefined }); }
 });
 app.post('/api/kick', apiAuth, async (req, res) => {
     try {
@@ -3497,7 +3901,7 @@ app.post('/api/kick', apiAuth, async (req, res) => {
         const chat = await s.client.getChatById(jid);
         const result = await chat.removeParticipants([numberToJid(member)]);
         res.json({ success: true, data: result });
-    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
+    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : safeApiError(e), reconnecting: _dead || undefined }); }
 });
 app.post('/api/leave-group', apiAuth, async (req, res) => {
     try {
@@ -3512,7 +3916,35 @@ app.post('/api/leave-group', apiAuth, async (req, res) => {
         await chat.leave();
         s.groupCache.delete(jid);
         res.json({ success: true, phone_id: pid, left_group: jid });
-    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
+    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : safeApiError(e), reconnecting: _dead || undefined }); }
+});
+app.post('/api/approve-membership', apiAuth, async (req, res) => {
+    try {
+        const pid = sanitizeId(req.body.phone_id || '') || getFirstOpenSession();
+        const s = sessions.get(pid);
+        if (!s || s.status !== 'open') return res.status(503).json({ error: 'Session not connected', phone_id: pid });
+        const { group_id, requester } = req.body;
+        if (!group_id || !requester) return res.status(400).json({ error: 'group_id and requester required' });
+        const jid = resolveGroupJid(group_id, s.groupCache);
+        if (!jid) return res.status(404).json({ error: 'Group not found: ' + group_id });
+        const chat = await s.client.getChatById(jid);
+        const result = await chat.approveGroupMembershipRequests({ requesterIds: [numberToJid(requester)] });
+        res.json({ success: true, phone_id: pid, data: result });
+    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : safeApiError(e), reconnecting: _dead || undefined }); }
+});
+app.post('/api/reject-membership', apiAuth, async (req, res) => {
+    try {
+        const pid = sanitizeId(req.body.phone_id || '') || getFirstOpenSession();
+        const s = sessions.get(pid);
+        if (!s || s.status !== 'open') return res.status(503).json({ error: 'Session not connected', phone_id: pid });
+        const { group_id, requester } = req.body;
+        if (!group_id || !requester) return res.status(400).json({ error: 'group_id and requester required' });
+        const jid = resolveGroupJid(group_id, s.groupCache);
+        if (!jid) return res.status(404).json({ error: 'Group not found: ' + group_id });
+        const chat = await s.client.getChatById(jid);
+        const result = await chat.rejectGroupMembershipRequests({ requesterIds: [numberToJid(requester)] });
+        res.json({ success: true, phone_id: pid, data: result });
+    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : safeApiError(e), reconnecting: _dead || undefined }); }
 });
 app.post('/api/create-group', apiAuth, async (req, res) => {
     try {
@@ -3568,7 +4000,7 @@ app.post('/api/refresh-groups', apiAuth, async (req, res) => {
         const pid = sanitizeId(req.body.phone_id || '') || getFirstOpenSession();
         const s = sessions.get(pid);
         if (!s || s.status !== 'open') return res.status(503).json({ error: 'Session not connected' });
-        await refreshGroupCacheForSession(pid);
+        await refreshGroupCacheForSession(pid, true);
         const groups = [];
         for (const [jid, meta] of s.groupCache) groups.push({ jid, name: meta.subject, participants: meta.participants?.length || 0 });
         res.json({ success: true, phone_id: pid, groups });
@@ -3659,12 +4091,13 @@ async function runMonitoringAgent() {
             connecting++;
             // Skip sessions that are actively showing QR (waiting for user scan — this is expected)
             if (sess._qrCount > 0) continue;
-            // Stuck in "connecting" > 5 min WITHOUT QR = likely Chrome zombied
+            // Stuck in "connecting" > 8 min WITHOUT QR = likely Chrome zombied
+            // (post-init ready timer handles 5min case, agent is last resort at 8min)
             const since = sess._connectingSince || now;
-            if (now - since > 5 * 60 * 1000 && !sess._removing && !sess._qrTimeout) {
+            if (now - since > 8 * 60 * 1000 && !sess._removing && !sess._qrTimeout) {
                 stuckConnecting++;
                 agentLog('STUCK: ' + id + ' connecting for ' + Math.round((now - since) / 60000) + 'm — forcing restart');
-                try { if (sess.client) await Promise.race([sess.client.destroy(), new Promise(r => setTimeout(r, 5000))]); } catch { }
+                await safeDestroy(sess.client, id);
                 sess.client = null;
                 sess.status = 'disconnected';
                 sess.connectedAt = null;
@@ -3678,8 +4111,9 @@ async function runMonitoringAgent() {
         }
         if (sess.status === 'disconnected') {
             disconnected++;
-            // Orphaned: disconnected for > 5 min, no reconnect timer, not being removed, not user-disconnected
-            if (!sess._reconnectTimer && !sess._removing && !sess._userDisconnecting && !_shuttingDown) {
+            // Orphaned: disconnected, no reconnect timer, not being removed, not user-disconnected
+            // BUT skip sessions without valid auth — they need manual QR pairing from dashboard
+            if (!sess._reconnectTimer && !sess._removing && !sess._userDisconnecting && !_shuttingDown && hasValidAuth(id)) {
                 orphaned++;
                 agentLog('ORPHAN: ' + id + ' disconnected with no reconnect scheduled — auto-recovering');
                 sess._failCount = 0;
@@ -3708,13 +4142,36 @@ async function runMonitoringAgent() {
         }
     }
 
-    // 3. Chrome process count monitoring (info only — no killing, too dangerous)
+    // 3. Chrome zombie cleanup — kill orphaned Chrome processes not owned by any session
     try {
         const chromeCount = parseInt(execSync('pgrep -c chrome || echo 0', { timeout: 3000, encoding: 'utf8' }).trim()) || 0;
         let activeClients = 0;
-        for (const [, s] of sessions) { if (s.client) activeClients++; }
+        const activeDataDirs = new Set();
+        for (const [id, s] of sessions) {
+            if (s.client) { activeClients++; activeDataDirs.add(path.resolve('./auth_info', 'session-' + id)); }
+        }
         if (chromeCount > (activeClients * 4 + 5) && chromeCount > 10) {
-            agentLog('CHROME-HIGH: ' + chromeCount + ' Chrome procs, ' + activeClients + ' active clients (monitoring only)');
+            agentLog('CHROME-HIGH: ' + chromeCount + ' Chrome procs, ' + activeClients + ' active clients — scanning for zombies');
+            // Find all Chrome PIDs with their data-dir
+            try {
+                const psOut = execSync('ps aux | grep "user-data-dir=.*auth_info" | grep -v grep', { timeout: 5000, encoding: 'utf8' });
+                const zombiePids = [];
+                for (const line of psOut.trim().split('\n')) {
+                    if (!line.trim()) continue;
+                    const pidMatch = line.match(/^\S+\s+(\d+)/);
+                    const dirMatch = line.match(/user-data-dir=([^\s]+)/);
+                    if (pidMatch && dirMatch) {
+                        const pid = pidMatch[1], dir = dirMatch[1];
+                        if (!activeDataDirs.has(dir)) zombiePids.push({ pid, dir });
+                    }
+                }
+                if (zombiePids.length > 0) {
+                    agentLog('ZOMBIE-KILL: Killing ' + zombiePids.length + ' orphaned Chrome processes');
+                    for (const z of zombiePids) {
+                        try { execSync('kill -9 ' + z.pid, { timeout: 2000 }); } catch { }
+                    }
+                }
+            } catch { }
         }
     } catch { }
 
@@ -3784,12 +4241,19 @@ async function runMonitoringAgent() {
         }
     }
 
-    // 6. Daily report at 8:00 AM Jakarta time
+    // 6. Daily report at 8:00 AM Jakarta time + DB retention cleanup
     const jakartaHour = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })).getHours();
     const jakartaMin = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })).getMinutes();
     const today = new Date().toISOString().slice(0, 10);
     if (jakartaHour === 8 && jakartaMin < 2 && _agentState.lastDailyReport !== today) {
         _agentState.lastDailyReport = today;
+        // Daily DB retention: prune messages_log older than 30 days
+        try {
+            const pruned = await db.query(`DELETE FROM messages_log WHERE created_at < NOW() - INTERVAL '30 days'`);
+            if (pruned.rowCount > 0) agentLog('DB retention: pruned ' + pruned.rowCount + ' old messages_log rows');
+            const prunedBroadcast = await db.query(`DELETE FROM broadcast_jobs WHERE status='done' AND created_at < NOW() - INTERVAL '30 days'`);
+            if (prunedBroadcast.rowCount > 0) agentLog('DB retention: pruned ' + prunedBroadcast.rowCount + ' old broadcast_jobs rows');
+        } catch (e) { agentLog('DB retention error: ' + e.message); }
         let allOpen = true;
         for (const [, sess] of sessions.entries()) { if (sess.status !== 'open') { allOpen = false; break; } }
         // Only send daily report if there are problems — no spam when everything is fine
