@@ -64,7 +64,12 @@ class VerifyGatewayHealth extends Command
             $missing = [];
 
             foreach ($this->requiredListeners as $listener) {
-                if (strpos($source, "client.on('{$listener}'") === false) {
+                // Accept both whatsapp-web.js style client.on('event') and
+                // Baileys/other styles using sock.ev.on or ev.on
+                $found = strpos($source, "client.on('{$listener}'") !== false
+                    || strpos($source, "ev.on('{$listener}'") !== false
+                    || strpos($source, "sock.ev.on('{$listener}'") !== false;
+                if (!$found) {
                     $missing[] = $listener;
                 }
             }

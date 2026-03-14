@@ -73,6 +73,12 @@ class WebhookController extends Controller
     private function handleGroupMembershipRequest(array $payload): void
     {
         $requesterPhone = preg_replace('/@\S+/', '', $payload['requester'] ?? '');
+        // Fallback: try requester_ids[0] when requester is null (e.g. LID accounts)
+        if (empty($requesterPhone)) {
+            $requesterIds = $payload['requester_ids'] ?? [];
+            $fallback = is_array($requesterIds) ? ($requesterIds[0] ?? '') : $requesterIds;
+            $requesterPhone = preg_replace('/@\S+/', '', (string) $fallback);
+        }
         if (empty($requesterPhone)) {
             Log::warning('WebhookController: group_membership_request with no requester', $payload);
             return;
@@ -193,15 +199,19 @@ class WebhookController extends Controller
         $event = $payload['event'] ?? '';
         $action = $payload['action'] ?? '';
 
-        // Format 1: { type: "group_participants_update", action: "add" }
+        // Format 1: { type: "group_participants_update", action: "add" } — backup/older gateway
         if ($type === 'group_participants_update' && $action === 'add') {
             return true;
         }
-        // Format 2: { event: "participant.added" } or { event: "participant.joined" }
+        // Format 2: { type: "group_join", ... } — current index.js (whatsapp-web.js)
+        if ($type === 'group_join' && !empty($payload['group_id'])) {
+            return true;
+        }
+        // Format 3: { event: "participant.added" } or { event: "participant.joined" }
         if ($event === 'participant.added' || $event === 'participant.joined') {
             return true;
         }
-        // Format 3: { type: "notify", action: "add", group_id: ... }
+        // Format 4: { type: "notify", action: "add", group_id: ... }
         if ($type === 'notify' && $action === 'add' && !empty($payload['group_id'])) {
             return true;
         }
@@ -216,7 +226,9 @@ class WebhookController extends Controller
     {
         Log::info('WebhookController: group_add event received', $payload);
 
-        $rawParticipants = $payload['participants'] ?? ($payload['participant'] ?? null);
+        // 'participants' used by older gateway (group_participants_update format)
+        // 'who' used by current index.js (group_join format)
+        $rawParticipants = $payload['participants'] ?? $payload['who'] ?? ($payload['participant'] ?? null);
         if (empty($rawParticipants)) {
             Log::warning('WebhookController::handleMemberAdded: no participants in payload', $payload);
             return;
