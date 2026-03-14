@@ -60,10 +60,29 @@
                                  style="border:2px dashed #d1d5db;border-radius:8px;padding:1.2rem 1rem;text-align:center;cursor:pointer;background:#f9fafb;transition:border-color .15s,background .15s;">
                                 <i class="bi bi-images" style="font-size:1.6rem;color:#9ca3af;"></i>
                                 <div style="font-size:.82rem;color:#4b5563;margin-top:.35rem;font-weight:500;">Klik pilih file <span style="color:#9ca3af;">atau tempel gambar (Ctrl+V)</span></div>
-                                <div style="font-size:.72rem;color:#9ca3af;margin-top:.2rem;">Maks 5 file · foto maks 5MB · video maks 20MB · JPG, PNG, WEBP, MP4, WEBM</div>
+                                <div style="font-size:.72rem;color:#9ca3af;margin-top:.2rem;">Maks 5 file · foto maks 5MB · video maks 50MB · JPG, PNG, WEBP, MP4, WEBM</div>
                             </div>
                             <input type="file" id="newPhotosInput" name="new_photos[]" multiple accept="image/*,video/mp4,video/webm,video/quicktime" style="display:none;">
                             <div id="newPhotoPreview" class="d-flex gap-2 flex-wrap mt-2"></div>
+                            <div id="videoSizeWarn" style="display:none;background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:.55rem .8rem;font-size:.79rem;color:#854d0e;margin-top:.5rem;">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                <strong>Video &gt; 50MB tidak bisa diupload langsung.</strong>
+                                Upload video ke Google Drive, lalu tempel link-nya di kolom di bawah.
+                            </div>
+                        </div>
+
+                        <!-- Google Drive video link -->
+                        <div class="mt-3 pt-3" style="border-top:1px solid #e5e7eb;">
+                            <label class="form-label" style="font-size:.82rem;font-weight:600;color:#374151;">
+                                <i class="bi bi-play-btn me-1" style="color:#4285f4;"></i>Link Video Google Drive
+                                <span style="font-weight:400;color:#9ca3af;font-size:.75rem;">(opsional &mdash; untuk video &gt; 50MB)</span>
+                            </label>
+                            <input type="url" name="gdrive_url" id="gdriveUrlInput" class="form-control" style="font-size:.875rem;"
+                                   value="{{ old('gdrive_url', $listing->gdrive_url) }}"
+                                   placeholder="https://drive.google.com/file/d/...">
+                            <div class="form-text" style="font-size:.73rem;color:#6b7280;">
+                                Pastikan video sudah diset <strong>&quot;Siapa saja yang punya link bisa lihat&quot;</strong> di Google Drive.
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -227,6 +246,19 @@ function restorePhoto(btn, wrapper) {
             wrapper.appendChild(removeBtn);
             preview.appendChild(wrapper);
         });
+
+        // Warn about oversize videos
+        const _maxVid = 50 * 1024 * 1024;
+        const _hasLarge = pending.some(f => f.type.startsWith('video/') && f.size > _maxVid);
+        const _warn = document.getElementById('videoSizeWarn');
+        if (_warn) _warn.style.display = _hasLarge ? '' : 'none';
+        if (_hasLarge) {
+            const inp = document.getElementById('gdriveUrlInput');
+            if (inp && !inp.value) { inp.style.borderColor = '#f59e0b'; inp.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+        } else {
+            const inp = document.getElementById('gdriveUrlInput');
+            if (inp) inp.style.borderColor = '';
+        }
 
         // Visual feedback on drop zone
         if (pending.length > 0) {

@@ -76,6 +76,28 @@
                         <div class="text-center"><i class="bi bi-image" style="font-size:3rem;color:#a7f3d0;"></i><div class="mt-2">Tidak ada foto</div></div>
                     </div>
                 @endif
+
+                @if($listing->gdrive_url)
+                @php
+                    $gdEmbed = null;
+                    if (preg_match('/drive\.google\.com\/file\/d\/([^\/\?]+)/', $listing->gdrive_url, $gm)) {
+                        $gdEmbed = 'https://drive.google.com/file/d/' . $gm[1] . '/preview';
+                    } elseif (preg_match('/[?&]id=([^&]+)/', $listing->gdrive_url, $gm)) {
+                        $gdEmbed = 'https://drive.google.com/file/d/' . $gm[1] . '/preview';
+                    }
+                @endphp
+                <div class="mt-3 pt-3" style="border-top:1px solid #e5e7eb;">
+                    <div style="font-size:.82rem;font-weight:600;color:#374151;margin-bottom:.5rem;"><i class="bi bi-play-btn-fill me-1" style="color:#4285f4;"></i>Video Produk</div>
+                    @if($gdEmbed)
+                    <div style="position:relative;padding-bottom:56.25%;height:0;border-radius:12px;overflow:hidden;">
+                        <iframe src="{{ $gdEmbed }}" frameborder="0" allowfullscreen
+                            style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe>
+                    </div>
+                    @else
+                    <a href="{{ $listing->gdrive_url }}" target="_blank" class="btn btn-sm" style="background:#e8f0fe;color:#1a73e8;border:none;"><i class="bi bi-play-btn me-1"></i>Tonton Video di Google Drive</a>
+                    @endif
+                </div>
+                @endif
             </div>
 
             {{-- Title + Price --}}

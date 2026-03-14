@@ -53,7 +53,8 @@ class BroadcastAgent
             return;
         }
 
-        $senderName = $message->sender_name ?? $message->sender_number;
+        $contact = \App\Models\Contact::where('phone_number', $message->sender_number)->first();
+        $senderName = $contact ? $contact->getSapaan($message->sender_name) : ($message->sender_name ?? $message->sender_number);
         $categoryName = $listing->category?->name ?? 'Umum';
         $priceLabel = $listing->price_formatted ?? '-';
         $listingUrl = url('/p/' . $listing->id);

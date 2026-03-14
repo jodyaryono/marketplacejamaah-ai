@@ -50,7 +50,7 @@
             <input type="checkbox" name="remember" id="remember" class="form-check-input" style="background:#ffffff;border-color:#d1d5db;">
             <label for="remember" class="form-label mb-0" style="font-size:.8rem;">Ingat saya</label>
         </div>
-        <button type="submit" class="btn btn-primary w-100">
+        <button type="submit" id="btn-login" class="btn btn-primary w-100">
             <i class="bi bi-box-arrow-in-right me-2"></i>Masuk
         </button>
     </form>
@@ -61,6 +61,13 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+// Prevent double-click / double-submit
+document.querySelector('form').addEventListener('submit', function() {
+    var btn = document.getElementById('btn-login');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Masuk...';
+});
+
 // Shortcut: Ctrl+Enter → auto-fill admin & login
 document.addEventListener('keydown', function(e) {
     if (e.ctrlKey && e.key === 'Enter') {

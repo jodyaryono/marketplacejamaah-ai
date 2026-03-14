@@ -21,6 +21,7 @@ class Listing extends Model
         'contact_number',
         'contact_name',
         'media_urls',
+        'gdrive_url',
         'location',
         'condition',
         'status',

@@ -96,7 +96,13 @@ class GeminiService
         $text = trim($text);
 
         $decoded = json_decode($text, true);
-        return is_array($decoded) ? $decoded : null;
+        if (!is_array($decoded)) {
+            Log::warning('GeminiService::generateJson: non-JSON response', [
+                'raw' => mb_substr($text, 0, 300),
+            ]);
+            return null;
+        }
+        return $decoded;
     }
 
     public function analyzeImageWithText(string $base64Image, string $mimeType, string $prompt): ?string

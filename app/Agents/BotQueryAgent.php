@@ -93,7 +93,7 @@ class BotQueryAgent
                 // Stickers, audio notes, video without caption, etc.
                 if (in_array($message->message_type, ['sticker', 'audio', 'video'])) {
                     $contact = Contact::where('phone_number', $message->sender_number)->first();
-                    $name = $contact?->name ?? 'Kak';
+                    $name = $contact ? $contact->getSapaan($message->sender_name) : ($message->sender_name ?: 'Kak');
                     $responses = [
                         '😄👍',
                         "Hehe lucu *{$name}* 😂",

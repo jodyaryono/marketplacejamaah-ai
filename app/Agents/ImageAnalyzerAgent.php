@@ -141,7 +141,7 @@ class ImageAnalyzerAgent
     {
         try {
             $contact = Contact::where('phone_number', $message->sender_number)->first();
-            $name = $contact?->name ?? $message->sender_name ?? 'Kak';
+            $name = $contact ? $contact->getSapaan($message->sender_name) : ($message->sender_name ?: 'Kak');
             $title = $listing->title ?? 'iklanmu';
             $listingUrl = config('app.url') . '/listings/' . $listing->id;
 

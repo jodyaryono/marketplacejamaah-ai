@@ -39,6 +39,30 @@
             </div>
             @endif
 
+            @if($listing->gdrive_url)
+            @php
+                $gdriveEmbed = null;
+                if (preg_match('/drive\.google\.com\/file\/d\/([^\/\?]+)/', $listing->gdrive_url, $gm)) {
+                    $gdriveEmbed = 'https://drive.google.com/file/d/' . $gm[1] . '/preview';
+                } elseif (preg_match('/[?&]id=([^&]+)/', $listing->gdrive_url, $gm)) {
+                    $gdriveEmbed = 'https://drive.google.com/file/d/' . $gm[1] . '/preview';
+                }
+            @endphp
+            <div class="card mb-3">
+                <div class="card-header" style="background:transparent;border-bottom:1px solid #e5e7eb;padding:.75rem 1.25rem;">
+                    <span style="font-weight:600;color:#111827;font-size:.9rem;"><i class="bi bi-play-btn me-2" style="color:#4285f4;"></i>Video Google Drive</span>
+                    <a href="{{ $listing->gdrive_url }}" target="_blank" class="float-end" style="font-size:.78rem;color:#4285f4;">Buka di Drive <i class="bi bi-box-arrow-up-right"></i></a>
+                </div>
+                <div class="card-body p-0">
+                    @if($gdriveEmbed)
+                    <iframe src="{{ $gdriveEmbed }}" width="100%" height="360" frameborder="0" allowfullscreen style="display:block;border-radius:0 0 8px 8px;"></iframe>
+                    @else
+                    <div class="p-3"><a href="{{ $listing->gdrive_url }}" target="_blank">{{ $listing->gdrive_url }}</a></div>
+                    @endif
+                </div>
+            </div>
+            @endif
+
             <!-- Description -->
             <div class="card mb-3">
                 <div class="card-header" style="background:transparent;border-bottom:1px solid #e5e7eb;padding:.75rem 1.25rem;">

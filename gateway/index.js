@@ -30,12 +30,17 @@ const APP_VERSION = '2026.03-10';
 const SEND_DELAY_MS = parseInt(process.env.SEND_DELAY_MS || '5000', 10); // min delay between sends per session (ms)
 const SEND_HOURLY_LIMIT = parseInt(process.env.SEND_HOURLY_LIMIT || '150', 10); // max sends per session per hour
 
+// ─── ANTI-BAN: human behaviour simulation ────────────────────────────────────
+const ANTI_BAN_TYPING = process.env.ANTI_BAN_TYPING !== 'false';               // simulate typing indicator before text sends (default: true)
+const ANTI_BAN_JITTER_MS = parseInt(process.env.ANTI_BAN_JITTER_MS || '2000', 10); // max extra random delay added per send (ms)
+const ANTI_BAN_TYPING_CPS = parseInt(process.env.ANTI_BAN_TYPING_CPS || '15', 10); // typing speed chars/sec for duration calc
+
 const _sendLastTime = new Map();   // phoneId → timestamp of last send
 const _sendHourCount = new Map();  // phoneId → { count, resetAt }
 
 /**
  * Per-session send throttle. Ensures minimum gap between outgoing messages
- * and enforces hourly limit. Returns { ok, waitMs, error }.
+ * and enforces hourly limit. Returns { ok, jitterMs, error }.
  */
 async function acquireSendSlot(phoneId) {
     // ── hourly limit ──
@@ -47,7 +52,7 @@ async function acquireSendSlot(phoneId) {
     }
     if (hc.count >= SEND_HOURLY_LIMIT) {
         const minsLeft = Math.ceil((hc.resetAt - now) / 60000);
-        return { ok: false, error: `Batas kirim ${SEND_HOURLY_LIMIT} pesan/jam tercapai. Coba lagi dalam ${minsLeft} menit.` };
+        return { ok: false, error: `Batas kirim ${SEND_HOURLY_LIMIT} pesan/jam tercapai. Coba lagi dalam ${minsLeft} menit.`, retryAfterSec: minsLeft * 60 };
     }
 
     // ── minimum delay between sends ──
@@ -59,10 +64,30 @@ async function acquireSendSlot(phoneId) {
         await new Promise(r => setTimeout(r, waitMs));
     }
 
+    // ── random jitter (anti-ban: avoid machine-perfect interval detection) ──
+    const jitterMs = ANTI_BAN_JITTER_MS > 0 ? Math.floor(Math.random() * ANTI_BAN_JITTER_MS) : 0;
+    if (jitterMs > 0) {
+        console.log(`[AntiBan][${phoneId}] Jitter: +${jitterMs}ms`);
+        await new Promise(r => setTimeout(r, jitterMs));
+    }
+
     // Reserve slot
     _sendLastTime.set(phoneId, Date.now());
     hc.count++;
-    return { ok: true, waitMs: 0 };
+    return { ok: true, jitterMs };
+}
+
+/**
+ * Simulate human typing by sending composing presence for a duration
+ * proportional to message length, then pausing. Errors are silently ignored.
+ */
+async function simulateTyping(client, jid, message) {
+    try {
+        const typingMs = Math.min(Math.max(Math.ceil(message.length * (1000 / ANTI_BAN_TYPING_CPS)), 500), 5000);
+        await client.sendPresenceUpdate('composing', jid);
+        await new Promise(r => setTimeout(r, typingMs));
+        await client.sendPresenceUpdate('paused', jid);
+    } catch { /* presence errors are non-fatal */ }
 }
 
 // ─── ADMIN NOTIFICATION ───────────────────────────────────────────────────────
@@ -3735,10 +3760,12 @@ app.post('/api/send', apiAuth, async (req, res) => {
         const { number, message } = req.body;
         if (!number || !message) return res.status(400).json({ error: 'number and message required' });
         const slot = await acquireSendSlot(pid);
-        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: Math.ceil((slot.waitMs || 60000) / 1000) });
-        const result = await withTimeout(s.client.sendMessage(numberToJid(number), message), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
+        const _jid = numberToJid(number);
+        if (ANTI_BAN_TYPING) await simulateTyping(s.client, _jid, message);
+        const result = await withTimeout(s.client.sendMessage(_jid, message), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), message, 'text', 'sent', result.id?._serialized || '']); } catch { }
-        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized }, anti_ban: { simulated_typing: ANTI_BAN_TYPING, jitter_ms: slot.jitterMs } });
     } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
 });
 app.post('/api/sendGroup', apiAuth, async (req, res) => {
@@ -3751,10 +3778,11 @@ app.post('/api/sendGroup', apiAuth, async (req, res) => {
         const jid = resolveGroupJid(group, s.groupCache);
         if (!jid) return res.status(404).json({ error: 'Group not found: ' + group });
         const slot = await acquireSendSlot(pid);
-        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: Math.ceil((slot.waitMs || 60000) / 1000) });
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
+        if (ANTI_BAN_TYPING) await simulateTyping(s.client, jid, message);
         const result = await withTimeout(s.client.sendMessage(jid, message), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, jid.replace(/@g\.us$/, ''), message, 'text', 'sent', result.id?._serialized || '']); } catch { }
-        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized, group_jid: jid } });
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized, group_jid: jid }, anti_ban: { simulated_typing: ANTI_BAN_TYPING, jitter_ms: slot.jitterMs } });
     } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
 });
 app.post('/api/send-image', apiAuth, async (req, res) => {
@@ -3766,10 +3794,10 @@ app.post('/api/send-image', apiAuth, async (req, res) => {
         if (!number || !image) return res.status(400).json({ error: 'number and image required' });
         const media = await MessageMedia.fromUrl(image);
         const slot = await acquireSendSlot(pid);
-        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: Math.ceil((slot.waitMs || 60000) / 1000) });
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
         const result = await withTimeout(s.client.sendMessage(numberToJid(number), media, { caption: message || '' }), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), message || '[image]', 'image', 'sent', result.id?._serialized || '']); } catch { }
-        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized }, anti_ban: { simulated_typing: false, jitter_ms: slot.jitterMs } });
     } catch (e) { const _dead = handleDeadSession(pid, s, e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
 });
 app.post('/api/send-location', apiAuth, async (req, res) => {
@@ -3781,10 +3809,10 @@ app.post('/api/send-location', apiAuth, async (req, res) => {
         if (!number || latitude == null || longitude == null) return res.status(400).json({ error: 'number, latitude, and longitude required' });
         const loc = new Location(parseFloat(latitude), parseFloat(longitude), description || '');
         const slot = await acquireSendSlot(pid);
-        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: Math.ceil((slot.waitMs || 60000) / 1000) });
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
         const result = await withTimeout(s.client.sendMessage(numberToJid(number), loc), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), description || '[location]', 'location', 'sent', result.id?._serialized || '']); } catch { }
-        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized }, anti_ban: { simulated_typing: false, jitter_ms: slot.jitterMs } });
     } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
 });
 app.post('/api/send-buttons', apiAuth, async (req, res) => {
@@ -3798,10 +3826,11 @@ app.post('/api/send-buttons', apiAuth, async (req, res) => {
         const btnList = buttons.map((b, i) => ({ id: b.id || ('btn' + (i + 1)), body: b.text || b.body || ('Button ' + (i + 1)) }));
         const btnMsg = new Buttons(message, btnList, '', footer || '');
         const slot = await acquireSendSlot(pid);
-        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: Math.ceil((slot.waitMs || 60000) / 1000) });
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
+        if (ANTI_BAN_TYPING) await simulateTyping(s.client, numberToJid(number), message);
         const result = await withTimeout(s.client.sendMessage(numberToJid(number), btnMsg), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), message + ' [buttons]', 'buttons', 'sent', result.id?._serialized || '']); } catch { }
-        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized }, anti_ban: { simulated_typing: ANTI_BAN_TYPING, jitter_ms: slot.jitterMs } });
     } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
 });
 app.post('/api/send-list', apiAuth, async (req, res) => {
@@ -3813,10 +3842,10 @@ app.post('/api/send-list', apiAuth, async (req, res) => {
         if (!number || !message || !buttonText || !sections || !Array.isArray(sections) || sections.length === 0) return res.status(400).json({ error: 'number, message, buttonText, and sections[] required' });
         const listMsg = new List(message, buttonText, sections, title || '', footer || '');
         const slot = await acquireSendSlot(pid);
-        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: Math.ceil((slot.waitMs || 60000) / 1000) });
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
         const result = await withTimeout(s.client.sendMessage(numberToJid(number), listMsg), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), message + ' [list]', 'list', 'sent', result.id?._serialized || '']); } catch { }
-        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized }, anti_ban: { simulated_typing: false, jitter_ms: slot.jitterMs } });
     } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
 });
 app.post('/api/send-poll', apiAuth, async (req, res) => {
@@ -3829,10 +3858,10 @@ app.post('/api/send-poll', apiAuth, async (req, res) => {
         if (options.length > 12) return res.status(400).json({ error: 'Maximum 12 poll options allowed' });
         const poll = new Poll(question, options, { allowMultipleAnswers: allowMultiple !== false });
         const slot = await acquireSendSlot(pid);
-        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: Math.ceil((slot.waitMs || 60000) / 1000) });
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
         const result = await withTimeout(s.client.sendMessage(numberToJid(number), poll), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), question + ' [poll]', 'poll', 'sent', result.id?._serialized || '']); } catch { }
-        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized } });
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized }, anti_ban: { simulated_typing: false, jitter_ms: slot.jitterMs } });
     } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
 });
 app.post('/api/delete', apiAuth, async (req, res) => {

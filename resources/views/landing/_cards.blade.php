@@ -15,6 +15,7 @@
     $waLink = $waPhone ? 'https://wa.me/' . $waPhone . '?text=' . $waText : null;
 
     $sellerName = $listing->contact?->name ?: ($listing->contact_name ?: 'Penjual');
+    $sellerLocation = $listing->location ?: $listing->contact?->address;
     if ($listing->price_label) $priceDisplay = $listing->price_label;
     elseif ($listing->price_min && $listing->price_max) $priceDisplay = 'Rp ' . number_format($listing->price_min,0,',','.') . ' – ' . number_format($listing->price_max,0,',','.');
     elseif ($listing->price && $listing->price > 0) $priceDisplay = 'Rp ' . number_format($listing->price,0,',','.');
@@ -36,8 +37,13 @@
                 <img src="{{ $firstMedia }}" alt="{{ $listing->title }}" loading="lazy"
                      onerror="this.style.display='none';this.parentElement.querySelector('.product-img-placeholder').style.display='flex'">
                 <div class="product-img-placeholder" style="display:none"><i class="bi bi-image"></i></div>
+            @elseif(!empty($listing->gdrive_url))
+                <div class="product-img-placeholder" style="background:#e8f0fe;"><i class="bi bi-play-btn-fill" style="color:#4285f4;font-size:2.5rem;"></i></div>
             @else
                 <div class="product-img-placeholder"><i class="bi bi-box-seam"></i></div>
+            @endif
+            @if(!empty($listing->gdrive_url) && !$isVideo)
+                <div class="video-play-badge" style="background:#4285f4;"><i class="bi bi-play-btn-fill me-1"></i>Video Drive</div>
             @endif
         </div>
 
@@ -58,12 +64,13 @@
             <div class="product-seller">
                 <i class="bi bi-person-circle"></i>
                 <span>{{ $sellerName }}</span>
-                @if($listing->location)
-                    <span class="ms-auto d-flex align-items-center gap-1">
-                        <i class="bi bi-geo-alt"></i>{{ \Illuminate\Support\Str::limit($listing->location, 14) }}
-                    </span>
-                @endif
             </div>
+            @if($sellerLocation)
+            <div style="font-size:.72rem;color:#6b7280;display:flex;align-items:center;gap:.3rem;padding-top:.15rem;">
+                <i class="bi bi-geo-alt-fill" style="color:#059669;font-size:.78rem;"></i>
+                <span>{{ \Illuminate\Support\Str::limit($sellerLocation, 28) }}</span>
+            </div>
+            @endif
             <div style="font-size:.7rem;color:#9ca3af;display:flex;align-items:center;gap:.3rem;padding-top:.2rem;">
                 <i class="bi bi-calendar3"></i>
                 {{ ($listing->source_date ?? $listing->created_at)?->format('d M Y') }}

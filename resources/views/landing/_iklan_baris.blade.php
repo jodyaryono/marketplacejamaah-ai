@@ -9,6 +9,7 @@
     $waText  = urlencode('Halo, saya tertarik dengan "' . $listing->title . '". Apakah masih tersedia?');
     $waLink  = $waPhone ? 'https://wa.me/' . $waPhone . '?text=' . $waText : null;
     $sellerName = $listing->contact?->name ?: ($listing->contact_name ?: 'Penjual');
+    $sellerLocation = $listing->location ?: $listing->contact?->address;
 
     if ($listing->price_label)                                   $priceDisplay = $listing->price_label;
     elseif ($listing->price_min && $listing->price_max)          $priceDisplay = 'Rp ' . number_format($listing->price_min,0,',','.') . '–' . number_format($listing->price_max,0,',','.');
@@ -28,8 +29,8 @@
     <span class="iklan-baris-price">{{ $priceDisplay }}</span>
     <span class="iklan-baris-meta">
         <i class="bi bi-person-circle"></i>{{ \Illuminate\Support\Str::limit($sellerName, 14) }}
-        @if($listing->location)
-            &nbsp;<i class="bi bi-geo-alt"></i>{{ \Illuminate\Support\Str::limit($listing->location, 12) }}
+        @if($sellerLocation)
+            &nbsp;<i class="bi bi-geo-alt-fill" style="color:#059669;"></i>{{ \Illuminate\Support\Str::limit($sellerLocation, 18) }}
         @endif
         &nbsp;<i class="bi bi-calendar3"></i>{{ ($listing->source_date ?? $listing->created_at)?->format('d M') }}
     </span>
