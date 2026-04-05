@@ -18,6 +18,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\RateLimited;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
@@ -25,8 +26,15 @@ class ProcessMessageJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries = 3;
+    public int $tries = 50;    // high enough to survive re-releases from rate limiting
     public int $timeout = 120;
+    public int $maxExceptions = 3; // but only 3 actual exceptions before failing
+
+    public function middleware(): array
+    {
+        // When rate limit hit: release job back to queue with delay (~60s), don't fail it
+        return [new RateLimited('wa-outbound')];
+    }
 
     public function __construct(
         private int $messageId
@@ -59,15 +67,17 @@ class ProcessMessageJob implements ShouldQueue
             // ── Master command: perintah dari nomor owner diproses sebelum semua pipeline ──
             $masterForwarded = false;
             if (MasterCommandAgent::isMaster($message)) {
-                // Forwarded message from master DM → inject into ad pipeline as WAG message
                 $isForwarded = $message->raw_payload['isForwarded'] ?? false;
-                if ($isForwarded && is_null($message->whatsapp_group_id)) {
+                $isMediaMessage = in_array($message->message_type, ['image', 'video', 'document', 'audio']);
+
+                if ($isForwarded && is_null($message->whatsapp_group_id) && !$isMediaMessage) {
+                    // Text-only forwarded from master DM → inject into WAG ad pipeline as before
                     $mainGroup = \App\Models\WhatsappGroup::where('is_active', true)->first();
                     if ($mainGroup) {
                         $message->update(['whatsapp_group_id' => $mainGroup->id]);
                         $message->refresh();
                         $masterForwarded = true;
-                        Log::info("ProcessMessageJob: master forwarded ad → assigned to group {$mainGroup->group_name}");
+                        Log::info("ProcessMessageJob: master forwarded text ad → assigned to group {$mainGroup->group_name}");
                         // Fall through to group ad pipeline below
                     } else {
                         app(WhacenterService::class)->sendMessage(
@@ -77,6 +87,32 @@ class ProcessMessageJob implements ShouldQueue
                         $message->update(['is_processed' => true, 'processed_at' => now()]);
                         return;
                     }
+                } elseif (is_null($message->whatsapp_group_id) && $isMediaMessage) {
+                    // Image/video from master in DM (forwarded or direct) → route to DM/AdBuilder flow
+                    Log::info("ProcessMessageJob: master sent media in DM → routing to AdBuilder flow");
+                    // Fall through to DM handling below (BotQueryAgent will handle via AdBuilderAgent)
+                } elseif (is_null($message->whatsapp_group_id)) {
+                    // Master text DM: try BotQueryAgent first (edit, search, ad builder, terjual, etc.)
+                    // then fall back to MasterCommandAgent for master-only system commands.
+                    $text = mb_strtolower(trim($message->raw_body ?? ''));
+                    $isBotQueryCommand = preg_match(
+                        '/\b(edit|ubah|terjual|laku|sold|cari|iklanku|buat\s+iklan|pasang\s+iklan|bantuan|help|scan\s+ktp|iklan\s+apa|produkku)\b/iu',
+                        $text
+                    ) || \Illuminate\Support\Facades\Cache::has('ad_builder:' . $message->sender_number)
+                      || \Illuminate\Support\Facades\Cache::has('edit_pending:' . $message->sender_number)
+                      || \Illuminate\Support\Facades\Cache::has('clarify_pending:' . $message->sender_number);
+
+                    if ($isBotQueryCommand) {
+                        Log::info("ProcessMessageJob: master DM routed to BotQueryAgent (bot command pattern)");
+                        $handled = $botQuery->handle($message);
+                        if (!$handled) {
+                            $master->handle($message);
+                        }
+                    } else {
+                        $master->handle($message);
+                    }
+                    $message->update(['is_processed' => true, 'processed_at' => now()]);
+                    return;
                 } else {
                     $master->handle($message);
                     $message->update(['is_processed' => true, 'processed_at' => now()]);
@@ -107,11 +143,11 @@ class ProcessMessageJob implements ShouldQueue
                         // Known contact (group member, registered or not) → AI replies contextually
                         $handled = $botQuery->handle($message);
                         if (!$handled) {
-                            // BotQueryAgent failed — send polite fallback
+                            // BotQueryAgent failed — send smart fallback
                             $name = $contact->name ?? 'Kak';
                             app(\App\Services\WhacenterService::class)->sendMessage(
                                 $message->sender_number,
-                                "Aduh maaf *{$name}*, aku kurang nangkep maksudnya nih 🙏 Bisa cerita lebih lengkap?"
+                                "*{$name}*, bisa diperjelas pertanyaannya? 😊 Ketik *bantuan* untuk lihat apa saja yang bisa aku bantu."
                             );
                         }
                     } else {

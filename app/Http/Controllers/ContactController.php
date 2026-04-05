@@ -186,14 +186,18 @@ class ContactController extends Controller
             ->get();
 
         $count = $pending->count();
-        foreach ($pending as $index => $contact) {
-            // Stagger dispatches by 5 seconds per contact to avoid WA rate limits
-            SendOnboardingDmJob::dispatch($contact->id)->delay(now()->addSeconds($index * 5));
+
+        // Hard cap: max 20 per trigger to prevent WA spam ban
+        $batch = $pending->take(20);
+        foreach ($batch as $index => $contact) {
+            // Stagger dispatches by 10 seconds per contact to avoid WA rate limits
+            SendOnboardingDmJob::dispatch($contact->id)->delay(now()->addSeconds($index * 10));
         }
 
+        $sent = $batch->count();
         return response()->json([
             'success' => true,
-            'message' => "Mengirim DM ke {$count} kontak di background (antrian aktif)",
+            'message' => "Mengirim DM ke {$sent} kontak di background (antrian aktif)" . ($count > 20 ? ". Sisa " . ($count - 20) . " kontak, jalankan lagi nanti." : ""),
         ]);
     }
 }

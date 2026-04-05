@@ -538,6 +538,28 @@
                 </div>
             </div>
 
+            {{-- 16. Landing Page Hero Slider --}}
+            <div class="col-md-6 col-lg-4">
+                <div class="feat-card">
+                    <div class="feat-icon green"><i class="bi bi-layout-wtf"></i></div>
+                    <h5>Landing Page dengan Hero Slider</h5>
+                    <p>Halaman publik marketplace tampil profesional dengan <strong>hero slider</strong> berisi iklan foto/video terbaik, bagian <strong>iklan barus</strong> (tanpa foto), filter kategori, pencarian real-time, dan pagination — semua tanpa perlu login.</p>
+                    <span class="feat-tag free"><i class="bi bi-globe me-1"></i>Public</span>
+                    <span class="feat-tag auto"><i class="bi bi-images me-1"></i>Hero Slider</span>
+                </div>
+            </div>
+
+            {{-- 17. Configurable Display Settings --}}
+            <div class="col-md-6 col-lg-4">
+                <div class="feat-card">
+                    <div class="feat-icon amber"><i class="bi bi-sliders"></i></div>
+                    <h5>Konfigurasi Tampilan Landing dari Admin</h5>
+                    <p>Admin bisa mengatur jumlah iklan dengan media dan iklan barus yang ditampilkan di landing page langsung dari halaman <strong>Settings</strong> — tanpa perlu ubah kode. Perubahan langsung berlaku real-time tanpa deploy ulang.</p>
+                    <span class="feat-tag free"><i class="bi bi-gear me-1"></i>Admin Control</span>
+                    <span class="feat-tag ai"><i class="bi bi-toggles me-1"></i>Configurable</span>
+                </div>
+            </div>
+
         </div>
     </div>
 </section>
@@ -715,9 +737,9 @@
                         </div>
                         <div class="col-6 col-md-3">
                             <div class="arch-box">
-                                <div class="arch-icon">🔐</div>
-                                <div class="arch-label">Member Dashboard</div>
-                                <div class="arch-sub">OTP via WhatsApp</div>
+                                <div class="arch-icon">🤖</div>
+                                <div class="arch-label">Bot WhatsApp</div>
+                                <div class="arch-sub">Kelola iklan via chat</div>
                             </div>
                         </div>
                         <div class="col-6 col-md-3">
@@ -827,9 +849,9 @@
                                 <td class="text-center"><span class="check-yes">✓</span> Halaman publik semua iklan penjual</td>
                             </tr>
                             <tr>
-                                <td><strong>Login pembeli / penjual</strong></td>
-                                <td class="text-center"><span class="check-no">✗</span> Tidak ada sistem akun</td>
-                                <td class="text-center"><span class="check-yes">✓</span> OTP via WhatsApp, tanpa password</td>
+                                <td><strong>Kelola iklan penjual</strong></td>
+                                <td class="text-center"><span class="check-no">✗</span> Tidak ada, harus upload manual</td>
+                                <td class="text-center"><span class="check-yes">✓</span> Semua via chat bot WA, tanpa login</td>
                             </tr>
                             <tr>
                                 <td><strong>Analitik & monitoring</strong></td>
@@ -867,7 +889,7 @@
                     </button>
                     <div id="faq1" class="collapse show">
                         <div class="faq-body">
-                            Tidak perlu daftar apapun. Cukup posting iklan di grup WhatsApp yang sudah terhubung ke platform — AI akan otomatis mendeteksi dan memproses iklan tersebut. Untuk mengelola iklan yang sudah tayang, penjual bisa login ke dashboard menggunakan OTP yang dikirim ke WhatsApp mereka.
+                            Tidak perlu daftar apapun. Cukup posting iklan di grup WhatsApp yang sudah terhubung ke platform — AI akan otomatis mendeteksi dan memproses iklan tersebut. Untuk mengelola iklan yang sudah tayang, penjual cukup chat langsung ke bot WhatsApp — ketik <strong>iklan saya</strong> untuk lihat daftar, atau <strong>edit #ID</strong> untuk ubah detail. Tidak ada login, tidak ada password.
                         </div>
                     </div>
                 </div>
@@ -978,13 +1000,13 @@
                     <i class="bi bi-rocket-takeoff-fill"></i>&nbsp;Mulai Sekarang
                 </div>
                 <h2>Siap Bikin Marketplace<br>dari Grup WA Komunitas Kamu?</h2>
-                <p>Bergabung sebagai member lewat WhatsApp — gratis, tanpa daftar, langsung bisa jual.</p>
+                <p>Posting di grup WhatsApp seperti biasa — AI yang mengurus sisanya. Gratis, tanpa daftar, tanpa login.</p>
                 <div class="d-flex gap-3 justify-content-center flex-wrap">
-                    <a href="{{ url('/login-wa') }}" class="btn-cta-white">
-                        <i class="bi bi-whatsapp"></i> Masuk Sebagai Member
-                    </a>
-                    <a href="{{ url('/') }}" class="btn-cta-outline">
+                    <a href="{{ url('/') }}" class="btn-cta-white">
                         <i class="bi bi-grid"></i> Lihat Semua Produk
+                    </a>
+                    <a href="{{ url('/release-notes') }}" class="btn-cta-outline">
+                        <i class="bi bi-journal-code"></i> Release Notes
                     </a>
                 </div>
             </div>

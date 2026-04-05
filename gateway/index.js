@@ -3711,6 +3711,20 @@ app.get('/api/status', apiAuth, (req, res) => {
     for (const [id, s] of sessions) data[id] = { label: s.label, status: s.status, groups_cached: s.groupCache.size };
     res.json({ sessions: data, uptime: process.uptime() });
 });
+app.post('/api/restart/:id', apiAuth, async (req, res) => {
+    const id = sanitizeId(req.params.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'invalid id' });
+    const sess = sessions.get(id);
+    if (!sess) return res.status(404).json({ ok: false, error: 'session not found' });
+    if (sess.status === 'open') return res.json({ ok: true, status: 'open', message: 'Sesi sudah terhubung' });
+    if (sess.status === 'connecting' && sess.client) return res.json({ ok: true, status: 'connecting', message: 'Sesi sedang menghubungkan' });
+    if (sess._reconnectTimer) { clearTimeout(sess._reconnectTimer); sess._reconnectTimer = null; }
+    sess._failCount = 0;
+    if (sess.client) { try { await sess.client.destroy(); } catch { } sess.client = null; }
+    sess.status = 'disconnected';
+    startSession(id, sess.label, sess.apiToken, sess.webhookUrl, sess.webhookEnabled);
+    res.json({ ok: true, status: 'restarting', message: 'Sesi sedang di-restart...' });
+});
 app.get('/api/qr/:id', apiAuth, (req, res) => {
     const id = sanitizeId(req.params.id); const s = sessions.get(id);
     if (!s) return res.status(404).json({ error: 'Session not found' });
@@ -3799,6 +3813,23 @@ app.post('/api/send-image', apiAuth, async (req, res) => {
         try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, number.replace(/\D/g, ''), message || '[image]', 'image', 'sent', result.id?._serialized || '']); } catch { }
         res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized }, anti_ban: { simulated_typing: false, jitter_ms: slot.jitterMs } });
     } catch (e) { const _dead = handleDeadSession(pid, s, e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
+});
+app.post('/api/sendGroup-image', apiAuth, async (req, res) => {
+    try {
+        const pid = sanitizeId(req.body.phone_id || '') || getFirstOpenSession();
+        const s = sessions.get(pid);
+        if (!s || s.status !== 'open') return res.status(503).json({ error: 'Session not connected', phone_id: pid });
+        const { group, message, image } = req.body;
+        if (!group || !image) return res.status(400).json({ error: 'group and image required' });
+        const jid = resolveGroupJid(group, s.groupCache);
+        if (!jid) return res.status(404).json({ error: 'Group not found: ' + group });
+        const media = await MessageMedia.fromUrl(image);
+        const slot = await acquireSendSlot(pid);
+        if (!slot.ok) return res.status(429).json({ error: slot.error, retry_after_sec: slot.retryAfterSec || 3600 });
+        const result = await withTimeout(s.client.sendMessage(jid, media, { caption: message || '' }), 60000, 'sendMessage timeout — Chrome terlalu lambat, coba lagi');
+        try { await db.query('INSERT INTO messages_log(session_id,direction,from_number,to_number,message,media_type,status,wa_msg_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [pid, 'out', pid, jid.replace(/@g\.us$/, ''), message || '[image]', 'image', 'sent', result.id?._serialized || '']); } catch { }
+        res.json({ success: true, phone_id: pid, data: { id: result.id?._serialized, group_jid: jid }, anti_ban: { simulated_typing: false, jitter_ms: slot.jitterMs } });
+    } catch (e) { const _dead = handleDeadSession(sanitizeId(req.body.phone_id || '') || getFirstOpenSession(), sessions.get(sanitizeId(req.body.phone_id || '') || getFirstOpenSession()), e); res.status(_dead ? 503 : 500).json({ success: false, error: _dead ? 'Sesi terputus, sedang reconnect otomatis. Silakan coba lagi dalam beberapa detik.' : e.message, reconnecting: _dead || undefined }); }
 });
 app.post('/api/send-location', apiAuth, async (req, res) => {
     try {

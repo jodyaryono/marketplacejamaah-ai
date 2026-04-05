@@ -29,6 +29,7 @@
         .pub-footer { background:#022c22; color:#94a3b8; padding:2rem 0; margin-top:4rem; font-size:.82rem; }
         .pub-footer a { color:#6ee7b7; text-decoration:none; }
     </style>
+    @yield('meta')
     @yield('styles')
 </head>
 <body>
@@ -58,6 +59,7 @@
             <div class="d-flex gap-3">
                 <a href="{{ route('landing') }}">Beranda</a>
                 <a href="{{ route('marketing-tools') }}">Fitur</a>
+                <a href="{{ route('panduan') }}">Panduan</a>
             </div>
         </div>
     </div>

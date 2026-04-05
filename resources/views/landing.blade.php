@@ -464,6 +464,12 @@
             </div>
         </a>
         <div class="d-flex align-items-center gap-2">
+            <a href="{{ route('panduan') }}" class="btn-login-admin d-none d-md-flex">
+                <i class="bi bi-book"></i> Panduan
+            </a>
+            <a href="{{ route('marketing-tools') }}" class="btn-login-admin d-none d-lg-flex">
+                <i class="bi bi-stars"></i> Fitur
+            </a>
             @auth
                 <a href="{{ route('dashboard') }}" class="btn-dashboard">
                     <i class="bi bi-speedometer2"></i>Dashboard
@@ -802,7 +808,7 @@
             <strong style="color:#fff;">MarketplaceJamaah AI</strong> — Platform jual beli otomatis dari grup WhatsApp jamaah
         </div>
         <div style="color:rgba(255,255,255,.5);">
-            Powered by AI &middot; <a href="{{ url('/marketing-tools') }}">Fitur</a>
+            Powered by AI &middot; <a href="{{ url('/marketing-tools') }}">Fitur</a> &middot; <a href="{{ url('/panduan') }}">Panduan</a>
         </div>
     </div>
 </footer>

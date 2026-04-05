@@ -8,7 +8,6 @@ use App\Models\AgentLog;
 use App\Models\AnalyticsDaily;
 use App\Models\Listing;
 use App\Models\Message;
-use App\Models\Setting;
 use App\Services\WhacenterService;
 
 class BroadcastAgent
@@ -53,22 +52,26 @@ class BroadcastAgent
             return;
         }
 
-        $contact = \App\Models\Contact::where('phone_number', $message->sender_number)->first();
-        $senderName = $contact ? $contact->getSapaan($message->sender_name) : ($message->sender_name ?? $message->sender_number);
-        $categoryName = $listing->category?->name ?? 'Umum';
-        $priceLabel = $listing->price_formatted ?? '-';
-        $listingUrl = url('/p/' . $listing->id);
-        $paddedId = str_pad($listing->id, 5, '0', STR_PAD_LEFT);
-        $locationLine = $listing->location ? "\xF0\x9F\x93\x8D Lokasi: {$listing->location}\n" : '';
+        $priceLabel   = $listing->price_formatted ?? 'Harga Nego';
+        $listingUrl   = url('/p/' . $listing->id);
+        $categoryLine = $listing->category ? "📂 {$listing->category->name}\n" : '';
+        $locLine      = $listing->location ? "📍 {$listing->location}\n" : '';
+        $shortDesc    = $listing->description ? \Illuminate\Support\Str::limit(explode("\n", $listing->description)[0], 120) : '';
+        $descLine     = $shortDesc ? "_{$shortDesc}_\n" : '';
 
-        $tpl = Setting::get('template_broadcast_new_listing', "✅ *Iklan Diterima!*\n\nHalo *{senderName}*, iklan kamu sudah masuk! 🎉\n\n📋 *{title}*\n💰 {priceLabel}");
-        $text = str_replace(
-            ['{senderName}', '{title}', '{categoryName}', '{priceLabel}', '{locationLine}', '{paddedId}', '{listingUrl}'],
-            [$senderName, $listing->title ?? '', $categoryName, $priceLabel, $locationLine, $paddedId, $listingUrl],
-            $tpl
-        );
+        $caption = "🛍️ *{$listing->title}*\n"
+            . $descLine
+            . "💰 {$priceLabel}\n"
+            . $categoryLine
+            . $locLine
+            . "\n🔗 {$listingUrl}";
 
-        $this->whacenter->sendGroupMessage($group->group_name, $text);
+        $mediaUrl = $listing->media_urls[0] ?? null;
+        if ($mediaUrl) {
+            $this->whacenter->sendGroupImageMessage($group->group_name, $caption, $mediaUrl);
+        } else {
+            $this->whacenter->sendGroupMessage($group->group_name, $caption);
+        }
     }
 
     private function updateAnalytics(Message $message): void

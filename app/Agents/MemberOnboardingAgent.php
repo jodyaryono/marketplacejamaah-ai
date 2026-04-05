@@ -150,7 +150,7 @@ class MemberOnboardingAgent
 
             // AI failed → use a warm generic fallback, but only if we haven't just sent the same message
             if (!$parsed) {
-                $fallback = 'Hehe maaf ya, aku agak lemot nih 😅 Bisa cerita sedikit tentang diri kamu? Aku mau kenalan aja kok 😊';
+                $fallback = 'Masya Allah, senang sekali bisa kenalan! 😊 Boleh tau nama Kakak siapa dan biasanya jual atau cari produk apa di sini?';
                 $lastBotMsg = \App\Models\Message::where('sender_number', 'bot')
                     ->where('recipient_number', $message->sender_number)
                     ->orderBy('created_at', 'desc')

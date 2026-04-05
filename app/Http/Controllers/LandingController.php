@@ -4,18 +4,30 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Models\Listing;
+use App\Models\Setting;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
 class LandingController extends Controller
 {
     public function index(Request $request)
     {
+        $perPageMedia = (int) Setting::get('landing_listings_with_media', 6);
+        $perPageText  = (int) Setting::get('landing_listings_text', 10);
+
         // ── Produk dengan foto/video ────────────────────────────────────────
         $query = Listing::with(['category', 'contact'])
             ->where('status', 'active')
             ->whereNotNull('media_urls')
             ->whereRaw("media_urls::text != '[]'")
-            ->latest();
+            ->orderByRaw("
+                CASE WHEN (price IS NOT NULL AND price > 0)
+                          OR (price_label IS NOT NULL AND price_label <> '')
+                          OR (price_min IS NOT NULL AND price_min > 0)
+                     THEN 0 ELSE 1 END,
+                created_at DESC
+            ");
+        $this->deduplicateByContactTitle($query);
 
         if ($request->filled('category_id')) {
             $query->where('category_id', $request->category_id);
@@ -31,7 +43,7 @@ class LandingController extends Controller
                 }
             });
         }
-        $listings = $query->paginate(6)->withQueryString();
+        $listings = $query->paginate($perPageMedia)->withQueryString();
 
         // ── Iklan baris (tanpa foto/video) ─────────────────────────────────
         $textQuery = Listing::with(['category', 'contact'])
@@ -39,7 +51,14 @@ class LandingController extends Controller
             ->where(function ($q) {
                 $q->whereNull('media_urls')->orWhereRaw("media_urls::text = '[]'");
             })
-            ->latest();
+            ->orderByRaw("
+                CASE WHEN (price IS NOT NULL AND price > 0)
+                          OR (price_label IS NOT NULL AND price_label <> '')
+                          OR (price_min IS NOT NULL AND price_min > 0)
+                     THEN 0 ELSE 1 END,
+                created_at DESC
+            ");
+        $this->deduplicateByContactTitle($textQuery);
 
         if ($request->filled('category_id')) {
             $textQuery->where('category_id', $request->category_id);
@@ -55,7 +74,7 @@ class LandingController extends Controller
                 }
             });
         }
-        $textListings = $textQuery->paginate(10)->withQueryString();
+        $textListings = $textQuery->paginate($perPageText)->withQueryString();
 
         $categories = Category::where('is_active', true)->orderBy('name')->get();
         $totalActive = Listing::where('status', 'active')->count();
@@ -109,6 +128,11 @@ class LandingController extends Controller
         return view('marketing-tools', compact('totalActive', 'totalSellers', 'totalCategories'));
     }
 
+    public function panduan()
+    {
+        return view('panduan');
+    }
+
     public function releaseNotes()
     {
         return view('release-notes');
@@ -125,6 +149,7 @@ class LandingController extends Controller
         $query = Listing::with(['category', 'contact'])
             ->where('status', 'active')
             ->latest();
+        $this->deduplicateByContactTitle($query);
 
         if ($isText) {
             $query->where(function ($q) {
@@ -160,5 +185,18 @@ class LandingController extends Controller
             'hasMore' => $listings->hasMorePages(),
             'total' => $listings->total(),
         ]);
+    }
+
+    /**
+     * Show only the most recent listing per seller+title to avoid duplicate ads.
+     */
+    private function deduplicateByContactTitle(Builder $query): void
+    {
+        $query->whereIn('id', function ($sub) {
+            $sub->selectRaw('MAX(id)')
+                ->from('listings')
+                ->where('status', 'active')
+                ->groupBy('contact_id', \DB::raw('lower(trim(title))'));
+        });
     }
 }

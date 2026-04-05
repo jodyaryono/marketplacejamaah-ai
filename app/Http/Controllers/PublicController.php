@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Contact;
 use App\Models\Listing;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 
 class PublicController extends Controller
 {
@@ -33,6 +34,36 @@ class PublicController extends Controller
             ->get();
 
         return view('public.listing-detail', compact('listing', 'related'));
+    }
+
+    /**
+     * Proxy first listing image through app domain for OG/social preview crawlers
+     */
+    public function ogImage(int $id)
+    {
+        $listing  = Listing::where('status', 'active')->findOrFail($id);
+        $mediaUrl = $listing->media_urls[0] ?? null;
+
+        if (!$mediaUrl) {
+            abort(404);
+        }
+
+        try {
+            $response = Http::timeout(8)->get($mediaUrl);
+            if (!$response->successful()) {
+                abort(404);
+            }
+
+            $contentType = $response->header('Content-Type') ?? 'image/jpeg';
+            // Strip charset if appended (e.g. "image/jpeg; charset=utf-8")
+            $contentType = strtok($contentType, ';');
+
+            return response($response->body())
+                ->header('Content-Type', trim($contentType))
+                ->header('Cache-Control', 'public, max-age=86400');
+        } catch (\Exception $e) {
+            abort(404);
+        }
     }
 
     /**

@@ -13,7 +13,9 @@ class OnboardMissingMembers extends Command
     protected $signature = 'onboard:missing
                             {--group= : Group JID (default: from config)}
                             {--dry-run : List members to onboard without sending DMs}
-                            {--delay=1 : Seconds between DMs to avoid rate-limiting}';
+                            {--delay=6 : Seconds between DMs to avoid rate-limiting (min 6)}
+                            {--max-send=20 : Maximum number of DMs to send per run (default 20, max 50)}
+                            {--force : Skip confirmation prompt for large batches}';
 
     protected $description = 'Find group members not yet onboarded and send them intro DMs';
 
@@ -23,11 +25,23 @@ class OnboardMissingMembers extends Command
     {
         $groupId = $this->option('group') ?: config('services.wa_gateway.group_id');
         $isDryRun = (bool) $this->option('dry-run');
-        $delay = (int) $this->option('delay');
+        $delay = max(6, (int) $this->option('delay'));   // enforce minimum 6s gap
+        $maxSend = min(50, max(1, (int) $this->option('max-send')));  // hard cap: 1–50
+        $force = (bool) $this->option('force');
 
         if (!$groupId) {
             $this->error('No group ID provided. Use --group=xxx@g.us or set services.wa_gateway.group_id in config.');
             return 1;
+        }
+
+        if (!$isDryRun) {
+            $this->warn("⚠  Will send at most {$maxSend} DM(s) with {$delay}s delay between each.");
+            if ($maxSend > 10 && !$force) {
+                if (!$this->confirm("Sending {$maxSend} DMs in one run. Continue?", false)) {
+                    $this->info('Aborted.');
+                    return 0;
+                }
+            }
         }
 
         $this->info("Fetching group members for {$groupId}...");
@@ -83,6 +97,12 @@ class OnboardMissingMembers extends Command
                 $this->line("  → WOULD ONBOARD: {$phone} | {$name}{$roleDisplay}");
                 $stats['sent']++;
                 continue;
+            }
+
+            // Hard cap: stop once limit reached
+            if ($stats['sent'] >= $maxSend) {
+                $this->warn("  ⛔ Reached --max-send={$maxSend} limit. Run again to continue.");
+                break;
             }
 
             $this->line("  → Sending onboarding DM to: {$phone} | {$name}{$roleDisplay}");

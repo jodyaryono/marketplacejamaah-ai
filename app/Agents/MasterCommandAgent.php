@@ -32,8 +32,16 @@ class MasterCommandAgent
      */
     public static function isMaster(Message $message): bool
     {
+        return self::isMasterPhone($message->sender_number);
+    }
+
+    /**
+     * Check if a phone number belongs to master.
+     */
+    public static function isMasterPhone(string $phone): bool
+    {
         $masterPhone = config('services.wa_gateway.master_phone', '');
-        return $masterPhone !== '' && $message->sender_number === $masterPhone;
+        return $masterPhone !== '' && $phone === $masterPhone;
     }
 
     /**

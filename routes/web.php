@@ -20,11 +20,13 @@ use Illuminate\Support\Facades\Route;
 // Public landing page
 Route::get('/', [LandingController::class, 'index'])->name('landing');
 Route::get('/marketing-tools', [LandingController::class, 'marketingTools'])->name('marketing-tools');
+Route::get('/panduan', [LandingController::class, 'panduan'])->name('panduan');
 Route::get('/release-notes', [LandingController::class, 'releaseNotes'])->name('release-notes');
 
 // ── Public product & seller pages (no auth required) ────────────────────────
 Route::get('/produk/lagi', [LandingController::class, 'loadMore'])->name('listings.more');
 Route::get('/p/{id}', [PublicController::class, 'listingDetail'])->name('public.listing')->where('id', '[0-9]+');
+Route::get('/p/{id}/og-image', [PublicController::class, 'ogImage'])->name('public.listing.og-image')->where('id', '[0-9]+');
 Route::get('/u/{phone}', [PublicController::class, 'sellerProfile'])->name('public.seller')->where('phone', '[0-9]+');
 
 // ── WhatsApp OTP authentication (DISABLED — all member actions via bot now) ──
@@ -51,6 +53,10 @@ Route::middleware(['auth', 'check.active'])->group(function () {
     // Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/dashboard/stats', [DashboardController::class, 'stats'])->name('dashboard.stats');
+    Route::get('/dashboard/wa-status', [DashboardController::class, 'waStatus'])->name('dashboard.wa-status');
+    Route::post('/dashboard/wa-restart/{sessionId}', [DashboardController::class, 'waRestart'])->name('dashboard.wa-restart');
+    Route::get('/dashboard/queue-status', [DashboardController::class, 'queueStatus'])->name('dashboard.queue-status');
+    Route::post('/dashboard/queue-restart', [DashboardController::class, 'queueRestart'])->name('dashboard.queue-restart');
 
     // Messages (Inbox)
     Route::get('/messages', [MessageController::class, 'index'])->name('messages.index');
