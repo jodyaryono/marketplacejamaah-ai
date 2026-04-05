@@ -56,6 +56,20 @@ class WhacenterService
         return $result;
     }
 
+    public function sendGroupImageMessage(string $groupName, string $message, string $imageUrl): array
+    {
+        $result = $this->gatewayPost('/sendGroup-image', [
+            'phone_id' => $this->phoneId,
+            'group' => $groupName,
+            'message' => $message,
+            'image' => $imageUrl,
+        ]);
+        $group = \App\Models\WhatsappGroup::where('group_name', $groupName)->first();
+        $outId = $result['data']['result']['data']['id'] ?? null;
+        $this->logOutgoing($message, groupId: $group?->id, groupName: $groupName, outgoingMessageId: $outId);
+        return $result;
+    }
+
     /**
      * Delete a message for everyone in a group.
      *

@@ -238,12 +238,67 @@
             <div class="col-lg-9">
                 <div class="timeline">
 
+                    {{-- ═══ v0.5.2 — Landing Page + Configurable Settings ═══ --}}
+                    <div class="rn-entry">
+                        <div class="rn-dot green"><i class="bi bi-layout-wtf"></i></div>
+                        <div class="rn-card">
+                            <div class="rn-meta">
+                                <span class="rn-version latest">Latest</span>
+                                <span class="rn-version stable">v0.5.2</span>
+                                <span class="rn-date"><i class="bi bi-calendar3 me-1"></i>16 Maret 2026</span>
+                            </div>
+                            <h4>🌐 Landing Page Publik & Konfigurasi Tampilan dari Admin</h4>
+                            <p class="rn-summary">
+                                Landing page marketplace kini tampil lebih profesional dengan hero slider iklan foto/video, bagian iklan barus, tema putih–emerald, dan font Plus Jakarta Sans. Admin kini bisa mengatur jumlah iklan yang ditampilkan langsung dari halaman Settings tanpa ubah kode.
+                            </p>
+                            <ul class="rn-items">
+                                <li>
+                                    <span class="ri-icon new"><i class="bi bi-plus-lg"></i></span>
+                                    <span><strong>Hero Slider Landing Page</strong> — Bagian hero kini menampilkan slider iklan foto/video aktif secara acak, memberi kesan marketplace yang hidup dan dinamis</span>
+                                </li>
+                                <li>
+                                    <span class="ri-icon new"><i class="bi bi-plus-lg"></i></span>
+                                    <span><strong>Iklan Barus (Text-Only)</strong> — Bagian baru di landing page untuk iklan tanpa foto/video, tampil dalam layout ringkas agar tidak memakan ruang layar</span>
+                                </li>
+                                <li>
+                                    <span class="ri-icon impr"><i class="bi bi-arrow-up"></i></span>
+                                    <span><strong>Redesign Tema Putih + Emerald</strong> — Seluruh landing page didesain ulang dengan warna dominan putih dan aksen hijau emerald, font Plus Jakarta Sans, dan layout 2-kolom hero yang lebih modern</span>
+                                </li>
+                                <li>
+                                    <span class="ri-icon new"><i class="bi bi-plus-lg"></i></span>
+                                    <span><strong>Setting: Jumlah Iklan dengan Media</strong> — Admin bisa atur jumlah iklan foto/video di landing page via <strong>Settings → Landing</strong> (default: 6). Perubahan berlaku real-time</span>
+                                </li>
+                                <li>
+                                    <span class="ri-icon new"><i class="bi bi-plus-lg"></i></span>
+                                    <span><strong>Setting: Jumlah Iklan Barus</strong> — Admin bisa atur jumlah iklan barus (tanpa media) yang tampil di landing page (default: 10)</span>
+                                </li>
+                                <li>
+                                    <span class="ri-icon fix"><i class="bi bi-bug-fill"></i></span>
+                                    <span><strong>Fix: Tombol Tambah Grup Tidak Muncul</strong> — Gate <code>@can('manage groups')</code> yang tidak pernah terdaftar diganti dengan pengecekan <code>role === 'admin'</code> langsung — tombol kini tampil untuk admin</span>
+                                </li>
+                                <li>
+                                    <span class="ri-icon fix"><i class="bi bi-bug-fill"></i></span>
+                                    <span><strong>Fix: Route Error di /listings</strong> — <code>Route [listings.update-status]</code> tidak ada — diperbaiki ke nama route yang benar <code>listings.status</code></span>
+                                </li>
+                                <li>
+                                    <span class="ri-icon impr"><i class="bi bi-arrow-up"></i></span>
+                                    <span><strong>Settings Form: Support Input Number</strong> — Form pengaturan di /settings kini mendukung tipe <code>number</code> agar input jumlah iklan tervalidasi browser secara otomatis</span>
+                                </li>
+                            </ul>
+                            <div class="tag-row">
+                                <span class="rn-tag ui"><i class="bi bi-layout-wtf me-1"></i>Landing Page</span>
+                                <span class="rn-tag infra"><i class="bi bi-sliders me-1"></i>Settings</span>
+                                <span class="rn-tag fix"><i class="bi bi-bug me-1"></i>Bug Fix</span>
+                                <span class="rn-tag db"><i class="bi bi-database me-1"></i>DB Migration</span>
+                            </div>
+                        </div>
+                    </div>
+
                     {{-- ═══ v0.5.1 — Login Member Dihapus ═══ --}}
                     <div class="rn-entry">
                         <div class="rn-dot blue"><i class="bi bi-arrow-repeat"></i></div>
                         <div class="rn-card">
                             <div class="rn-meta">
-                                <span class="rn-version latest">Latest</span>
                                 <span class="rn-version stable">v0.5.1</span>
                                 <span class="rn-date"><i class="bi bi-calendar3 me-1"></i>11 Maret 2026</span>
                             </div>
@@ -594,7 +649,7 @@
                                 <span style="font-size:1.3rem;">📍</span>
                                 <strong style="font-size:.88rem;">Lokasi Bisnis di Profil Penjual</strong>
                             </div>
-                            <p style="font-size:.8rem;color:#6b7280;margin:0;">Tampilkan koordinat GPS + alamat bisnis penjual di halaman profil publik mereka</p>
+                            <p style="font-size:.8rem;color:#6b7280;margin:0;">Tampilkan koordinat GPS + alamat bisnis penjual di halaman profil publik mereka — sudah tersimpan di DB, tinggal ditampilkan di UI</p>
                         </div>
                     </div>
                     <div class="col-md-4">
@@ -627,11 +682,11 @@
         <div class="p-4 p-md-5 rounded-4 text-center"
              style="background:linear-gradient(135deg,#042f24 0%,#064e3b 45%,#059669 100%);color:#fff;box-shadow:0 16px 60px rgba(5,150,105,.3);">
             <h3 style="font-size:1.6rem;font-weight:900;margin-bottom:.5rem;">Semua Fitur Ini <span style="color:#6ee7b7;">Gratis untuk Komunitas</span></h3>
-            <p style="color:rgba(255,255,255,.7);font-size:.9rem;margin-bottom:1.5rem;">Bergabung sebagai member dan mulai jual beli di komunitas jamaah kamu</p>
+            <p style="color:rgba(255,255,255,.7);font-size:.9rem;margin-bottom:1.5rem;">Posting iklan di grup WhatsApp seperti biasa &mdash; cukup chat, tanpa daftar, tanpa login</p>
             <div class="d-flex gap-3 justify-content-center flex-wrap">
-                <a href="{{ url('/login-wa') }}"
+                <a href="{{ url('/') }}"
                    style="background:#fff;color:#047857;border:none;border-radius:12px;padding:.7rem 1.8rem;font-size:.9rem;font-weight:800;text-decoration:none;display:inline-flex;align-items:center;gap:.5rem;box-shadow:0 6px 24px rgba(0,0,0,.2);">
-                    <i class="bi bi-whatsapp"></i> Masuk via WhatsApp
+                    <i class="bi bi-grid"></i> Lihat Semua Produk
                 </a>
                 <a href="{{ url('/marketing-tools') }}"
                    style="background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);border-radius:12px;padding:.68rem 1.6rem;font-size:.9rem;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:.5rem;">

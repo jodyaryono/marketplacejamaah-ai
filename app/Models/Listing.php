@@ -18,6 +18,7 @@ class Listing extends Model
         'price_min',
         'price_max',
         'price_label',
+        'price_type',
         'contact_number',
         'contact_name',
         'media_urls',
@@ -61,13 +62,28 @@ class Listing extends Model
         if ($this->price_label) {
             return $this->price_label;
         }
-        if ($this->price) {
-            return 'Rp ' . number_format($this->price, 0, ',', '.');
+
+        $type = $this->price_type ?? 'fix';
+
+        if ($this->price && $this->price > 0) {
+            $rp = 'Rp ' . number_format($this->price, 0, ',', '.');
+            return match ($type) {
+                'nego'   => "{$rp} (Nego)",
+                'lelang' => "Lelang mulai {$rp}",
+                default  => $rp,
+            };
         }
+
         if ($this->price_min && $this->price_max) {
-            return 'Rp ' . number_format($this->price_min, 0, ',', '.') . ' - ' . number_format($this->price_max, 0, ',', '.');
+            $range = 'Rp ' . number_format($this->price_min, 0, ',', '.') . ' - ' . number_format($this->price_max, 0, ',', '.');
+            return $type === 'nego' ? "{$range} (Nego)" : $range;
         }
-        return 'Harga tidak dicantumkan';
+
+        return match ($type) {
+            'nego'   => 'Harga Nego',
+            'lelang' => 'Harga Lelang',
+            default  => 'Harga tidak dicantumkan',
+        };
     }
 
     public function scopeActive($query)

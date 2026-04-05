@@ -18,12 +18,14 @@ use Illuminate\Support\Str;
 class BotQueryAgent
 {
     private string $baseUrl;
+    private AdBuilderAgent $adBuilder;
 
     public function __construct(
         private WhacenterService $whacenter,
         private GeminiService $gemini,
     ) {
         $this->baseUrl = rtrim(config('app.url'), '/');
+        $this->adBuilder = app(AdBuilderAgent::class);
     }
 
     /**
@@ -67,24 +69,56 @@ class BotQueryAgent
                 return false;
             }
 
-            // ── Handle image DM (e.g. KTP scan) ──────────────────────────────
+            // ── Handle image DM ───────────────────────────────────────────────
             if ($message->message_type === 'image') {
                 $mediaUrl = $message->media_url;
                 $rawPayload = $message->raw_payload ?? [];
                 $mediaData = $rawPayload['media_data'] ?? null;
 
                 if ($mediaUrl || $mediaData) {
-                    $ktpCacheKey = 'ktp_pending:' . $message->sender_number;
-                    Cache::forget($ktpCacheKey);
-                    // Send instant acknowledgment so user knows we received the photo
-                    $this->whacenter->sendMessage($message->sender_number, '⏳ _Sedang membaca gambar, mohon tunggu sebentar..._');
-                    $reply = $mediaData && !$mediaUrl
-                        ? $this->analyzeKtpBase64($mediaData['data'], $mediaData['mimetype'] ?? 'image/jpeg')
-                        : $this->handleKtpImage($mediaUrl);
+                    $adBuilderState = $this->adBuilder->getState($message->sender_number);
+                    $ktpPending = Cache::has('ktp_pending:' . $message->sender_number);
+
+                    if ($ktpPending) {
+                        // KTP scan mode — existing flow
+                        Cache::forget('ktp_pending:' . $message->sender_number);
+                        $this->whacenter->sendMessage($message->sender_number, '⏳ _Sedang membaca gambar, mohon tunggu sebentar..._');
+                        $reply = $mediaData && !$mediaUrl
+                            ? $this->analyzeKtpBase64($mediaData['data'], $mediaData['mimetype'] ?? 'image/jpeg')
+                            : $this->handleKtpImage($mediaUrl);
+                        $this->whacenter->sendMessage($message->sender_number, $reply);
+                        $log->update(['status' => 'success', 'output_payload' => ['intent' => 'ktp_scan_image']]);
+                        return true;
+                    }
+
+                    // Ad builder: active session OR auto-start on any image DM
+                    if (!$adBuilderState) {
+                        // Auto-start — user sent photo without typing "buat iklan" first
+                        $contact = Contact::where('phone_number', $message->sender_number)->first();
+                        $name = $contact ? $contact->getSapaan($message->sender_name) : ($message->sender_name ?: 'Kak');
+                        $this->adBuilder->startSilent($message->sender_number);
+                    }
+                    $reply = $this->adBuilder->handleImage($message);
                     $this->whacenter->sendMessage($message->sender_number, $reply);
-                    $log->update(['status' => 'success', 'output_payload' => ['intent' => 'ktp_scan_image']]);
+                    $log->update(['status' => 'success', 'output_payload' => ['intent' => 'ad_builder_image']]);
                     return true;
                 }
+            }
+
+            // ── Ad builder: handle text in active build session ───────────────
+            $adBuilderState = $this->adBuilder->getState($message->sender_number);
+            if ($adBuilderState) {
+                $text = trim($message->raw_body ?? '');
+                $step = $adBuilderState['step'] ?? '';
+                $reply = match ($step) {
+                    'waiting_input' => $this->adBuilder->handleTextWhileWaiting($message->sender_number, $text),
+                    'enriching' => $this->adBuilder->handleEnriching($message->sender_number, $text, $adBuilderState),
+                    'reviewing' => $this->adBuilder->handleReview($message->sender_number, $text, $adBuilderState),
+                    default => $this->adBuilder->handleTextWhileWaiting($message->sender_number, $text),
+                };
+                $this->whacenter->sendMessage($message->sender_number, $reply);
+                $log->update(['status' => 'success', 'output_payload' => ['intent' => 'ad_builder_text', 'step' => $step]]);
+                return true;
             }
 
             // ── Handle sticker / media without text ─────────────────────
@@ -130,6 +164,38 @@ class BotQueryAgent
 
             $categoryNames = Category::where('is_active', true)->pluck('name')->implode(', ');
 
+            // ── Quick terjual shortcut: "terjual #146" or "tandai terjual 146" ───
+            if (preg_match('/\b(?:terjual|laku|sold|tandai\s+(?:terjual|laku|sold))\b.*?#?(\d+)|#?(\d+).*?\b(?:terjual|laku|sold)\b/iu', $text, $tjm)) {
+                $listingId = (int) ($tjm[1] ?: $tjm[2]);
+                if ($listingId > 0) {
+                    $reply = $this->markAsSold($message, $listingId);
+                    $this->whacenter->sendMessage($message->sender_number, $reply);
+                    $log->update(['status' => 'success', 'output_payload' => ['intent' => 'mark_sold', 'listing_id' => $listingId]]);
+                    return true;
+                }
+            }
+
+            // ── Quick aktifkan shortcut: "aktifkan #146" ─────────────────────
+            if (preg_match('/\b(?:aktifkan|aktifkan\s+kembali|aktif|reactivate)\b.*?#?(\d+)|#?(\d+).*?\b(?:aktifkan|aktifkan\s+kembali)\b/iu', $text, $akm)) {
+                $listingId = (int) ($akm[1] ?: $akm[2]);
+                if ($listingId > 0) {
+                    $reply = $this->reactivateListing($message, $listingId);
+                    $this->whacenter->sendMessage($message->sender_number, $reply);
+                    $log->update(['status' => 'success', 'output_payload' => ['intent' => 'reactivate_listing', 'listing_id' => $listingId]]);
+                    return true;
+                }
+            }
+
+            // ── Quick create_ad intent — bypass Gemini for obvious ad-create keywords ──
+            if (preg_match('/\b(buat|pasang|bikin|tambah|post|posting)\s+(iklan|jualan|dagangan|produk|listing)\b|\b(iklan\s+baru|pasang\s+iklan|buat\s+iklan|iklan\s+via\s+bot)\b/iu', $text)) {
+                $contact = Contact::where('phone_number', $message->sender_number)->first();
+                $name = $contact ? $contact->getSapaan($message->sender_name) : ($message->sender_name ?: 'Kak');
+                $reply = $this->adBuilder->start($message->sender_number, $name);
+                $this->whacenter->sendMessage($message->sender_number, $reply);
+                $log->update(['status' => 'success', 'output_payload' => ['intent' => 'create_ad']]);
+                return true;
+            }
+
             // ── Quick KTP intent — bypass Gemini for obvious KTP keywords ─────
             if (preg_match('/\b(scan|baca|ocr|ekstrak|upload|foto|kirim|cek|check|identitas)\s+k\.?t\.?p\.?\b|\bk\.?t\.?p\.?\s*(scan|baca|ocr|upload|kirim)\b|^\s*k\.?t\.?p\.?\s*$/i', $text)) {
                 $reply = $this->handleKtpScanRequest($message->sender_number);
@@ -143,10 +209,31 @@ class BotQueryAgent
             if (Cache::has($editCacheKey)) {
                 $pendingEdit = Cache::get($editCacheKey);
                 Cache::forget($editCacheKey);
-                $reply = $this->applyPendingEdit($message, $pendingEdit['listing_id'], $text);
+                $isMemberOnly = $pendingEdit['member_only'] ?? false;
+                $reply = $isMemberOnly
+                    ? $this->applyMemberEdit($message, $pendingEdit['listing_id'], $text)
+                    : $this->applyPendingEdit($message, $pendingEdit['listing_id'], $text);
                 $this->whacenter->sendMessage($message->sender_number, $reply);
                 $log->update(['status' => 'success', 'output_payload' => ['intent' => 'edit_listing_continue', 'listing_id' => $pendingEdit['listing_id']]]);
                 return true;
+            }
+
+            // ── Bare number: member ketik nomor iklan saja → quick edit ──────
+            if (preg_match('/^\s*#?(\d{1,6})\s*$/', $text, $nm)) {
+                $listingId = (int) $nm[1];
+                $contact = Contact::where('phone_number', $message->sender_number)->first();
+                if ($contact && $listingId > 0) {
+                    $listing = Listing::where('id', $listingId)
+                        ->where(fn($q) => $q->where('contact_id', $contact->id)
+                            ->orWhere('contact_number', $message->sender_number))
+                        ->first();
+                    if ($listing) {
+                        $reply = $this->showMemberEditMenu($listing, $message->sender_number);
+                        $this->whacenter->sendMessage($message->sender_number, $reply);
+                        $log->update(['status' => 'success', 'output_payload' => ['intent' => 'member_quick_edit', 'listing_id' => $listingId]]);
+                        return true;
+                    }
+                }
             }
 
             // ── Quick edit command — bypass Gemini for obvious edit patterns ──
@@ -185,12 +272,28 @@ class BotQueryAgent
 
             $clarifyQuestion = $parsed['clarify_question'] ?? null;
 
+            // ── Override: greeting/conversation containing product price query → search_product
+            if (in_array($intent, ['greeting', 'conversation', 'general_question', 'unknown'])) {
+                $lowerText = mb_strtolower($text);
+                if (preg_match('/\b(harga|berapa|brp|ada\s+jual|jual\s+apa|dijual|ada\s+yang\s+jual|mau\s+beli|cari)\b/i', $lowerText)) {
+                    $intent = 'search_product';
+                    if (!$keyword) {
+                        // Strip greeting prefix and price words to get the product keyword
+                        $kw = preg_replace('/^(assalamu\S*\s*,?\s*|wa.?alaikum\S*\s*,?\s*|halo\s*,?\s*|hai\s*,?\s*|bismillah\s*,?\s*)/iu', '', $text);
+                        $kw = preg_replace('/\b(harga|berapa|brp|ya|dong|deh|nih|ada|jual|mau\s+beli|cari)\b\s*/iu', ' ', $kw);
+                        $kw = trim(preg_replace('/\s+/', ' ', $kw));
+                        $keyword = $kw ?: null;
+                    }
+                }
+            }
+
             $reply = match ($intent) {
                 'search_seller' => $this->searchSellers($text, $categoryQuery, $limit),
                 'search_product' => $this->searchProducts($text, $categoryQuery, $limit),
                 'list_categories' => $this->listCategories(),
                 'my_listings' => $this->myListings($message->sender_number, $limit),
                 'edit_listing' => $this->handleEditListing($message, (int) ($parsed['listing_id'] ?? 0), $text),
+                'create_ad' => $this->handleCreateAd($message),
                 'help' => $this->helpMessage(),
                 'off_topic' => $this->offTopicReply(),
                 'contact_admin' => $this->handleContactAdmin($message->sender_number),
@@ -488,7 +591,10 @@ class BotQueryAgent
     private function helpMessage(): string
     {
         return "🤖 *Kemampuan Bot Marketplace Jamaah*\n\n"
-            . "📦 *Iklan Otomatis*\n"
+            . "🛍️ *Buat Iklan via DM (Baru!)*\n"
+            . "_\"buat iklan\"_ atau _\"pasang iklan\"_\n"
+            . "→ Kirim foto + AI polishing otomatis → setujui → tayang di grup!\n\n"
+            . "📦 *Iklan Otomatis via Grup*\n"
             . "Posting jualan di grup seperti biasa — AI deteksi, ekstrak, dan tayangkan otomatis.\n\n"
             . "🔍 *Cari Produk/Penjual (DM ke bot)*\n"
             . "_\"Siapa yang jual gamis ukuran L?\"_\n"
@@ -499,12 +605,15 @@ class BotQueryAgent
             . "Kirim pin lokasi → bot tanya tujuan:\n"
             . "1️⃣ Update lokasi bisnis di profil\n"
             . "2️⃣ Cari produk di sekitar area\n\n"
-            . "📋 *Kelola Iklan*\n"
-            . "_\"Iklan apa yang saya punya?\"_\n\n"
-            . "✏️ *Edit Iklan via Chat*\n"
-            . "_\"edit #35 harga 150000\"_\n"
-            . "_\"edit #35 terjual\"_\n"
-            . "_\"edit #35\"_ → lihat detail & edit interaktif\n\n"
+            . "📋 *Kelola Iklan Saya*\n"
+            . "_\"iklanku\"_ → lihat semua iklanmu\n\n"
+            . "✏️ *Edit Iklan (Ketik Nomor Iklan Saja!)*\n"
+            . "_\"146\"_ → bot tampilkan iklan #146 + menu edit\n"
+            . "Lalu balas:\n"
+            . "• _harga 500000_ → ubah harga\n"
+            . "• _terjual_ → tandai sudah laku\n"
+            . "• _sembunyikan_ → hapus dari etalase\n"
+            . "• _aktifkan_ → tampilkan kembali\n\n"
             . "📂 *Lihat Kategori*\n"
             . "_\"Daftar kategori tersedia\"_\n\n"
             . "🤔 *AI Tanya Balik* jika pesan kurang jelas\n\n"
@@ -611,16 +720,314 @@ class BotQueryAgent
         }
     }
 
+    /**
+     * Mark a listing as sold quickly (shortcut: "terjual #146").
+     * Only owner or master can mark as sold.
+     */
+    private function markAsSold(Message $message, int $listingId): string
+    {
+        $phone = $message->sender_number;
+        $isMaster = MasterCommandAgent::isMasterPhone($phone);
+        $contact = Contact::where('phone_number', $phone)->first();
+
+        $listing = Listing::find($listingId);
+        if (!$listing) {
+            return "❌ Iklan #{$listingId} tidak ditemukan.";
+        }
+
+        if (!$isMaster) {
+            $isOwner = ($contact && $listing->contact_id === $contact->id)
+                || $listing->contact_number === $phone;
+            if (!$isOwner) {
+                return "🚫 Kamu tidak bisa mengubah iklan #{$listingId} karena bukan milikmu.";
+            }
+        }
+
+        if ($listing->status === 'sold') {
+            return "ℹ️ Iklan *#{$listing->id} — {$listing->title}* sudah ditandai terjual sebelumnya.";
+        }
+
+        $listing->update(['status' => 'sold']);
+
+        // Announce to WAG that item is sold
+        $group = \App\Models\WhatsappGroup::where('is_active', true)->first();
+        if ($group) {
+            $sellerName = $listing->contact_name ?? $contact?->name ?? 'Penjual';
+            $wagMsg = "✅ *TERJUAL!*\n\n"
+                . "📦 *{$listing->title}* (#️⃣{$listing->id})\n"
+                . "👤 Penjual: {$sellerName}\n\n"
+                . "_Iklan ini sudah tidak tersedia._";
+            try {
+                $this->whacenter->sendGroupMessage($group->group_name, $wagMsg);
+            } catch (\Exception $e) {
+                Log::warning('markAsSold: gagal kirim notif WAG', ['error' => $e->getMessage()]);
+            }
+        }
+
+        return "✅ *Iklan #{$listing->id} — {$listing->title}* berhasil ditandai *TERJUAL!*\n\n"
+            . "📭 Iklan sudah dihapus dari etalase marketplace.\n\n"
+            . "_Ketik *aktifkan #$listing->id* jika ingin mengaktifkan kembali._";
+    }
+
+    /**
+     * Show a simple edit menu for member's own listing.
+     * Triggered when member types just the listing number.
+     */
+    private function showMemberEditMenu(Listing $listing, string $phone): string
+    {
+        $status = match ($listing->status) {
+            'active'   => '🟢 Aktif (tayang)',
+            'sold'     => '✅ Terjual',
+            'inactive' => '🔴 Disembunyikan',
+            'expired'  => '🟡 Kadaluarsa',
+            default    => $listing->status,
+        };
+
+        // Store pending edit with member_only flag
+        Cache::put('edit_pending:' . $phone, [
+            'listing_id'  => $listing->id,
+            'member_only' => true,
+        ], now()->addMinutes(10));
+
+        $priceTypeLabel = match ($listing->price_type ?? 'fix') {
+            'nego'   => '🤝 Nego',
+            'lelang' => '🔨 Lelang',
+            default  => '🏷️ Fix',
+        };
+
+        return "📦 *Iklan #{$listing->id}*\n"
+            . "*{$listing->title}*\n\n"
+            . "💰 Harga: {$listing->price_formatted}\n"
+            . "🏷️ Tipe harga: {$priceTypeLabel}\n"
+            . "Status: {$status}\n\n"
+            . "─────────────────\n"
+            . "Balas dengan perintah:\n\n"
+            . "💰 *Ubah Harga:*\n"
+            . "• *harga fix 500000* → Rp 500.000 (Harga Tetap)\n"
+            . "• *harga nego 500000* → Rp 500.000 (Nego)\n"
+            . "• *harga nego* → Harga Nego (tanpa angka)\n"
+            . "• *harga lelang 1000000* → Lelang mulai Rp 1.000.000\n\n"
+            . "📋 *Status Iklan:*\n"
+            . "• *terjual* → tandai sudah laku\n"
+            . "• *sembunyikan* → hapus dari etalase\n"
+            . "• *aktifkan* → tampilkan kembali\n\n"
+            . "_Atau ketik *batal* untuk keluar._";
+    }
+
+    /**
+     * Apply a member-limited edit (price + status only).
+     * Called when edit_pending has member_only=true.
+     */
+    private function applyMemberEdit(Message $message, int $listingId, string $text): string
+    {
+        if (preg_match('/^\s*(batal|cancel)\s*$/iu', $text)) {
+            return '👌 Oke, tidak ada yang diubah.';
+        }
+
+        $phone = $message->sender_number;
+        $contact = Contact::where('phone_number', $phone)->first();
+        $isMaster = MasterCommandAgent::isMasterPhone($phone);
+
+        $listing = Listing::find($listingId);
+        if (!$listing) {
+            return "❌ Iklan #{$listingId} tidak ditemukan.";
+        }
+
+        // Ownership check
+        if (!$isMaster) {
+            $isOwner = ($contact && $listing->contact_id === $contact->id)
+                || $listing->contact_number === $phone;
+            if (!$isOwner) {
+                return "🚫 Kamu tidak bisa mengubah iklan ini karena bukan milikmu.";
+            }
+        }
+
+        $lower = mb_strtolower(trim($text));
+        $changes = [];
+        $desc = [];
+
+        // Status commands
+        if (preg_match('/^\s*(terjual|laku|sold)\s*$/iu', $lower)) {
+            if ($listing->status === 'sold') {
+                return "ℹ️ Iklan ini sudah ditandai terjual sebelumnya.";
+            }
+            $changes['status'] = 'sold';
+            $desc[] = "Status → *Terjual* ✅";
+        } elseif (preg_match('/^\s*(sembunyikan|sembunyikan\s+iklan|hidden|nonaktif|hide)\s*$/iu', $lower)) {
+            $changes['status'] = 'inactive';
+            $desc[] = "Status → *Disembunyikan* 🔴 (tidak tayang di etalase)";
+        } elseif (preg_match('/^\s*(aktifkan|tampilkan\s+lagi|aktif|aktifkan\s+kembali)\s*$/iu', $lower)) {
+            $changes['status'] = 'active';
+            $desc[] = "Status → *Aktif* 🟢 (tayang di etalase)";
+        }
+        // Price commands: "harga fix 500000" / "harga nego 750000" / "harga lelang 1jt" / "harga nego"
+        elseif (preg_match('/^\s*harga\s+(.+)$/iu', $text, $hm) || preg_match('/^\s*(\d[\d.,]*[kKmM]?)\s*$/u', $text, $hm)) {
+            $rawPrice = trim($hm[1]);
+
+            // Detect price_type from keyword
+            $priceType = 'fix';
+            if (preg_match('/\b(nego|negotiable|negosiasi)\b/iu', $rawPrice)) {
+                $priceType = 'nego';
+                $rawPrice = trim(preg_replace('/\b(nego|negotiable|negosiasi)\b\s*/iu', '', $rawPrice));
+            } elseif (preg_match('/\b(lelang|auction|bid)\b/iu', $rawPrice)) {
+                $priceType = 'lelang';
+                $rawPrice = trim(preg_replace('/\b(lelang|auction|bid)\b\s*/iu', '', $rawPrice));
+            } elseif (preg_match('/\b(fix|fixed|tetap|pasti)\b/iu', $rawPrice)) {
+                $priceType = 'fix';
+                $rawPrice = trim(preg_replace('/\b(fix|fixed|tetap|pasti)\b\s*/iu', '', $rawPrice));
+            }
+
+            $changes['price_type'] = $priceType;
+            $changes['price_label'] = null;
+
+            // Parse numeric value (support: 500000 / 500.000 / 500k / 1.5jt / 1jt)
+            $numericValue = null;
+            if (preg_match('/(\d[\d.,]*)\s*(jt|juta)/iu', $rawPrice, $jm)) {
+                $numericValue = (int) round((float) str_replace(['.', ','], ['', '.'], $jm[1]) * 1000000);
+            } elseif (preg_match('/(\d[\d.,]*)\s*[kK]\b/', $rawPrice, $km)) {
+                $numericValue = (int) round((float) str_replace(['.', ','], ['', '.'], $km[1]) * 1000);
+            } elseif (preg_match('/^[\d.,]+$/', $rawPrice)) {
+                $numericValue = (int) preg_replace('/[^\d]/', '', $rawPrice);
+            }
+
+            if ($numericValue && $numericValue > 0) {
+                $changes['price'] = $numericValue;
+                $rpStr = 'Rp ' . number_format($numericValue, 0, ',', '.');
+                $typeLabel = match ($priceType) {
+                    'nego'   => "(Nego)",
+                    'lelang' => "— Harga Lelang",
+                    default  => "(Fix)",
+                };
+                $desc[] = "Harga → *{$rpStr} {$typeLabel}*";
+            } elseif ($priceType !== 'fix') {
+                // No number but valid type (e.g. "harga nego")
+                $changes['price'] = null;
+                $typeLabel = match ($priceType) {
+                    'nego'   => 'Nego',
+                    'lelang' => 'Lelang',
+                    default  => 'Fix',
+                };
+                $desc[] = "Harga → *{$typeLabel}*";
+            } else {
+                return "❓ Tidak dimengerti. Contoh:\n• *harga fix 500000*\n• *harga nego 750000*\n• *harga lelang 1000000*\n• *harga nego* (tanpa angka)\n• *terjual*\n• *sembunyikan*";
+            }
+        }
+
+        if (empty($changes)) {
+            return "❓ Tidak dimengerti. Coba:\n• *harga 500000*\n• *harga nego*\n• *terjual*\n• *sembunyikan*\n• *batal*";
+        }
+
+        $listing->update($changes);
+        $listing->refresh();
+
+        $group = \App\Models\WhatsappGroup::where('is_active', true)->first();
+        $link = "{$this->baseUrl}/p/{$listing->id}";
+
+        // Terjual → announce WAG, no re-post
+        if (($changes['status'] ?? '') === 'sold') {
+            if ($group) {
+                $sellerName = $listing->contact_name ?? $contact?->name ?? 'Penjual';
+                try {
+                    $this->whacenter->sendGroupMessage($group->group_name,
+                        "✅ *TERJUAL!*\n\n📦 *{$listing->title}* (#️⃣{$listing->id})\n"
+                        . "👤 Penjual: {$sellerName}\n\n_Iklan ini sudah tidak tersedia._"
+                    );
+                } catch (\Exception $e) {
+                    Log::warning('applyMemberEdit: gagal kirim notif terjual ke WAG', ['error' => $e->getMessage()]);
+                }
+            }
+            return "✅ *Iklan #{$listing->id}* berhasil ditandai *TERJUAL!*\n\n"
+                . "📭 Iklan sudah dihapus dari etalase marketplace.";
+        }
+
+        // Sembunyikan → no WAG post
+        if (($changes['status'] ?? '') === 'inactive') {
+            return "✅ *Iklan #{$listing->id}* berhasil diperbarui!\n\n"
+                . implode("\n", $desc)
+                . "\n\n📭 Iklan tidak lagi tayang di etalase.\n_Ketik *{$listing->id}* → *aktifkan* jika ingin tampilkan lagi._";
+        }
+
+        // Harga/tipe berubah → re-post ke WAG dengan format clean
+        if ($group && $listing->status === 'active') {
+            $priceStr   = $listing->price_formatted;
+            $catLine    = $listing->category ? "📂 {$listing->category->name}\n" : '';
+            $locLine    = $listing->location ? "📍 {$listing->location}\n" : '';
+            $mediaUrls  = $listing->media_urls ?? [];
+            $firstImage = !empty($mediaUrls) ? $mediaUrls[0] : null;
+            $shortDesc  = $listing->description ? Str::limit(explode("\n", $listing->description)[0], 120) : '';
+            $descLine   = $shortDesc ? "_{$shortDesc}_\n" : '';
+
+            $wagCaption = "✏️ *[UPDATE] {$listing->title}*\n"
+                . $descLine
+                . "💰 {$priceStr}\n"
+                . $catLine
+                . $locLine
+                . "\n🔗 {$link}";
+
+            try {
+                if ($firstImage) {
+                    $this->whacenter->sendGroupImageMessage($group->group_name, $wagCaption, $firstImage);
+                } else {
+                    $this->whacenter->sendGroupMessage($group->group_name, $wagCaption);
+                }
+            } catch (\Exception $e) {
+                Log::warning('applyMemberEdit: gagal re-post ke WAG', ['error' => $e->getMessage()]);
+            }
+        }
+
+        return "✅ *Iklan #{$listing->id}* berhasil diperbarui!\n\n"
+            . implode("\n", $desc)
+            . "\n\n🔗 {$link}";
+    }
+
+    private function reactivateListing(Message $message, int $listingId): string
+    {
+        $phone = $message->sender_number;
+        $isMaster = MasterCommandAgent::isMasterPhone($phone);
+        $contact = Contact::where('phone_number', $phone)->first();
+
+        $listing = Listing::find($listingId);
+        if (!$listing) {
+            return "❌ Iklan #{$listingId} tidak ditemukan.";
+        }
+
+        if (!$isMaster) {
+            $isOwner = ($contact && $listing->contact_id === $contact->id)
+                || $listing->contact_number === $phone;
+            if (!$isOwner) {
+                return "🚫 Kamu tidak bisa mengaktifkan iklan #{$listingId} karena bukan milikmu.";
+            }
+        }
+
+        $listing->update(['status' => 'active']);
+        $link = "{$this->baseUrl}/p/{$listing->id}";
+
+        return "✅ *Iklan #{$listing->id} — {$listing->title}* berhasil *diaktifkan kembali!*\n\n"
+            . "🟢 Iklan sudah tayang di etalase marketplace.\n"
+            . "🔗 {$link}";
+    }
+
+    private function handleCreateAd(Message $message): string
+    {
+        $contact = Contact::where('phone_number', $message->sender_number)->first();
+        $name = $contact ? $contact->getSapaan($message->sender_name) : ($message->sender_name ?: 'Kak');
+        $isMaster = MasterCommandAgent::isMasterPhone($message->sender_number);
+        $onBehalfPasmal = $isMaster && AdBuilderAgent::isOnBehalfPasmal($message->raw_body ?? $message->content ?? '');
+        return $this->adBuilder->start($message->sender_number, $name, $onBehalfPasmal);
+    }
+
     private function offTopicReply(): string
     {
-        return "Hehe maaf ya, aku cuma bisa bantu soal jual beli di Marketplace Jamaah nih 😅\n\n"
-            . 'Butuh bantuan apa? Ketik *bantuan* ya 🙏';
+        return "Untuk itu aku belum bisa bantu ya — fokusnya soal jual beli di Marketplace Jamaah 🛒\n\n"
+            . 'Ketik *bantuan* untuk lihat fitur lengkapnya 👇';
     }
 
     private function handleConversation(string $text, string $phoneNumber): string
     {
         $contact = Contact::where('phone_number', $phoneNumber)->first();
-        $name = $contact?->name ?? 'Sahabat';
+        // Gunakan getSapaan() agar honorific sudah tersimpan (default "Kak" jika belum diketahui),
+        // sehingga Gemini tidak perlu menebak sapaan gendered (Mbak/Mas/dll) sendiri.
+        $name = $contact ? $contact->getSapaan() : 'Kak';
 
         // Cek apakah ini pesan pertama (belum pernah ada pesan sebelumnya)
         $previousMessageCount = Message::where('sender_number', $phoneNumber)->count();
@@ -685,6 +1092,9 @@ class BotQueryAgent
         if (preg_match('/\b(edit|ubah|perbarui|update)\s*(iklan|listing|#)?\s*#?(\d+)/i', $lower, $em)) {
             return ['intent' => 'edit_listing', 'listing_id' => (int) $em[3], 'category_query' => null, 'keyword' => null, 'limit' => 5];
         }
+        if (preg_match('/\b(buat|pasang|bikin|tambah|post|posting)\s+(iklan|jualan|dagangan|produk|listing)\b|\b(iklan\s+baru|pasang\s+iklan|buat\s+iklan)\b/iu', $lower)) {
+            return ['intent' => 'create_ad', 'category_query' => null, 'keyword' => null, 'limit' => 5];
+        }
         if (preg_match('/\b(bantuan|help|info|apa yang|bisa apa)\b/', $lower)) {
             return ['intent' => 'help', 'category_query' => null, 'keyword' => null, 'limit' => 5];
         }
@@ -697,6 +1107,13 @@ class BotQueryAgent
         if (preg_match('/\b(penjual|seller|toko|jualan|jual)\b/', $lower)) {
             $kw = preg_replace('/^.*(penjual|seller|toko|jual)\s*/i', '', $text);
             return ['intent' => 'search_seller', 'category_query' => trim($kw) ?: null, 'keyword' => null, 'limit' => 5];
+        }
+        if (preg_match('/\b(harga|berapa|brp)\b/i', $lower)) {
+            // Asking about price of a product → search for it
+            $kw = preg_replace('/^(assalamu\S*\s*,?\s*|wa.?alaikum\S*\s*,?\s*|halo\s*,?\s*|hai\s*,?\s*)/iu', '', $text);
+            $kw = preg_replace('/\b(harga|berapa|brp|ya|dong|deh|nih|ada|jual)\b\s*/iu', ' ', $kw);
+            $kw = trim(preg_replace('/\s+/', ' ', $kw));
+            return ['intent' => 'search_product', 'category_query' => null, 'keyword' => $kw ?: null, 'limit' => 5];
         }
         if (preg_match('/\b(cari|tampilkan|ada|produk|barang|beli)\b/', $lower)) {
             $kw = preg_replace('/^.*(cari|tampilkan|ada|produk|barang|beli)\s*/i', '', $text);
@@ -740,7 +1157,7 @@ class BotQueryAgent
     {
         $phone = $message->sender_number;
         $contact = Contact::where('phone_number', $phone)->first();
-        $isMaster = $phone === MasterCommandAgent::MASTER_PHONE;
+        $isMaster = MasterCommandAgent::isMasterPhone($phone);
 
         if ($listingId <= 0) {
             // No listing ID — show user's listings with IDs
@@ -771,7 +1188,7 @@ class BotQueryAgent
             return $this->formatListingForEdit($listing);
         }
 
-        return $this->parseAndApplyEdits($listing, $cleanText);
+        return $this->parseAndApplyEdits($listing, $cleanText, $phone);
     }
 
     /**
@@ -791,7 +1208,7 @@ class BotQueryAgent
         // Re-check ownership
         $phone = $message->sender_number;
         $contact = Contact::where('phone_number', $phone)->first();
-        $isMaster = $phone === MasterCommandAgent::MASTER_PHONE;
+        $isMaster = MasterCommandAgent::isMasterPhone($phone);
         if (!$isMaster) {
             $isOwner = ($contact && $listing->contact_id === $contact->id) ||
                 $listing->contact_number === $phone;
@@ -800,7 +1217,7 @@ class BotQueryAgent
             }
         }
 
-        return $this->parseAndApplyEdits($listing, $text);
+        return $this->parseAndApplyEdits($listing, $text, $phone);
     }
 
     /**
@@ -876,15 +1293,44 @@ class BotQueryAgent
     /**
      * Parse natural-language edit instructions with Gemini and apply.
      */
-    private function parseAndApplyEdits(Listing $listing, string $editText): string
+    private function parseAndApplyEdits(Listing $listing, string $editText, ?string $senderPhone = null): string
     {
+        // Detect "on behalf pasmal" — only allowed for master
+        $onBehalfPasmal = $senderPhone
+            && MasterCommandAgent::isMasterPhone($senderPhone)
+            && AdBuilderAgent::isOnBehalfPasmal($editText);
+
+        // Strip "on behalf pasmal" from editText before sending to Gemini
+        $editText = trim(preg_replace('/\b(on\s*behalf\s*pasmal|atas\s*nama\s*pasmal|behalf\s*pasmal)\b[,\s]*/iu', '', $editText));
+        $editText = trim($editText, ' ,');
+
+        // If nothing left after stripping (pure "on behalf pasmal" command), skip Gemini
+        if (empty($editText) && $onBehalfPasmal) {
+            $pasmalPhone   = Setting::get('pasmal_contact_phone', '082211436115');
+            $pasmalName    = Setting::get('pasmal_contact_name', 'Pasaramal Jamaah');
+            $pasmalContact = Contact::where('phone_number', $pasmalPhone)->first();
+            $listing->update([
+                'contact_number' => $pasmalPhone,
+                'contact_name'   => $pasmalName,
+                'contact_id'     => $pasmalContact?->id,
+            ]);
+            $listing->refresh();
+            $link = "{$this->baseUrl}/p/{$listing->id}";
+            return "✅ *Iklan #{$listing->id} berhasil diperbarui!*\n\n"
+                . "• Kontak → *{$pasmalName}* ({$pasmalPhone})\n\n"
+                . "🔗 {$link}";
+        }
+
+        // Clean existing description of any "on behalf pasmal" contamination before passing to Gemini
+        $cleanExistingDesc = trim(preg_replace('/\b(on\s*behalf\s*pasmal|atas\s*nama\s*pasmal|behalf\s*pasmal)\b[.,\s]*/iu', '', $listing->description ?? ''));
+
         $categories = Category::where('is_active', true)->pluck('name', 'id')->toArray();
         $catList = implode(', ', array_map(fn($id, $name) => "{$id}:{$name}", array_keys($categories), $categories));
 
         $prompt = "Kamu adalah parser edit iklan marketplace.\n"
             . "Data iklan saat ini:\n"
             . "- Judul: {$listing->title}\n"
-            . '- Deskripsi: ' . Str::limit($listing->description, 300) . "\n"
+            . '- Deskripsi: ' . Str::limit($cleanExistingDesc, 300) . "\n"
             . "- Harga: {$listing->price}\n"
             . "- Label harga: {$listing->price_label}\n"
             . "- Lokasi: {$listing->location}\n"
@@ -896,26 +1342,44 @@ class BotQueryAgent
             . "Tentukan field mana yang ingin diubah dan nilai barunya.\n"
             . "Jawab HANYA JSON valid:\n"
             . '{"title":null,"description":null,"price":null,"price_label":null,'
-            . '"location":null,"condition":null,"status":null,"category_id":null}' . "\n\n"
-            . "Hanya isi field yang user MINTA ubah. Yang tidak diubah = null.\n"
-            . "Jika user bilang \"terjual\"/\"sudah laku\"/\"sold\" → status=\"sold\"\n"
-            . "Jika user bilang harga \"150k\"/\"150rb\" → konversi ke 150000\n"
-            . 'Jika user bilang "aktifkan lagi" → status="active"';
+            . '"price_type":null,"location":null,"condition":null,"status":null,"category_id":null}' . "\n\n"
+            . "ATURAN PENTING:\n"
+            . "- Hanya isi field yang user SECARA EKSPLISIT minta ubah. Field lain = null.\n"
+            . "- Untuk field description: HANYA isi jika ada sesuatu yang perlu ditambahkan atau diubah. Jika diisi, WAJIB dimulai dari description_lama yang sudah ada, lalu tambahkan/perluas. JANGAN replace dengan versi lebih pendek.\n"
+            . "- Jika ada frasa deskriptif tambahan seperti 'persediaan terbatas', 'stok terbatas', 'COD', 'bonus', dll: TAMBAHKAN ke akhir description yang sudah ada (append). Format: description_lama + '\\n' + frasa_baru.\n"
+            . "- Jika user meminta 'tambahan deskripsi yg sesuai' / 'tambah keterangan' / 'lengkapi deskripsi': perluas description yang ada dengan detail produk yang relevan (minimal 3-4 kalimat). Gunakan context dari judul dan data iklan.\n"
+            . "- Jika tidak ada instruksi terkait description sama sekali, description = null.\n"
+            . "- Jika user bilang \"terjual\"/\"sudah laku\"/\"sold\" → status=\"sold\"\n"
+            . "- Jika user bilang \"sembunyikan\"/\"nonaktif\" → status=\"inactive\"\n"
+            . "- Jika user bilang \"aktifkan lagi\" → status=\"active\"\n"
+            . "- Jika user bilang harga \"150k\"/\"1 jutaan\"/\"1jt\" → konversi ke angka (150000 / 1000000)\n"
+            . "- Jika ada kata nego/negotiable → price_type=\"nego\"\n"
+            . "- Jika ada kata lelang/auction → price_type=\"lelang\"\n"
+            . "- Jika ada kata fix/tetap → price_type=\"fix\"\n"
+            . 'price_type valid: "fix", "nego", "lelang". Default jika tidak disebutkan = null (jangan ubah).';
 
         $parsed = $this->gemini->generateJson($prompt);
 
         if (!$parsed) {
-            return "❌ Maaf, saya tidak mengerti perubahan yang diminta.\n\n"
-                . "Contoh:\n"
-                . "• *harga 150000*\n"
-                . "• *judul Gamis Syar'i*\n"
-                . "• *terjual*\n"
-                . '• *lokasi Bekasi*';
+            return "⏳ *AI sedang sibuk, silakan coba beberapa saat lagi.*\n\n"
+                . "_Kirim ulang perintah edit yang sama ya._";
+        }
+
+        // Strip any "on behalf pasmal" that Gemini may have included in description
+        if (!empty($parsed['description'])) {
+            $parsed['description'] = trim(preg_replace('/\b(on\s*behalf\s*pasmal|atas\s*nama\s*pasmal|behalf\s*pasmal)\b[.,\s]*/iu', '', $parsed['description']));
+        }
+
+        // Safety guard: reject description if Gemini replaced it with something shorter than the clean original
+        if (!empty($parsed['description']) && !empty($cleanExistingDesc)) {
+            if (mb_strlen($parsed['description']) < mb_strlen($cleanExistingDesc)) {
+                $parsed['description'] = null;
+            }
         }
 
         $changes = [];
         $changeDesc = [];
-        $editable = ['title', 'description', 'price', 'price_label', 'location', 'condition', 'status', 'category_id'];
+        $editable = ['title', 'description', 'price', 'price_label', 'price_type', 'location', 'condition', 'status', 'category_id'];
 
         foreach ($editable as $field) {
             if (!isset($parsed[$field]) || $parsed[$field] === null) {
@@ -926,7 +1390,9 @@ class BotQueryAgent
             // Validate enum fields
             if ($field === 'condition' && !in_array($val, ['new', 'used', 'unknown']))
                 continue;
-            if ($field === 'status' && !in_array($val, ['active', 'sold', 'expired']))
+            if ($field === 'status' && !in_array($val, ['active', 'sold', 'expired', 'inactive']))
+                continue;
+            if ($field === 'price_type' && !in_array($val, ['fix', 'nego', 'lelang']))
                 continue;
             if ($field === 'category_id' && !isset($categories[$val]))
                 continue;
@@ -941,6 +1407,7 @@ class BotQueryAgent
                 'location' => 'Lokasi',
                 'condition' => 'Kondisi',
                 'status' => 'Status',
+                'price_type' => 'Tipe Harga',
                 'category_id' => 'Kategori',
                 default => $field,
             };
@@ -956,15 +1423,41 @@ class BotQueryAgent
                     'active' => 'Aktif',
                     'sold' => 'Terjual',
                     'expired' => 'Kadaluarsa',
+                    'inactive' => 'Disembunyikan',
                     default => $val
+                },
+                'price_type' => match ($val) {
+                    'nego' => 'Nego 🤝',
+                    'lelang' => 'Lelang 🔨',
+                    default => 'Fix 🏷️',
                 },
                 default => Str::limit((string) $val, 100),
             };
             $changeDesc[] = "• {$label} → *{$display}*";
         }
 
-        if (empty($changes)) {
-            return '🤔 Tidak ada perubahan yang terdeteksi. Coba sebutkan lebih spesifik apa yang mau diubah.';
+        // On behalf Pasmal: always update contact info, regardless of other changes
+        if ($onBehalfPasmal) {
+            $pasmalPhone   = Setting::get('pasmal_contact_phone', '082211436115');
+            $pasmalName    = Setting::get('pasmal_contact_name', 'Pasaramal Jamaah');
+            $pasmalContact = Contact::where('phone_number', $pasmalPhone)->first();
+            $listing->update([
+                'contact_number' => $pasmalPhone,
+                'contact_name'   => $pasmalName,
+                'contact_id'     => $pasmalContact?->id,
+            ]);
+            // Don't add kontak to changeDesc — contact info is visible on the website
+        }
+
+        if (empty($changes) && !$onBehalfPasmal) {
+            return "🤔 Tidak ada perubahan yang terdeteksi dari:\n_\"{$editText}\"_\n\n"
+                . "Contoh yang dimengerti:\n"
+                . "• *harga lelang mulai 1 juta*\n"
+                . "• *harga nego 500000*\n"
+                . "• *harga fix 750000*\n"
+                . "• *terjual*\n"
+                . "• *judul [judul baru]*\n"
+                . "• *lokasi Bekasi*";
         }
 
         // Mutual exclusion: price vs price_label
@@ -974,12 +1467,71 @@ class BotQueryAgent
             $changes['price'] = null;
         }
 
-        $listing->update($changes);
+        if (!empty($changes)) {
+            $listing->update($changes);
+        }
+
+        $listing->refresh();
 
         $link = "{$this->baseUrl}/p/{$listing->id}";
-        return "✅ *Iklan #{$listing->id} berhasil diperbarui!*\n\n"
+        $result = "✅ *Iklan #{$listing->id} berhasil diperbarui!*\n\n"
             . implode("\n", $changeDesc) . "\n\n"
             . "🔗 {$link}";
+
+        $group = \App\Models\WhatsappGroup::where('is_active', true)->first();
+
+        // Status sold → announce terjual, stop here (no re-post)
+        if (($changes['status'] ?? '') === 'sold') {
+            if ($group) {
+                $wagMsg = "✅ *TERJUAL!*\n\n"
+                    . "📦 *{$listing->title}* (#️⃣{$listing->id})\n"
+                    . "👤 Penjual: " . ($listing->contact_name ?? 'Penjual') . "\n\n"
+                    . "_Iklan ini sudah tidak tersedia._";
+                try {
+                    $this->whacenter->sendGroupMessage($group->group_name, $wagMsg);
+                } catch (\Exception $e) {
+                    Log::warning('parseAndApplyEdits: gagal kirim notif terjual ke WAG', ['error' => $e->getMessage()]);
+                }
+            }
+            $result .= "\n\n📭 _Iklan sudah dihapus dari etalase marketplace._";
+            return $result;
+        }
+
+        // Status inactive/hidden → no WAG post
+        if (($changes['status'] ?? '') === 'inactive') {
+            $result .= "\n\n📭 _Iklan disembunyikan dari etalase._";
+            return $result;
+        }
+
+        // For all other updates (harga, judul, dll) → re-post to WAG with clean image caption
+        if ($group && $listing->status === 'active') {
+            $priceStr    = $listing->price_formatted;
+            $catLine     = $listing->category ? "📂 {$listing->category->name}\n" : '';
+            $locLine     = $listing->location ? "📍 {$listing->location}\n" : '';
+            $mediaUrls   = $listing->media_urls ?? [];
+            $firstImage  = !empty($mediaUrls) ? $mediaUrls[0] : null;
+            $shortDesc   = $listing->description ? Str::limit(explode("\n", $listing->description)[0], 120) : '';
+            $descLine    = $shortDesc ? "_{$shortDesc}_\n" : '';
+
+            $wagCaption = "✏️ *[UPDATE] {$listing->title}*\n"
+                . $descLine
+                . "💰 {$priceStr}\n"
+                . $catLine
+                . $locLine
+                . "\n🔗 {$link}";
+
+            try {
+                if ($firstImage) {
+                    $this->whacenter->sendGroupImageMessage($group->group_name, $wagCaption, $firstImage);
+                } else {
+                    $this->whacenter->sendGroupMessage($group->group_name, $wagCaption);
+                }
+            } catch (\Exception $e) {
+                Log::warning('parseAndApplyEdits: gagal re-post ke WAG', ['error' => $e->getMessage()]);
+            }
+        }
+
+        return $result;
     }
 
     /**

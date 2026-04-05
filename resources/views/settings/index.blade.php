@@ -235,7 +235,7 @@
                                         <input class="form-check-input" type="checkbox" name="setting[{{ $item->key }}]" value="1" {{ $item->value ? 'checked' : '' }}>
                                     </div>
                                 @else
-                                    <input type="{{ $item->type === 'url' ? 'url' : 'text' }}" name="setting[{{ $item->key }}]" class="form-control" value="{{ $item->value }}" placeholder="{{ $item->type === 'url' ? 'https://' : '' }}" style="font-size:.82rem;">
+                                    <input type="{{ in_array($item->type, ['url','number']) ? $item->type : 'text' }}" name="setting[{{ $item->key }}]" class="form-control" value="{{ $item->value }}" placeholder="{{ $item->type === 'url' ? 'https://' : '' }}" style="font-size:.82rem;" {{ $item->type === 'number' ? 'min=1' : '' }}>
                                 @endif
                                 @if($item->description)
                                 <div style="font-size:.72rem;color:#6b7280;margin-top:.3rem;">{{ $item->description }}</div>

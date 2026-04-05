@@ -2,13 +2,30 @@
 @section('title', $listing->title . ' — Marketplace Jamaah')
 @section('description', Str::limit(strip_tags($listing->description ?? $listing->title), 160))
 
-@section('styles')
-@php $ogImage = ($listing->media_urls[0] ?? null); @endphp
-<meta property="og:title" content="{{ $listing->title }}">
-<meta property="og:description" content="{{ Str::limit(strip_tags($listing->description ?? $listing->title), 160) }}">
-@if($ogImage)<meta property="og:image" content="{{ $ogImage }}">@endif
-<meta property="og:url" content="{{ url('/p/' . $listing->id) }}">
+@section('meta')
+@php
+    $ogTitle  = $listing->title . ' — Marketplace Jamaah';
+    $ogDesc   = Str::limit(strip_tags($listing->description ?? $listing->title), 160);
+    $ogUrl    = url('/p/' . $listing->id);
+    $ogImage  = count($listing->media_urls ?? []) ? route('public.listing.og-image', $listing->id) : null;
+@endphp
+<meta property="og:title" content="{{ $ogTitle }}">
+<meta property="og:description" content="{{ $ogDesc }}">
+<meta property="og:url" content="{{ $ogUrl }}">
 <meta property="og:type" content="product">
+<meta property="og:site_name" content="Marketplace Jamaah">
+@if($ogImage)
+<meta property="og:image" content="{{ $ogImage }}">
+<meta property="og:image:width" content="800">
+<meta property="og:image:height" content="800">
+@endif
+<meta name="twitter:card" content="{{ $ogImage ? 'summary_large_image' : 'summary' }}">
+<meta name="twitter:title" content="{{ $ogTitle }}">
+<meta name="twitter:description" content="{{ $ogDesc }}">
+@if($ogImage)<meta name="twitter:image" content="{{ $ogImage }}">@endif
+@endsection
+
+@section('styles')
 <style>
     .detail-hero { display:none; }
     .breadcrumb-strip { background:#fff; border-bottom:1.5px solid #d1fae5; padding:.55rem 0; }

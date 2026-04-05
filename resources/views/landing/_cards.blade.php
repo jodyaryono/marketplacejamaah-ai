@@ -16,10 +16,11 @@
 
     $sellerName = $listing->contact?->name ?: ($listing->contact_name ?: 'Penjual');
     $sellerLocation = $listing->location ?: $listing->contact?->address;
-    if ($listing->price_label) $priceDisplay = $listing->price_label;
-    elseif ($listing->price_min && $listing->price_max) $priceDisplay = 'Rp ' . number_format($listing->price_min,0,',','.') . ' – ' . number_format($listing->price_max,0,',','.');
-    elseif ($listing->price && $listing->price > 0) $priceDisplay = 'Rp ' . number_format($listing->price,0,',','.');
-    else $priceDisplay = 'Harga nego';
+    $priceDisplay = $listing->price_formatted;
+    $priceType    = $listing->price_type ?? 'fix';
+    $isNego       = $priceType === 'nego';
+    $isLelang     = $priceType === 'lelang';
+    $condition    = $listing->condition;
     $mediaJson = json_encode(is_array($listing->media_urls) ? $listing->media_urls : [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_APOS);
 @endphp
 <div class="col">
@@ -27,6 +28,7 @@
        style="cursor:pointer; color:inherit;">
 
         <div class="product-img-wrap">
+            <div style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.52);color:#e5e7eb;font-size:.62rem;font-weight:700;padding:2px 7px;border-radius:20px;z-index:3;letter-spacing:.3px;">#{{ $listing->id }}</div>
             @if($isVideo)
                 <video class="card-autoplay-video" preload="none" playsinline muted loop
                        data-src="{{ $firstMedia }}"
@@ -48,19 +50,23 @@
         </div>
 
         <div class="product-body">
-            @if($listing->category)
-                <span class="product-category">{{ $listing->category->name }}</span>
-            @endif
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:.3rem;margin-bottom:.3rem;">
+                @if($listing->category)
+                    <span class="product-category">{{ $listing->category->name }}</span>
+                @endif
+                @if($condition === 'new')
+                    <span style="font-size:.62rem;font-weight:700;background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;border-radius:20px;padding:1px 7px;">✨ Baru</span>
+                @elseif($condition === 'used')
+                    <span style="font-size:.62rem;font-weight:700;background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db;border-radius:20px;padding:1px 7px;">♻️ Bekas</span>
+                @endif
+                @if($isNego)
+                    <span style="font-size:.62rem;font-weight:700;background:#fffbeb;color:#d97706;border:1px solid #fde68a;border-radius:20px;padding:1px 7px;">🤝 Nego</span>
+                @elseif($isLelang)
+                    <span style="font-size:.62rem;font-weight:700;background:#fdf4ff;color:#9333ea;border:1px solid #e9d5ff;border-radius:20px;padding:1px 7px;">🔨 Lelang</span>
+                @endif
+            </div>
             <div class="product-title">{{ $listing->title }}</div>
-            @if($listing->price_label)
-                <div class="product-price negotiable">{{ $listing->price_label }}</div>
-            @elseif($listing->price_min && $listing->price_max)
-                <div class="product-price negotiable">Rp {{ number_format($listing->price_min,0,',','.') }} – {{ number_format($listing->price_max,0,',','.') }}</div>
-            @elseif($listing->price && $listing->price > 0)
-                <div class="product-price">Rp {{ number_format($listing->price,0,',','.') }}</div>
-            @else
-                <div class="product-price negotiable">Harga nego</div>
-            @endif
+            <div class="product-price {{ $isNego || $isLelang ? 'negotiable' : '' }}">{{ $priceDisplay }}</div>
             <div class="product-seller">
                 <i class="bi bi-person-circle"></i>
                 <span>{{ $sellerName }}</span>

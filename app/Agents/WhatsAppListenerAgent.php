@@ -55,6 +55,7 @@ class WhatsAppListenerAgent
                     '✅ *Iklan Diterima!*',
                     '✅ *Iklan kamu sudah tayang!*',
                     '📢 *Iklan Baru!*',
+                    '🛍️ *',   // bot product post caption prefix
                     '🔄 *Iklan Lama Dihapus & Diganti*',
                     '*Iklan Kamu (', // "Iklan Kamu (2 terakhir)" listing summary
                     '📋 *Iklan Kamu',

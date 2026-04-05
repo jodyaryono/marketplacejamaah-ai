@@ -9,7 +9,6 @@ use App\Models\Message;
 use App\Models\WhatsappGroup;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-
 class DashboardController extends Controller
 {
     public function index()
@@ -116,6 +115,109 @@ class DashboardController extends Controller
             'today_listings' => Listing::whereDate('created_at', today())->count(),
             'total_deleted' => Message::whereIn('message_category', ['non_ad_deleted', 'extraction_failed'])->count(),
             'total_violations' => Message::where('violation_detected', true)->count(),
+        ]);
+    }
+
+    public function waStatus()
+    {
+        $base = rtrim(config('services.wa_gateway.url'), '/');
+        $token = config('services.wa_gateway.token', '');
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(5)
+                ->withHeaders(['Authorization' => "Bearer {$token}"])
+                ->get($base . '/status');
+            if ($response->successful()) {
+                return response()->json($response->json());
+            }
+            return response()->json(['ok' => false, 'error' => 'Gateway error ' . $response->status()], 502);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 503);
+        }
+    }
+
+    public function waRestart(string $sessionId)
+    {
+        $sessionId = preg_replace('/[^a-zA-Z0-9_\-]/', '', $sessionId);
+        if (empty($sessionId)) {
+            return response()->json(['ok' => false, 'error' => 'Invalid session id'], 400);
+        }
+        $base = rtrim(config('services.wa_gateway.url'), '/');
+        $token = config('services.wa_gateway.token', '');
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(10)
+                ->withHeaders(['Authorization' => "Bearer {$token}"])
+                ->post($base . '/restart/' . $sessionId);
+            return response()->json($response->json() ?? ['ok' => false], $response->successful() ? 200 : $response->status());
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 503);
+        }
+    }
+
+    public function queueStatus()
+    {
+        $pending  = DB::table('jobs')->count();
+        $failed   = DB::table('failed_jobs')->count();
+        $agentsQ  = DB::table('jobs')->where('queue', 'agents')->count();
+        $stuck    = DB::table('agent_logs')
+            ->where('status', 'processing')
+            ->where('created_at', '<', now()->subMinutes(5))
+            ->count();
+
+        // Detect running workers via pgrep (works from www-data, no sudo needed)
+        // Filter by app path to avoid false positives from other sites on this VPS
+        $supervisorRunning = false;
+        $supervisorDetail  = 'No workers detected';
+        $ps = @shell_exec('pgrep -fa "queue:work" 2>/dev/null') ?? '';
+        foreach (explode("\n", $ps) as $line) {
+            if (str_contains($line, 'queue:work') && str_contains($line, 'marketplacejamaah')) {
+                $supervisorRunning = true;
+                $supervisorDetail  = 'queue:work running (pgrep)';
+                break;
+            }
+        }
+
+        return response()->json([
+            'pending'           => (int) $pending,
+            'failed'            => (int) $failed,
+            'agents_queue'      => (int) $agentsQ,
+            'stuck'             => (int) $stuck,
+            'worker_running'    => $supervisorRunning,
+            'worker_detail'     => $supervisorDetail,
+            'at'                => now()->format('H:i:s'),
+        ]);
+    }
+
+    public function queueRestart()
+    {
+        $out = [];
+
+        // 1. Signal running workers to restart gracefully (picks up new code)
+        \Illuminate\Support\Facades\Artisan::call('queue:restart');
+        $out[] = 'queue:restart signal sent';
+
+        // 2. Retry all failed jobs
+        $failed = DB::table('failed_jobs')->count();
+        if ($failed > 0) {
+            \Illuminate\Support\Facades\Artisan::call('queue:retry', ['id' => ['all']]);
+            $out[] = "Retried {$failed} failed jobs";
+        }
+
+        // 3. Kick supervisor to restart worker processes
+        $sup = @shell_exec('sudo /usr/local/bin/marketplace-queue-restart.sh 2>&1') ?? '';
+        if (str_contains($sup, 'started') || str_contains($sup, 'RUNNING') || str_contains($sup, 'stopped')) {
+            $out[] = 'supervisor restart: OK';
+        } elseif ($sup) {
+            $out[] = 'supervisor: ' . trim($sup);
+        } else {
+            $out[] = 'supervisor restart signal sent (queue:restart)';
+        }
+
+        return response()->json([
+            'ok'     => true,
+            'steps'  => $out,
+            'pending'=> (int) DB::table('jobs')->count(),
+            'failed' => (int) DB::table('failed_jobs')->count(),
+            'at'     => now()->format('H:i:s'),
         ]);
     }
 }

@@ -14,7 +14,7 @@
     if ($listing->price_label)                                   $priceDisplay = $listing->price_label;
     elseif ($listing->price_min && $listing->price_max)          $priceDisplay = 'Rp ' . number_format($listing->price_min,0,',','.') . '–' . number_format($listing->price_max,0,',','.');
     elseif ($listing->price && $listing->price > 0)              $priceDisplay = 'Rp ' . number_format($listing->price,0,',','.');
-    else                                                         $priceDisplay = 'Harga nego';
+    else                                                         $priceDisplay = 'Harga Hubungi Penjual';
 @endphp
 <div class="iklan-baris-row" onclick="window.location='/p/{{ $listing->id }}'" style="cursor:pointer;">
     @if($listing->category)
@@ -28,6 +28,7 @@
     </div>
     <span class="iklan-baris-price">{{ $priceDisplay }}</span>
     <span class="iklan-baris-meta">
+        <span style="color:#d1d5db;font-weight:600;">#{{ $listing->id }}</span>&nbsp;&middot;
         <i class="bi bi-person-circle"></i>{{ \Illuminate\Support\Str::limit($sellerName, 14) }}
         @if($sellerLocation)
             &nbsp;<i class="bi bi-geo-alt-fill" style="color:#059669;"></i>{{ \Illuminate\Support\Str::limit($sellerLocation, 18) }}

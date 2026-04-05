@@ -22,6 +22,67 @@
 
 <div class="page-body">
 
+{{-- ══ WA SERVER STATUS BANNER ══ --}}
+<div id="wa-status-banner" class="mb-3 p-3 rounded-3"
+     style="background:#f0fdf4;border:1.5px solid #6ee7b7;transition:background .4s,border-color .4s;">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-0" id="wa-banner-row">
+        {{-- WA section --}}
+        <div class="d-flex align-items-center gap-3">
+            <div id="wa-icon-bg" style="width:44px;height:44px;background:#059669;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .4s;">
+                <i class="bi bi-whatsapp" style="color:#fff;font-size:1.2rem;"></i>
+            </div>
+            <div>
+                <div style="font-size:.85rem;font-weight:800;color:#111827;">
+                    WA Server &nbsp;<span id="wa-session-label" style="font-weight:600;color:#6b7280;"></span>
+                </div>
+                <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+                    <span id="wa-status-dot" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#9ca3af;flex-shrink:0;"></span>
+                    <span id="wa-status-text" style="font-size:.75rem;font-weight:700;color:#059669;">Memeriksa...</span>
+                    <span id="wa-uptime" style="font-size:.68rem;color:#9ca3af;"></span>
+                    <span id="wa-groups" style="font-size:.68rem;color:#9ca3af;"></span>
+                </div>
+            </div>
+        </div>
+
+        {{-- Divider --}}
+        <div style="width:1px;height:40px;background:#e5e7eb;flex-shrink:0;" class="d-none d-md-block"></div>
+
+        {{-- Queue section --}}
+        <div class="d-flex align-items-center gap-3">
+            <div id="queue-icon-bg" style="width:44px;height:44px;background:#059669;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .4s;">
+                <i class="bi bi-cpu-fill" style="color:#fff;font-size:1.1rem;"></i>
+            </div>
+            <div>
+                <div style="font-size:.85rem;font-weight:800;color:#111827;">Queue Worker</div>
+                <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+                    <span id="queue-status-dot" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#9ca3af;flex-shrink:0;"></span>
+                    <span id="queue-status-text" style="font-size:.75rem;font-weight:700;color:#059669;">Memeriksa...</span>
+                    <span id="queue-pending-badge" style="font-size:.65rem;display:none;font-weight:700;padding:2px 7px;border-radius:99px;"></span>
+                    <span id="queue-failed-badge" style="font-size:.65rem;display:none;font-weight:700;padding:2px 7px;border-radius:99px;background:#fee2e2;color:#dc2626;"></span>
+                </div>
+            </div>
+        </div>
+
+        {{-- Buttons --}}
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span id="wa-last-check" style="font-size:.63rem;color:#9ca3af;"></span>
+            <button id="btn-queue-restart" onclick="queueRestart()" disabled
+                style="background:#7c3aed;color:#fff;border:none;padding:7px 14px;border-radius:8px;font-size:.72rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;opacity:.5;transition:opacity .3s;">
+                <i class="bi bi-play-circle-fill"></i><span id="btn-queue-txt">Restart Worker</span>
+            </button>
+            <button id="btn-wa-restart" onclick="waRestart()" disabled
+                style="background:#059669;color:#fff;border:none;padding:7px 14px;border-radius:8px;font-size:.72rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;opacity:.5;transition:opacity .3s;">
+                <i class="bi bi-arrow-clockwise"></i><span id="btn-wa-txt">Restart WA</span>
+            </button>
+        </div>
+    </div>
+
+    {{-- Warning strip when queue or WA is broken --}}
+    <div id="wa-warning-strip" style="display:none;margin-top:10px;padding:8px 12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;font-size:.75rem;color:#dc2626;font-weight:600;">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i><span id="wa-warning-text"></span>
+    </div>
+</div>
+
 {{-- ══ ROW 1: 4 Big Stat Cards ══ --}}
 <div class="row g-3 mb-2">
     <div class="col-6 col-md-3">
@@ -478,6 +539,204 @@ new Chart(ctxLine, {
         }
     }
 });
+
+// ── WA Server Status ─────────────────────
+const _waPhoneId = '{{ config("services.wa_gateway.phone_id") }}';
+let _waCurrentSessionId = null;
+let _waStatus = 'unknown';
+let _queueWorkerRunning = false;
+let _queuePending = 0;
+
+function pollAll() {
+    const t = Date.now();
+    Promise.allSettled([
+        fetch('{{ route("dashboard.wa-status") }}').then(r => r.json()),
+        fetch('{{ route("dashboard.queue-status") }}').then(r => r.json()),
+    ]).then(([waRes, qRes]) => {
+        document.getElementById('wa-last-check').textContent = 'cek ' + new Date().toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        if (waRes.status === 'fulfilled') _applyWaStatus(waRes.value);
+        else _applyWaStatus({ error: 'Timeout' });
+        if (qRes.status === 'fulfilled') _applyQueueStatus(qRes.value);
+        else _applyQueueStatus({ worker_running: false, pending: 0, failed: 0 });
+        _updateWarningStrip();
+    });
+}
+
+function _fmtUptime(sec) {
+    sec = Math.floor(sec);
+    if (sec < 60) return sec + 'd';
+    if (sec < 3600) return Math.floor(sec/60) + 'm';
+    if (sec < 86400) return Math.floor(sec/3600) + 'j';
+    return Math.floor(sec/86400) + 'h';
+}
+
+function _applyWaStatus(data) {
+    const sessions = data.sessions || {};
+    const ids = Object.keys(sessions);
+    if (!ids.length) { _setWaBanner('disconnected', 'Tidak ada sesi', '', ''); return; }
+    const id = ids.includes(_waPhoneId) ? _waPhoneId : ids[0];
+    _waCurrentSessionId = id;
+    const s = sessions[id];
+    _waStatus = s.status;
+    const uptime = data.uptime ? _fmtUptime(data.uptime) + ' uptime' : '';
+    const groups = s.groups_cached ? s.groups_cached + ' grup' : '';
+    _setWaBanner(s.status, s.label || id, uptime, groups);
+}
+
+function _setWaBanner(status, label, uptime, groups) {
+    const dot  = document.getElementById('wa-status-dot');
+    const txt  = document.getElementById('wa-status-text');
+    const lbl  = document.getElementById('wa-session-label');
+    const up   = document.getElementById('wa-uptime');
+    const grp  = document.getElementById('wa-groups');
+    const btn  = document.getElementById('btn-wa-restart');
+    const icon = document.getElementById('wa-icon-bg');
+
+    lbl.textContent = label ? '· ' + label : '';
+    up.textContent  = uptime;
+    grp.textContent = groups;
+
+    const cfg = {
+        open:         { dot:'#16a34a', txt:'Terhubung ✅',          icon:'#059669', txtColor:'#16a34a' },
+        connecting:   { dot:'#f59e0b', txt:'Menghubungkan…',        icon:'#d97706', txtColor:'#d97706' },
+        disconnected: { dot:'#dc2626', txt:'Terputus ❌',            icon:'#dc2626', txtColor:'#dc2626' },
+        error:        { dot:'#9ca3af', txt:'Tidak dapat terhubung', icon:'#6b7280', txtColor:'#6b7280' },
+    };
+    const c = cfg[status] || cfg.error;
+    dot.style.background  = c.dot;
+    txt.textContent       = c.txt;
+    txt.style.color       = c.txtColor;
+    icon.style.background = c.icon;
+
+    const canRestart = (status === 'disconnected' || status === 'error') && _waCurrentSessionId;
+    btn.disabled = !canRestart;
+    btn.style.opacity = canRestart ? '1' : '.45';
+    btn.style.cursor  = canRestart ? 'pointer' : 'default';
+}
+
+function _applyQueueStatus(data) {
+    _queueWorkerRunning = !!data.worker_running;
+    _queuePending = data.pending || 0;
+    const failed  = data.failed || 0;
+    const stuck   = data.stuck  || 0;
+
+    const dot    = document.getElementById('queue-status-dot');
+    const txt    = document.getElementById('queue-status-text');
+    const icon   = document.getElementById('queue-icon-bg');
+    const pBadge = document.getElementById('queue-pending-badge');
+    const fBadge = document.getElementById('queue-failed-badge');
+    const btn    = document.getElementById('btn-queue-restart');
+
+    if (_queueWorkerRunning && failed === 0 && stuck === 0) {
+        dot.style.background  = '#16a34a';
+        txt.textContent       = 'Running ✅';
+        txt.style.color       = '#16a34a';
+        icon.style.background = '#059669';
+    } else if (_queueWorkerRunning) {
+        dot.style.background  = '#f59e0b';
+        txt.textContent       = 'Running (ada masalah)';
+        txt.style.color       = '#d97706';
+        icon.style.background = '#d97706';
+    } else {
+        dot.style.background  = '#dc2626';
+        txt.textContent       = 'MATI ❌ — bot tidak respon!';
+        txt.style.color       = '#dc2626';
+        icon.style.background = '#dc2626';
+    }
+
+    if (_queuePending > 0) {
+        pBadge.style.display     = 'inline-block';
+        pBadge.textContent       = _queuePending + ' pending';
+        pBadge.style.background  = _queuePending > 10 ? '#fef3c7' : '#f0fdf4';
+        pBadge.style.color       = _queuePending > 10 ? '#d97706' : '#059669';
+    } else {
+        pBadge.style.display = 'none';
+    }
+
+    if (failed > 0) {
+        fBadge.style.display  = 'inline-block';
+        fBadge.textContent    = failed + ' failed';
+    } else {
+        fBadge.style.display  = 'none';
+    }
+
+    const needRestart = !_queueWorkerRunning || failed > 0 || stuck > 0 || _queuePending > 20;
+    btn.disabled      = false; // always allow manual restart
+    btn.style.opacity = '1';
+    btn.style.cursor  = 'pointer';
+    btn.style.background = needRestart ? '#dc2626' : '#7c3aed';
+}
+
+function _updateWarningStrip() {
+    const strip = document.getElementById('wa-warning-strip');
+    const warnTxt = document.getElementById('wa-warning-text');
+    const msgs = [];
+    if (_waStatus === 'disconnected' || _waStatus === 'error')
+        msgs.push('WA Server terputus — klik Restart WA.');
+    if (!_queueWorkerRunning)
+        msgs.push('Queue Worker MATI — bot tidak bisa membalas pesan! Klik Restart Worker.');
+    if (_queuePending > 20)
+        msgs.push(_queuePending + ' pesan antri menunggu diproses.');
+    if (msgs.length) {
+        warnTxt.textContent  = msgs.join('  |  ');
+        strip.style.display  = 'block';
+    } else {
+        strip.style.display  = 'none';
+    }
+    // Update overall banner color
+    const banner = document.getElementById('wa-status-banner');
+    if (msgs.length) {
+        banner.style.background   = '#fef2f2';
+        banner.style.borderColor  = '#fca5a5';
+    } else {
+        banner.style.background   = '#f0fdf4';
+        banner.style.borderColor  = '#6ee7b7';
+    }
+}
+
+function waRestart() {
+    if (!_waCurrentSessionId) return;
+    const btn = document.getElementById('btn-wa-restart');
+    const lbl = document.getElementById('btn-wa-txt');
+    btn.disabled = true; lbl.textContent = 'Memulai...';
+    fetch(`/dashboard/wa-restart/${encodeURIComponent(_waCurrentSessionId)}`, {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json', 'Content-Type': 'application/json' },
+    })
+    .then(r => r.json())
+    .then(d => {
+        lbl.textContent = 'Restart WA';
+        if (d.ok) {
+            document.getElementById('wa-status-text').textContent = 'Restart dikirim — Menunggu…';
+            let n = 0; const p = setInterval(() => { pollAll(); if (++n >= 10) clearInterval(p); }, 3000);
+        } else { alert('❌ WA Restart gagal: ' + (d.error || d.message || 'unknown')); }
+    })
+    .catch(() => { lbl.textContent = 'Restart WA'; alert('❌ Gagal terhubung ke gateway'); });
+}
+
+function queueRestart() {
+    const btn = document.getElementById('btn-queue-restart');
+    const lbl = document.getElementById('btn-queue-txt');
+    btn.disabled = true; lbl.textContent = 'Memulai...';
+    fetch('{{ route("dashboard.queue-restart") }}', {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json', 'Content-Type': 'application/json' },
+    })
+    .then(r => r.json())
+    .then(d => {
+        lbl.textContent = 'Restart Worker';
+        btn.disabled = false;
+        if (d.ok) {
+            const steps = (d.steps || []).join('\n');
+            alert('✅ Queue Worker restart:\n\n' + steps + '\n\nPending: ' + d.pending + ', Failed: ' + d.failed);
+            setTimeout(pollAll, 2000);
+        } else { alert('❌ Gagal: ' + (d.error || JSON.stringify(d))); }
+    })
+    .catch(() => { lbl.textContent = 'Restart Worker'; btn.disabled = false; alert('❌ Request gagal'); });
+}
+
+pollAll();
+setInterval(pollAll, 20000);
 
 // ── Auto refresh ──────────────────────────
 function refreshStats() {
