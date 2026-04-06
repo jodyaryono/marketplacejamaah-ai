@@ -57,6 +57,7 @@ class DashboardController extends Controller
             ->get();
 
         // Violators: contacts with warnings or violations, with their latest violation message
+        // Load contacts first, then fetch all last-violation messages in ONE extra query (no N+1)
         $violators = Contact::where(function ($q) {
             $q
                 ->where('warning_count', '>', 0)
@@ -66,15 +67,28 @@ class DashboardController extends Controller
             ->orderByDesc('total_violations')
             ->orderByDesc('warning_count')
             ->limit(20)
-            ->get()
-            ->map(function ($contact) {
-                $lastViolation = Message::where('sender_number', $contact->phone_number)
-                    ->where('violation_detected', true)
-                    ->orderByDesc('created_at')
-                    ->first();
-                $contact->last_violation_message = $lastViolation;
-                return $contact;
-            });
+            ->get();
+
+        // Batch-load last violation message per contact (2 queries instead of N+1)
+        $violatorPhones = $violators->pluck('phone_number')->all();
+        if (!empty($violatorPhones)) {
+            $lastViolationIds = Message::where('violation_detected', true)
+                ->whereIn('sender_number', $violatorPhones)
+                ->select('sender_number', DB::raw('MAX(id) as last_id'))
+                ->groupBy('sender_number')
+                ->pluck('last_id');
+
+            $lastViolationMessages = Message::whereIn('id', $lastViolationIds)
+                ->get()
+                ->keyBy('sender_number');
+        } else {
+            $lastViolationMessages = collect();
+        }
+
+        $violators = $violators->map(function ($contact) use ($lastViolationMessages) {
+            $contact->last_violation_message = $lastViolationMessages->get($contact->phone_number);
+            return $contact;
+        });
 
         // Deleted messages — latest 10
         $recentDeleted = Message::with('group')
