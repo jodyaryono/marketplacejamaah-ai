@@ -51,7 +51,7 @@ su - postgres
 psql
 
 CREATE DATABASE marketplacejamaah;
-CREATE USER marketjam WITH ENCRYPTED PASSWORD '423525';
+CREATE USER marketjam WITH ENCRYPTED PASSWORD 'GANTI_PASSWORD_KUAT';
 GRANT ALL PRIVILEGES ON DATABASE marketplacejamaah TO marketjam;
 \q
 exit
@@ -109,7 +109,7 @@ DB_HOST=127.0.0.1
 DB_PORT=5432
 DB_DATABASE=marketplacejamaah
 DB_USERNAME=marketjam
-DB_PASSWORD=423525
+DB_PASSWORD=GANTI_PASSWORD_KUAT
 
 BROADCAST_CONNECTION=reverb
 QUEUE_CONNECTION=database
@@ -309,5 +309,5 @@ supervisorctl restart all
 ## Login Dashboard
 
 - URL: `https://marketplacejamaah-ai.jodyaryono.id`
-- Admin: `admin@marketplacejamaah.id` / `admin123`
-- Operator: `operator@marketplacejamaah.id` / `operator123`
+- Admin: `admin@marketplacejamaah.id` / _(lihat .env atau password manager)_
+- Operator: `operator@marketplacejamaah.id` / _(lihat .env atau password manager)_
