@@ -625,22 +625,64 @@
                     <button type="submit" class="btn-search flex-fill">
                         <i class="bi bi-search me-1"></i>Cari
                     </button>
-                    @if(request('search') || request('category_id'))
-                        <a href="{{ url('/') }}" class="btn-reset">
+                    <button type="button" class="btn-reset" data-bs-toggle="collapse" data-bs-target="#filterAdvanced"
+                            title="Filter harga & lokasi"
+                            style="{{ request()->hasAny(['min_price','max_price','location']) ? 'color:#059669;border-color:#059669;' : '' }}">
+                        <i class="bi bi-sliders"></i>
+                    </button>
+                    @if(request()->hasAny(['search','category_id','min_price','max_price','location']))
+                        <a href="{{ url('/') }}" class="btn-reset" title="Reset semua filter">
                             <i class="bi bi-x-lg"></i>
                         </a>
                     @endif
                 </div>
             </div>
 
+            {{-- Advanced filters (collapsible) --}}
+            <div class="collapse {{ request()->hasAny(['min_price','max_price','location']) ? 'show' : '' }}" id="filterAdvanced">
+                <div class="row g-2 mt-2">
+                    <div class="col-6 col-md-3">
+                        <label class="form-label" style="font-size:.78rem;color:#6b7280;font-weight:600;margin-bottom:.25rem;">Harga Min (Rp)</label>
+                        <input type="number" name="min_price" class="form-control form-control-sm"
+                               placeholder="contoh: 50000"
+                               value="{{ request('min_price') }}"
+                               min="0" step="1000"
+                               style="border-color:#d1d5db;font-size:.88rem;">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label" style="font-size:.78rem;color:#6b7280;font-weight:600;margin-bottom:.25rem;">Harga Max (Rp)</label>
+                        <input type="number" name="max_price" class="form-control form-control-sm"
+                               placeholder="contoh: 500000"
+                               value="{{ request('max_price') }}"
+                               min="0" step="1000"
+                               style="border-color:#d1d5db;font-size:.88rem;">
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" style="font-size:.78rem;color:#6b7280;font-weight:600;margin-bottom:.25rem;">Lokasi Penjual</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white" style="border-color:#d1d5db;">
+                                <i class="bi bi-geo-alt" style="color:#9ca3af;"></i>
+                            </span>
+                            <input type="text" name="location" class="form-control"
+                                   placeholder="contoh: Bekasi, Jakarta Selatan..."
+                                   value="{{ request('location') }}"
+                                   style="border-color:#d1d5db;font-size:.88rem;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {{-- Category pills --}}
+            @php
+                $qBase = array_filter(request()->only(['search','min_price','max_price','location']));
+            @endphp
             <div class="cat-pills-wrap mt-3">
-                <a href="{{ url('/') }}{{ request('search') ? '?search='.urlencode(request('search')) : '' }}"
+                <a href="{{ url('/') }}{{ $qBase ? '?'.http_build_query($qBase) : '' }}"
                    class="cat-pill {{ !request('category_id') ? 'active' : '' }}">
                     <i class="bi bi-grid me-1"></i>Semua
                 </a>
                 @foreach($categories as $cat)
-                    <a href="{{ url('/') }}?category_id={{ $cat->id }}{{ request('search') ? '&search='.urlencode(request('search')) : '' }}"
+                    <a href="{{ url('/') }}?{{ http_build_query(array_merge($qBase, ['category_id' => $cat->id])) }}"
                        class="cat-pill {{ request('category_id') == $cat->id ? 'active' : '' }}">
                         {{ $cat->name }}
                     </a>
@@ -820,9 +862,22 @@
     // ── Load More Products (with media) ──────────────────────────────
     var _page    = 1;
     var _loading = false;
-    var _search  = @json(request('search', ''));
-    var _catId   = @json(request('category_id', ''));
+    var _search   = @json(request('search', ''));
+    var _catId    = @json(request('category_id', ''));
+    var _minPrice = @json(request('min_price', ''));
+    var _maxPrice = @json(request('max_price', ''));
+    var _location = @json(request('location', ''));
     var _grid    = document.getElementById('productGrid');
+
+    function _buildParams(page, type) {
+        var p = new URLSearchParams({ page: page, type: type });
+        if (_search)   p.append('search',      _search);
+        if (_catId)    p.append('category_id', _catId);
+        if (_minPrice) p.append('min_price',   _minPrice);
+        if (_maxPrice) p.append('max_price',   _maxPrice);
+        if (_location) p.append('location',    _location);
+        return p;
+    }
 
     window.loadMoreMedia = function() {
         if (_loading) return;
@@ -831,9 +886,7 @@
         if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Memuat...'; }
         _page++;
 
-        var p = new URLSearchParams({ page: _page, type: 'media' });
-        if (_search) p.append('search', _search);
-        if (_catId)  p.append('category_id', _catId);
+        var p = _buildParams(_page, 'media');
 
         fetch('/produk/lagi?' + p.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
@@ -864,9 +917,7 @@
         _textLoading = true;
         if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Memuat...'; }
         _textPage++;
-        var p2 = new URLSearchParams({ page: _textPage, type: 'text' });
-        if (_search) p2.append('search', _search);
-        if (_catId)  p2.append('category_id', _catId);
+        var p2 = _buildParams(_textPage, 'text');
         fetch('/produk/lagi?' + p2.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
             .then(function(d) {

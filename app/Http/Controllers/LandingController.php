@@ -28,21 +28,7 @@ class LandingController extends Controller
                 created_at DESC
             ");
         $this->deduplicateByContactTitle($query);
-
-        if ($request->filled('category_id')) {
-            $query->where('category_id', $request->category_id);
-        }
-        if ($request->filled('search')) {
-            $terms = array_filter(array_map('trim', preg_split('/[,\s]+/', $request->search)));
-            $query->where(function ($q) use ($terms) {
-                foreach ($terms as $term) {
-                    $q->where(function ($q2) use ($term) {
-                        $q2->where('title', 'ilike', '%' . $term . '%')
-                           ->orWhere('description', 'ilike', '%' . $term . '%');
-                    });
-                }
-            });
-        }
+        $this->applyFilters($query, $request);
         $listings = $query->paginate($perPageMedia)->withQueryString();
 
         // ── Iklan baris (tanpa foto/video) ─────────────────────────────────
@@ -59,21 +45,7 @@ class LandingController extends Controller
                 created_at DESC
             ");
         $this->deduplicateByContactTitle($textQuery);
-
-        if ($request->filled('category_id')) {
-            $textQuery->where('category_id', $request->category_id);
-        }
-        if ($request->filled('search')) {
-            $terms = array_filter(array_map('trim', preg_split('/[,\s]+/', $request->search)));
-            $textQuery->where(function ($q) use ($terms) {
-                foreach ($terms as $term) {
-                    $q->where(function ($q2) use ($term) {
-                        $q2->where('title', 'ilike', '%' . $term . '%')
-                           ->orWhere('description', 'ilike', '%' . $term . '%');
-                    });
-                }
-            });
-        }
+        $this->applyFilters($textQuery, $request);
         $textListings = $textQuery->paginate($perPageText)->withQueryString();
 
         $categories = Category::where('is_active', true)->orderBy('name')->get();
@@ -148,7 +120,13 @@ class LandingController extends Controller
 
         $query = Listing::with(['category', 'contact'])
             ->where('status', 'active')
-            ->latest();
+            ->orderByRaw("
+                CASE WHEN (price IS NOT NULL AND price > 0)
+                          OR (price_label IS NOT NULL AND price_label <> '')
+                          OR (price_min IS NOT NULL AND price_min > 0)
+                     THEN 0 ELSE 1 END,
+                created_at DESC
+            ");
         $this->deduplicateByContactTitle($query);
 
         if ($isText) {
@@ -159,12 +137,28 @@ class LandingController extends Controller
             $query->whereNotNull('media_urls')->whereRaw("media_urls::text != '[]'");
         }
 
-        if ($request->filled('category_id')) {
-            $query->where('category_id', (int) $request->category_id);
-        }
+        $this->applyFilters($query, $request);
+
+        $perPage  = $isText ? 10 : 6;
+        $listings = $query->paginate($perPage);
+        $view     = $isText ? 'landing._iklan_baris' : 'landing._cards';
+        $html     = view($view, ['listings' => $listings->items()])->render();
+
+        return response()->json([
+            'html'    => $html,
+            'hasMore' => $listings->hasMorePages(),
+            'total'   => $listings->total(),
+        ]);
+    }
+
+    /**
+     * Apply search/filter conditions shared by index() and loadMore().
+     * Filters: search (keyword), category_id, min_price, max_price, location.
+     */
+    private function applyFilters(Builder $query, Request $request): void
+    {
         if ($request->filled('search')) {
-            $search = strip_tags($request->search);
-            $terms = array_filter(array_map('trim', preg_split('/[,\s]+/', $search)));
+            $terms = array_filter(array_map('trim', preg_split('/[,\s]+/', strip_tags($request->search))));
             $query->where(function ($q) use ($terms) {
                 foreach ($terms as $term) {
                     $q->where(function ($q2) use ($term) {
@@ -175,16 +169,28 @@ class LandingController extends Controller
             });
         }
 
-        $perPage = $isText ? 10 : 6;
-        $listings = $query->paginate($perPage);
-        $view = $isText ? 'landing._iklan_baris' : 'landing._cards';
-        $html = view($view, ['listings' => $listings->items()])->render();
+        if ($request->filled('category_id')) {
+            $query->where('category_id', (int) $request->category_id);
+        }
 
-        return response()->json([
-            'html' => $html,
-            'hasMore' => $listings->hasMorePages(),
-            'total' => $listings->total(),
-        ]);
+        if ($request->filled('min_price') && is_numeric($request->min_price)) {
+            $query->where(function ($q) use ($request) {
+                $q->where('price', '>=', (int) $request->min_price)
+                  ->orWhere('price_min', '>=', (int) $request->min_price);
+            });
+        }
+
+        if ($request->filled('max_price') && is_numeric($request->max_price)) {
+            $query->where(function ($q) use ($request) {
+                $q->where('price', '<=', (int) $request->max_price)
+                  ->orWhere('price_max', '<=', (int) $request->max_price);
+            });
+        }
+
+        if ($request->filled('location')) {
+            $loc = strip_tags(trim($request->location));
+            $query->where('location', 'ilike', '%' . $loc . '%');
+        }
     }
 
     /**

@@ -19,8 +19,22 @@ class GeminiService
         $this->endpoint = config('services.gemini.endpoint');
     }
 
-    public function generateContent(string $prompt): ?string
+    /**
+     * Generate text content from Gemini.
+     *
+     * @param  int|null $cacheTtl  Cache TTL in minutes. null = no cache.
+     */
+    public function generateContent(string $prompt, ?int $cacheTtl = null): ?string
     {
+        // Serve from cache when TTL is set and a cached entry exists
+        if ($cacheTtl !== null) {
+            $cacheKey = 'gemini_resp_' . md5($prompt);
+            $cached   = Cache::get($cacheKey);
+            if ($cached !== null) {
+                return $cached;
+            }
+        }
+
         $url = "{$this->endpoint}/{$this->model}:generateContent";
         $body = [
             'contents' => [
@@ -74,7 +88,14 @@ class GeminiService
                     'text'
                 );
 
-                return $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+                $result = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+
+                // Store in cache if requested and result is valid
+                if ($cacheTtl !== null && $result !== null) {
+                    Cache::put($cacheKey, $result, now()->addMinutes($cacheTtl));
+                }
+
+                return $result;
             } catch (\Exception $e) {
                 Log::error('GeminiService::generateContent exception', ['error' => $e->getMessage()]);
                 return null;
@@ -84,9 +105,14 @@ class GeminiService
         return null;
     }
 
-    public function generateJson(string $prompt): ?array
+    /**
+     * Generate a JSON-decoded response from Gemini.
+     *
+     * @param  int|null $cacheTtl  Cache TTL in minutes. null = no cache.
+     */
+    public function generateJson(string $prompt, ?int $cacheTtl = null): ?array
     {
-        $text = $this->generateContent($prompt . "\n\nRespond ONLY with valid JSON, no markdown, no explanation.");
+        $text = $this->generateContent($prompt . "\n\nRespond ONLY with valid JSON, no markdown, no explanation.", $cacheTtl);
         if (!$text)
             return null;
 
