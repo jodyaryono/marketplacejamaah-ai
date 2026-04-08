@@ -150,10 +150,20 @@ class GeminiService
         );
         if (!$text) return null;
 
-        $text    = preg_replace('/```json\s*/i', '', $text);
-        $text    = preg_replace('/```\s*/i', '', $text);
-        $text    = trim($text);
+        $text = preg_replace('/```json\s*/i', '', $text);
+        $text = preg_replace('/```\s*/i', '', $text);
+        $text = trim($text);
+
         $decoded = json_decode($text, true);
+
+        // Fallback: Groq/llama models sometimes prefix with prose ("Here's the JSON: {...}")
+        // or wrap a JSON array — extract the first balanced {...} or [...] block.
+        if (!is_array($decoded)) {
+            $extracted = $this->extractFirstJsonBlock($text);
+            if ($extracted !== null) {
+                $decoded = json_decode($extracted, true);
+            }
+        }
 
         if (!is_array($decoded)) {
             Log::warning('GeminiService::generateJson: non-JSON response', [
@@ -162,6 +172,50 @@ class GeminiService
             return null;
         }
         return $decoded;
+    }
+
+    /**
+     * Extract the first balanced JSON object or array from a string.
+     * Handles strings/escapes so braces inside string literals don't confuse the matcher.
+     */
+    private function extractFirstJsonBlock(string $text): ?string
+    {
+        $len = strlen($text);
+        $start = -1;
+        $open  = '{';
+        $close = '}';
+
+        for ($i = 0; $i < $len; $i++) {
+            if ($text[$i] === '{' || $text[$i] === '[') {
+                $start = $i;
+                $open  = $text[$i];
+                $close = $open === '{' ? '}' : ']';
+                break;
+            }
+        }
+        if ($start === -1) return null;
+
+        $depth    = 0;
+        $inString = false;
+        $escape   = false;
+
+        for ($i = $start; $i < $len; $i++) {
+            $ch = $text[$i];
+
+            if ($escape) { $escape = false; continue; }
+            if ($ch === '\\' && $inString) { $escape = true; continue; }
+            if ($ch === '"') { $inString = !$inString; continue; }
+            if ($inString) continue;
+
+            if ($ch === $open) $depth++;
+            elseif ($ch === $close) {
+                $depth--;
+                if ($depth === 0) {
+                    return substr($text, $start, $i - $start + 1);
+                }
+            }
+        }
+        return null;
     }
 
     public function analyzeImageWithText(string $base64Image, string $mimeType, string $prompt): ?string
