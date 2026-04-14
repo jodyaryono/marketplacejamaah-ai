@@ -71,6 +71,12 @@ class DataExtractorAgent
 
             $extracted = $this->gemini->generateJson($prompt);
 
+            // Normalize AI-extracted contact_number: only accept if it looks like a real phone.
+            // Guards against the AI pulling handles/usernames from the ad body (e.g. "(medibogor)").
+            if (!empty($extracted['contact_number'] ?? null)) {
+                $extracted['contact_number'] = $this->normalizePhone($extracted['contact_number']);
+            }
+
             // Gemini failed (rate limit, timeout, etc.) — create a basic listing from raw message data
             if (!$extracted) {
                 $senderContact = $message->sender_number
@@ -114,7 +120,7 @@ class DataExtractorAgent
                 }
             }
 
-            // Resolve contact from extracted number, or fall back to message sender
+            // Resolve contact from extracted number (already normalized above), or fall back to sender
             $contactId = null;
             if (!empty($extracted['contact_number'])) {
                 $contact = Contact::firstOrCreate(
@@ -295,5 +301,20 @@ class DataExtractorAgent
             $log->update(['status' => 'failed', 'error' => $e->getMessage()]);
             return null;
         }
+    }
+
+    /**
+     * Normalize a raw contact string to Indonesian MSISDN (62xxxxxxxxxx) or null if invalid.
+     * Rejects anything that isn't clearly a phone (handles, usernames, addresses, etc.).
+     */
+    private function normalizePhone(?string $raw): ?string
+    {
+        if (!$raw) return null;
+        $digits = preg_replace('/\D/', '', $raw);
+        if (!$digits) return null;
+        if (str_starts_with($digits, '0'))       $digits = '62' . substr($digits, 1);
+        elseif (str_starts_with($digits, '8'))   $digits = '62' . $digits;
+        elseif (!str_starts_with($digits, '62')) return null;
+        return preg_match('/^62\d{8,13}$/', $digits) ? $digits : null;
     }
 }
