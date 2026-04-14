@@ -11,7 +11,7 @@
     $sellerName = $listing->contact?->name ?: ($listing->contact_name ?: 'Penjual');
     $sellerLocation = $listing->location ?: $listing->contact?->address;
 
-    if ($listing->price_label)                                   $priceDisplay = $listing->price_label;
+    if ($listing->price_label)                                   $priceDisplay = \Illuminate\Support\Str::limit(trim($listing->price_label), 22);
     elseif ($listing->price_min && $listing->price_max)          $priceDisplay = 'Rp ' . number_format($listing->price_min,0,',','.') . '–' . number_format($listing->price_max,0,',','.');
     elseif ($listing->price && $listing->price > 0)              $priceDisplay = 'Rp ' . number_format($listing->price,0,',','.');
     else                                                         $priceDisplay = 'Harga Hubungi Penjual';

@@ -396,6 +396,7 @@
         .iklan-baris-price {
             grid-area: price;
             font-size: .92rem; font-weight: 800; white-space: nowrap; text-align: right;
+            max-width: 160px; overflow: hidden; text-overflow: ellipsis;
             background: linear-gradient(90deg,#059669,#10b981);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
