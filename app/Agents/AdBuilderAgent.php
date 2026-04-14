@@ -519,6 +519,14 @@ class AdBuilderAgent
             $priceNumeric = $numStr ? (float) $numStr : null;
         }
 
+        // Normalize condition to DB-allowed enum (listings_condition_check: new/used/unknown).
+        // Gemini returns Indonesian "baru"/"bekas" — map before insert.
+        $condition = match (mb_strtolower(trim((string) ($draft['condition'] ?? '')))) {
+            'baru', 'new'                             => 'new',
+            'bekas', 'second', 'seken', 'used'        => 'used',
+            default                                   => 'unknown',
+        };
+
         // Create listing record — attach $message so BroadcastAgent can resolve group via listing->message->group fallback
         $listing = Listing::create([
             'message_id' => $message->id,
@@ -534,7 +542,7 @@ class AdBuilderAgent
             'contact_name' => $name,
             'media_urls' => !empty($draft['media_url']) ? [$draft['media_url']] : null,
             'location' => $draft['location'] ?? null,
-            'condition' => $draft['condition'] ?? null,
+            'condition' => $condition,
             'status' => 'active',
             'source_date' => now(),
         ]);
