@@ -264,8 +264,10 @@ class AdBuilderAgent
     /**
      * Handle text message while user is in 'reviewing' step.
      */
-    public function handleReview(string $phone, string $text, array $state): string
+    public function handleReview(Message $message, array $state): string
     {
+        $phone = $message->sender_number;
+        $text = trim($message->raw_body ?? '');
         $draft = $state['draft'] ?? [];
         $onBehalfPasmal = !empty($state['on_behalf_pasmal']);
 
@@ -290,7 +292,7 @@ class AdBuilderAgent
 
         // Confirm & post
         if (preg_match('/^\s*(ya|yes|ok|oke|iya|post|posting|setuju|lanjut|kirim)\s*$/iu', $text)) {
-            return $this->confirmAndPost($phone, $draft, $onBehalfPasmal);
+            return $this->confirmAndPost($message, $draft, $onBehalfPasmal);
         }
 
         // Edit field: "edit judul Gamis Syari Premium"
@@ -482,8 +484,10 @@ class AdBuilderAgent
             . "_Contoh edit: `edit harga 75000` atau `edit lokasi Bekasi`_";
     }
 
-    private function confirmAndPost(string $phone, array $draft, bool $onBehalfPasmal = false): string
+    private function confirmAndPost(Message $message, array $draft, bool $onBehalfPasmal = false): string
     {
+        $phone = $message->sender_number;
+
         // On behalf Pasmal: use Pasmal's contact info instead of poster's
         if ($onBehalfPasmal) {
             $pasmalPhone = Setting::get('pasmal_contact_phone', '');
@@ -503,7 +507,7 @@ class AdBuilderAgent
             ->first()
             ?? Category::where('slug', 'lainnya')->first();
 
-        // Find active WAG
+        // Find active WAG (same resolution as group-origin ads)
         $group = WhatsappGroup::where('is_active', true)->first();
 
         // Build price numeric value
@@ -515,8 +519,9 @@ class AdBuilderAgent
             $priceNumeric = $numStr ? (float) $numStr : null;
         }
 
-        // Create listing record
+        // Create listing record — attach $message so BroadcastAgent can resolve group via listing->message->group fallback
         $listing = Listing::create([
+            'message_id' => $message->id,
             'whatsapp_group_id' => $group?->id,
             'category_id' => $category?->id,
             'contact_id' => $contact?->id,
@@ -534,46 +539,25 @@ class AdBuilderAgent
             'source_date' => now(),
         ]);
 
-        $baseUrl = rtrim(config('app.url'), '/');
-        $listingUrl = "{$baseUrl}/p/{$listing->id}";
+        // Clear state BEFORE delegating — success path below uses $listing directly.
+        Cache::forget(self::CACHE_PREFIX . $phone);
 
-        // Format WAG post — clean image caption, shareable by members
-        $priceType = $draft['price_type'] ?? 'fix';
-        $rawRp = $priceNumeric ? 'Rp ' . number_format($priceNumeric, 0, ',', '.') : '';
-        $priceStr = $draft['price_label'] ?? match ($priceType) {
-            'nego'   => $rawRp ? "{$rawRp} (Nego)" : 'Harga Nego',
-            'lelang' => $rawRp ? "Lelang mulai {$rawRp}" : 'Harga Lelang',
-            default  => $rawRp ?: 'Harga Nego',
-        };
-        $categoryLine = $category ? "📂 {$category->name}\n" : '';
-        $locLine  = !empty($draft['location']) ? "📍 {$draft['location']}\n" : '';
-        $shortDesc = BroadcastAgent::extractWagDescription($draft['description'] ?? '');
-        $descLine  = $shortDesc ? "_{$shortDesc}_\n" : '';
-
-        $wagCaption = "🛍️ *{$draft['title']}*\n"
-            . $descLine
-            . "💰 {$priceStr}\n"
-            . $categoryLine
-            . $locLine
-            . "\n🔗 {$listingUrl}";
-
-        // Post to WAG — always send as image if available so members can share the photo
+        // Delegate WAG posting to BroadcastAgent — same path used by group-origin listings.
         $posted = false;
-        if ($group) {
-            try {
-                if (!empty($draft['media_url'])) {
-                    $this->whacenter->sendGroupImageMessage($group->group_name, $wagCaption, $draft['media_url']);
-                } else {
-                    $this->whacenter->sendGroupMessage($group->group_name, $wagCaption);
-                }
-                $posted = true;
+        try {
+            app(BroadcastAgent::class)->handle($message, $listing);
+            $posted = true;
+            if ($group) {
                 $group->increment('ad_count');
-            } catch (\Exception $e) {
-                Log::error('AdBuilderAgent: failed to post to WAG', ['error' => $e->getMessage()]);
             }
+        } catch (\Exception $e) {
+            Log::error('AdBuilderAgent: BroadcastAgent failed to post listing', [
+                'error' => $e->getMessage(),
+                'listing_id' => $listing->id,
+            ]);
         }
 
-        Cache::forget(self::CACHE_PREFIX . $phone);
+        $listingUrl = rtrim(config('app.url'), '/') . '/p/' . $listing->id;
 
         if ($posted) {
             return "✅ *Iklan berhasil diposting ke grup!*\n\n"
