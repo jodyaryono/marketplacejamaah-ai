@@ -372,16 +372,34 @@ class ListingEditAgent
 
     public function parseAndApplyEdits(Listing $listing, string $editText, ?string $senderPhone = null): string
     {
-        $onBehalfPasmal = $senderPhone
-            && MasterCommandAgent::isMasterPhone($senderPhone)
-            && AdBuilderAgent::isOnBehalfPasmal($editText);
+        $isMaster = $senderPhone && MasterCommandAgent::isMasterPhone($senderPhone);
 
+        $onBehalfPasmal = $isMaster && AdBuilderAgent::isOnBehalfPasmal($editText);
         $editText = trim(preg_replace('/\b(on\s*behalf\s*pasmal|atas\s*nama\s*pasmal|behalf\s*pasmal)\b[,\s]*/iu', '', $editText));
         $editText = trim($editText, ' ,');
 
         // Pure "on behalf pasmal" — just reassign contact
         if (empty($editText) && $onBehalfPasmal) {
             return $this->applyOnBehalfPasmal($listing);
+        }
+
+        // Generalized "on behalf <Name> <phone>" / "atas nama <Name> <phone>" — master-only.
+        $onBehalfContact = null;
+        if ($isMaster) {
+            $onBehalfContact = self::parseOnBehalfArbitrary($editText);
+            if ($onBehalfContact) {
+                $editText = trim(preg_replace(
+                    '/\b(?:on\s*behalf|atas\s*nama|a\.?\s*n\.?)\s+.+?\s+(?:\+?62|0)[\d\s\-]{7,17}[,\s]*/iu',
+                    '',
+                    $editText
+                ));
+                $editText = trim($editText, ' ,');
+
+                // Pure "on behalf X <phone>" — just reassign contact, no Gemini needed.
+                if (empty($editText)) {
+                    return $this->applyOnBehalfContact($listing, $onBehalfContact['name'], $onBehalfContact['phone']);
+                }
+            }
         }
 
         $cleanExistingDesc = trim(preg_replace('/\b(on\s*behalf\s*pasmal|atas\s*nama\s*pasmal|behalf\s*pasmal)\b[.,\s]*/iu', '', $listing->description ?? ''));
@@ -480,8 +498,12 @@ class ListingEditAgent
         if ($onBehalfPasmal) {
             $this->applyOnBehalfPasmal($listing);
         }
+        if ($onBehalfContact) {
+            $this->applyOnBehalfContact($listing, $onBehalfContact['name'], $onBehalfContact['phone']);
+            $changeDesc[] = "• Kontak → *{$onBehalfContact['name']}* ({$onBehalfContact['phone']})";
+        }
 
-        if (empty($changes) && !$onBehalfPasmal) {
+        if (empty($changes) && !$onBehalfPasmal && !$onBehalfContact) {
             return "🤔 Tidak ada perubahan yang terdeteksi dari:\n_\"{$editText}\"_\n\n"
                 . "Contoh yang dimengerti:\n"
                 . "• *harga lelang mulai 1 juta*\n"
@@ -527,6 +549,49 @@ class ListingEditAgent
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /**
+     * Parse "on behalf <Name> <phone>" / "atas nama <Name> <phone>" / "a.n. <Name> <phone>".
+     * Returns ['name' => string, 'phone' => string (normalized to 62xxx)] or null.
+     * Explicitly skips the "pasmal" alias — that flows through applyOnBehalfPasmal.
+     */
+    public static function parseOnBehalfArbitrary(string $text): ?array
+    {
+        if (!preg_match(
+            '/\b(?:on\s*behalf|atas\s*nama|a\.?\s*n\.?)\s+(.+?)\s+((?:\+?62|0)[\d\s\-]{7,17})/iu',
+            $text,
+            $m
+        )) {
+            return null;
+        }
+
+        $name = trim(preg_replace('/\s+/', ' ', $m[1]));
+        if ($name === '' || preg_match('/\bpasmal\b/i', $name)) {
+            return null;
+        }
+
+        $raw = preg_replace('/[\s\-]/', '', $m[2]);
+        if (str_starts_with($raw, '+')) $raw = substr($raw, 1);
+        if (str_starts_with($raw, '0')) $raw = '62' . substr($raw, 1);
+        if (!str_starts_with($raw, '62')) $raw = '62' . $raw;
+
+        return ['name' => $name, 'phone' => $raw];
+    }
+
+    private function applyOnBehalfContact(Listing $listing, string $name, string $phone): string
+    {
+        $contact = Contact::where('phone_number', $phone)->first();
+        $listing->update([
+            'contact_number' => $phone,
+            'contact_name'   => $name,
+            'contact_id'     => $contact?->id,
+        ]);
+        $listing->refresh();
+        $link = "{$this->baseUrl}/p/{$listing->id}";
+        return "✅ *Iklan #{$listing->id} berhasil diperbarui!*\n\n"
+            . "• Kontak → *{$name}* ({$phone})\n\n"
+            . "🔗 {$link}";
+    }
 
     private function applyOnBehalfPasmal(Listing $listing): string
     {
