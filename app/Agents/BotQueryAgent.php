@@ -71,7 +71,7 @@ class BotQueryAgent
                 $reply = match ($step) {
                     'waiting_input' => $this->adBuilder->handleTextWhileWaiting($message->sender_number, $text),
                     'enriching'     => $this->adBuilder->handleEnriching($message->sender_number, $text, $adBuilderState),
-                    'reviewing'     => $this->adBuilder->handleReview($message->sender_number, $text, $adBuilderState),
+                    'reviewing'     => $this->adBuilder->handleReview($message, $adBuilderState),
                     default         => $this->adBuilder->handleTextWhileWaiting($message->sender_number, $text),
                 };
                 if ($reply !== '') {
