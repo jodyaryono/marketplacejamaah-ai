@@ -143,7 +143,15 @@
                 <h6 style="font-weight:700;color:#111827;margin-bottom:1rem;"><i class="bi bi-person-circle me-2" style="color:#059669;"></i>Info Penjual</h6>
                 @php
                     $sellerName   = $listing->contact?->name ?? $listing->contact_name ?? 'Penjual';
-                    $sellerPhone  = $listing->contact?->phone_number ?? $listing->contact_number;
+                    $normalizePhone = function ($raw) {
+                        $digits = preg_replace('/\D/', '', (string) ($raw ?? ''));
+                        if (!$digits) return null;
+                        if (str_starts_with($digits, '0'))       $digits = '62' . substr($digits, 1);
+                        elseif (str_starts_with($digits, '8'))   $digits = '62' . $digits;
+                        elseif (!str_starts_with($digits, '62')) return null;
+                        return preg_match('/^62\d{8,13}$/', $digits) ? $digits : null;
+                    };
+                    $sellerPhone  = $normalizePhone($listing->contact_number) ?: $normalizePhone($listing->contact?->phone_number);
                     $sellerInitial = mb_strtoupper(mb_substr($sellerName, 0, 1));
                     $sellProducts  = $listing->contact?->sell_products ?? null;
                 @endphp
@@ -157,10 +165,14 @@
                 </div>
 
                 @if($sellerPhone)
-                <a href="https://wa.me/{{ preg_replace('/\D/','',$sellerPhone) }}?text={{ urlencode('Halo, saya tertarik dengan ' . $listing->title . ' yang Anda jual di Marketplace Jamaah: ' . url('/p/' . $listing->id)) }}"
+                <a href="https://wa.me/{{ $sellerPhone }}?text={{ urlencode('Halo, saya tertarik dengan ' . $listing->title . ' yang Anda jual di Marketplace Jamaah: ' . url('/p/' . $listing->id)) }}"
                    target="_blank" class="btn-wa w-100 justify-content-center mb-2">
                     <i class="bi bi-whatsapp" style="font-size:1.1rem;"></i> Chat Penjual via WhatsApp
                 </a>
+                @else
+                <div class="w-100 mb-2" style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:.7rem .9rem;font-size:.82rem;color:#92400e;">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>Nomor WhatsApp penjual tidak tersedia untuk iklan ini.
+                </div>
                 @endif
 
                 @if($listing->contact)
