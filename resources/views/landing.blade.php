@@ -373,7 +373,7 @@
         .iklan-baris-list { display: flex; flex-direction: column; gap: .5rem; }
         .iklan-baris-row {
             display: grid;
-            grid-template-columns: 1fr auto auto;
+            grid-template-columns: minmax(0, 1fr) auto auto;
             grid-template-areas: "main price wa";
             align-items: center;
             column-gap: 1rem;
@@ -409,7 +409,7 @@
         }
         .iklan-baris-wa:hover { color: #fff; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(5,150,105,.45); }
         @media (max-width: 576px) {
-            .iklan-baris-row { grid-template-columns: 1fr auto; grid-template-areas: "main wa" "price price"; column-gap: .6rem; row-gap: .35rem; }
+            .iklan-baris-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main wa" "price price"; column-gap: .6rem; row-gap: .35rem; }
             .iklan-baris-price { text-align: left; font-size: .85rem; }
             .iklan-baris-desc, .iklan-baris-meta { display: none; }
         }
