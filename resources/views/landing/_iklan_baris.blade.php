@@ -1,11 +1,15 @@
 {{-- Iklan Baris partial — teks tanpa foto, dipakai untuk initial render & AJAX load-more --}}
 @foreach($listings as $listing)
 @php
-    $waPhone = $listing->contact_number ?: $listing->contact?->phone_number;
-    $waPhone = preg_replace('/\D/', '', $waPhone ?? '');
-    if (str_starts_with($waPhone, '0')) $waPhone = '62' . substr($waPhone, 1);
-    elseif ($waPhone && !str_starts_with($waPhone, '62')) $waPhone = '62' . $waPhone;
-    if (strlen($waPhone) >= 15 && str_starts_with($waPhone, '2500')) $waPhone = null;
+    $normalize = function ($raw) {
+        $digits = preg_replace('/\D/', '', (string) ($raw ?? ''));
+        if (!$digits) return null;
+        if (str_starts_with($digits, '0'))       $digits = '62' . substr($digits, 1);
+        elseif (str_starts_with($digits, '8'))   $digits = '62' . $digits;
+        elseif (!str_starts_with($digits, '62')) return null;
+        return preg_match('/^62\d{8,13}$/', $digits) ? $digits : null;
+    };
+    $waPhone = $normalize($listing->contact_number) ?: $normalize($listing->contact?->phone_number);
     $waText  = urlencode('Halo, saya tertarik dengan "' . $listing->title . '". Apakah masih tersedia?');
     $waLink  = $waPhone ? 'https://wa.me/' . $waPhone . '?text=' . $waText : null;
     $sellerName = $listing->contact?->name ?: ($listing->contact_name ?: 'Penjual');
@@ -39,6 +43,11 @@
         <a href="{{ $waLink }}" target="_blank" rel="noopener" class="iklan-baris-wa"
            onclick="event.stopPropagation();">
             <i class="bi bi-whatsapp"></i><span class="d-none d-sm-inline">Hubungi</span><span class="d-inline d-sm-none">WA</span>
+        </a>
+    @else
+        <a href="/p/{{ $listing->id }}" class="iklan-baris-wa iklan-baris-wa--detail"
+           onclick="event.stopPropagation();">
+            <i class="bi bi-box-arrow-up-right"></i><span class="d-none d-sm-inline">Detail</span><span class="d-inline d-sm-none">Detail</span>
         </a>
     @endif
 </div>
