@@ -17,24 +17,24 @@
     else                                                         $priceDisplay = 'Harga Hubungi Penjual';
 @endphp
 <div class="iklan-baris-row" onclick="window.location='/p/{{ $listing->id }}'" style="cursor:pointer;">
-    @if($listing->category)
-        <span class="iklan-baris-cat">{{ $listing->category->name }}</span>
-    @endif
     <div class="iklan-baris-main">
+        @if($listing->category)
+            <span class="iklan-baris-cat">{{ $listing->category->name }}</span>
+        @endif
         <div class="iklan-baris-title">{{ $listing->title }}</div>
         @if($listing->description)
-            <div class="iklan-baris-desc">{{ \Illuminate\Support\Str::limit(strip_tags($listing->description), 90) }}</div>
+            <div class="iklan-baris-desc">{{ \Illuminate\Support\Str::limit(strip_tags($listing->description), 110) }}</div>
         @endif
+        <div class="iklan-baris-meta">
+            <span style="color:#d1d5db;font-weight:600;">#{{ $listing->id }}</span>&nbsp;&middot;
+            <i class="bi bi-person-circle"></i>{{ \Illuminate\Support\Str::limit($sellerName, 14) }}
+            @if($sellerLocation)
+                &nbsp;<i class="bi bi-geo-alt-fill" style="color:#059669;"></i>{{ \Illuminate\Support\Str::limit($sellerLocation, 18) }}
+            @endif
+            &nbsp;<i class="bi bi-calendar3"></i>{{ ($listing->source_date ?? $listing->created_at)?->format('d M') }}
+        </div>
     </div>
     <span class="iklan-baris-price">{{ $priceDisplay }}</span>
-    <span class="iklan-baris-meta">
-        <span style="color:#d1d5db;font-weight:600;">#{{ $listing->id }}</span>&nbsp;&middot;
-        <i class="bi bi-person-circle"></i>{{ \Illuminate\Support\Str::limit($sellerName, 14) }}
-        @if($sellerLocation)
-            &nbsp;<i class="bi bi-geo-alt-fill" style="color:#059669;"></i>{{ \Illuminate\Support\Str::limit($sellerLocation, 18) }}
-        @endif
-        &nbsp;<i class="bi bi-calendar3"></i>{{ ($listing->source_date ?? $listing->created_at)?->format('d M') }}
-    </span>
     @if($waLink)
         <a href="{{ $waLink }}" target="_blank" rel="noopener" class="iklan-baris-wa"
            onclick="event.stopPropagation();">
