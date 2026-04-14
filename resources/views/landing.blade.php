@@ -370,36 +370,49 @@
         .pagination .page-link:hover { background: var(--em-xlight); color: var(--em-dark); border-color: var(--em-light); }
 
         /* ── Iklan Baris ───────────────── */
-        .iklan-baris-list { display: flex; flex-direction: column; gap: .48rem; }
+        .iklan-baris-list { display: flex; flex-direction: column; gap: .5rem; }
         .iklan-baris-row {
-            display: flex; align-items: center; gap: .85rem;
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            grid-template-areas: "main price wa";
+            align-items: center;
+            column-gap: 1rem;
             background: #fff; border: 1.5px solid #e5e7eb; border-radius: 13px;
             padding: .72rem 1rem; text-decoration: none; color: inherit;
             transition: border-color .18s, box-shadow .18s;
         }
         .iklan-baris-row:hover { border-color: var(--em-mid); box-shadow: 0 4px 18px rgba(5,150,105,.12); color: inherit; }
+        .iklan-baris-main { grid-area: main; min-width: 0; display: flex; flex-direction: column; gap: .18rem; }
         .iklan-baris-cat {
+            display: inline-block; align-self: flex-start;
             font-size: .6rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
             color: var(--em-dark); background: var(--em-xlight); border: 1px solid var(--em-light);
-            border-radius: 6px; padding: .16rem .5rem; white-space: nowrap; flex-shrink: 0;
+            border-radius: 6px; padding: .14rem .5rem; white-space: nowrap; max-width: 100%;
+            overflow: hidden; text-overflow: ellipsis;
         }
-        .iklan-baris-main { flex: 1; min-width: 0; }
-        .iklan-baris-title { font-size: .88rem; font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .iklan-baris-title { font-size: .9rem; font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
         .iklan-baris-desc { font-size: .75rem; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .iklan-baris-meta { font-size: .7rem; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: .35rem; margin-top: .12rem; }
         .iklan-baris-price {
-            font-size: .92rem; font-weight: 800; white-space: nowrap; flex-shrink: 0;
+            grid-area: price;
+            font-size: .92rem; font-weight: 800; white-space: nowrap; text-align: right;
             background: linear-gradient(90deg,#059669,#10b981);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
-        .iklan-baris-meta { font-size: .7rem; color: #9ca3af; white-space: nowrap; flex-shrink: 0; display: flex; align-items: center; gap: .35rem; }
         .iklan-baris-wa {
-            flex-shrink: 0; display: inline-flex; align-items: center; gap: .28rem;
+            grid-area: wa;
+            display: inline-flex; align-items: center; gap: .3rem;
             background: linear-gradient(135deg, #059669, #10b981); color: #fff;
-            border-radius: 8px; font-size: .74rem; font-weight: 700; padding: .36rem .82rem;
+            border-radius: 8px; font-size: .74rem; font-weight: 700; padding: .4rem .85rem;
             text-decoration: none; box-shadow: 0 2px 8px rgba(5,150,105,.28); transition: all .18s;
+            white-space: nowrap;
         }
         .iklan-baris-wa:hover { color: #fff; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(5,150,105,.45); }
-        @media (max-width: 576px) { .iklan-baris-desc, .iklan-baris-meta, .iklan-baris-cat { display: none; } }
+        @media (max-width: 576px) {
+            .iklan-baris-row { grid-template-columns: 1fr auto; grid-template-areas: "main wa" "price price"; column-gap: .6rem; row-gap: .35rem; }
+            .iklan-baris-price { text-align: left; font-size: .85rem; }
+            .iklan-baris-desc, .iklan-baris-meta { display: none; }
+        }
         .section-divider {
             display: flex; align-items: center; gap: 1rem; margin: 2.5rem 0 1.2rem;
         }
