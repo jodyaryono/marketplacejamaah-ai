@@ -74,7 +74,9 @@ class BotQueryAgent
                     'reviewing'     => $this->adBuilder->handleReview($message->sender_number, $text, $adBuilderState),
                     default         => $this->adBuilder->handleTextWhileWaiting($message->sender_number, $text),
                 };
-                $this->whacenter->sendMessage($message->sender_number, $reply);
+                if ($reply !== '') {
+                    $this->whacenter->sendMessage($message->sender_number, $reply);
+                }
                 $log->update(['status' => 'success', 'output_payload' => ['intent' => 'ad_builder_text', 'step' => $step]]);
                 return true;
             }
@@ -302,7 +304,9 @@ class BotQueryAgent
             $this->adBuilder->startSilent($message->sender_number);
         }
         $reply = $this->adBuilder->handleImage($message);
-        $this->whacenter->sendMessage($message->sender_number, $reply);
+        if ($reply !== '') {
+            $this->whacenter->sendMessage($message->sender_number, $reply);
+        }
         $log->update(['status' => 'success', 'output_payload' => ['intent' => 'ad_builder_image']]);
         return true;
     }

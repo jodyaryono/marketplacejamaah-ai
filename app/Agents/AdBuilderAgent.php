@@ -162,7 +162,8 @@ class AdBuilderAgent
             // Save draft and go to 'enriching' step — ask for extra details before finalizing
             Cache::put(self::CACHE_PREFIX . $phone, $newState, now()->addMinutes(self::CACHE_TTL_MINUTES));
 
-            return $this->formatEnrichPrompt($draft);
+            $this->pushPreview($phone, $draft, $this->formatEnrichPrompt($draft));
+            return '';
         } catch (\Exception $e) {
             Log::error('AdBuilderAgent::handleImage failed', ['error' => $e->getMessage()]);
             return '❌ Terjadi kesalahan. Silakan coba kirim foto lagi atau ketik *batal*.';
@@ -205,12 +206,19 @@ class AdBuilderAgent
             return "✅ _Mode atas nama *Pasmal* aktif._\n\nLanjutkan dengan info produk, atau ketik *lanjut* untuk review.";
         }
 
+        // Meta-request: user is asking to see / include the image in the preview — re-send preview with image.
+        if ($this->isShowImageRequest($text)) {
+            $this->pushPreview($phone, $draft, $this->formatEnrichPrompt($draft));
+            return '';
+        }
+
         // "lanjut", "skip", "tidak ada", "sudah ok" → proceed to review as-is
         if (preg_match('/^\s*(lanjut|next|skip|oke|ok|sudah|sudah\s+ok|tidak\s+ada|ga\s+ada|gak\s+ada|langsung\s+post)\s*$/iu', $text)) {
             $newState = ['step' => 'reviewing', 'draft' => $draft];
             if (!empty($state['on_behalf_pasmal'])) $newState['on_behalf_pasmal'] = true;
             Cache::put(self::CACHE_PREFIX . $phone, $newState, now()->addMinutes(self::CACHE_TTL_MINUTES));
-            return $this->formatDraftPreview($draft, !empty($state['on_behalf_pasmal']));
+            $this->pushPreview($phone, $draft, $this->formatDraftPreview($draft, !empty($state['on_behalf_pasmal'])));
+            return '';
         }
 
         // User provided extra info — ask Gemini to merge it into the draft
@@ -249,7 +257,8 @@ class AdBuilderAgent
         $newState = ['step' => 'reviewing', 'draft' => $draft];
         if (!empty($state['on_behalf_pasmal'])) $newState['on_behalf_pasmal'] = true;
         Cache::put(self::CACHE_PREFIX . $phone, $newState, now()->addMinutes(self::CACHE_TTL_MINUTES));
-        return $this->formatDraftPreview($draft, !empty($state['on_behalf_pasmal']));
+        $this->pushPreview($phone, $draft, $this->formatDraftPreview($draft, !empty($state['on_behalf_pasmal'])));
+        return '';
     }
 
     /**
@@ -263,6 +272,12 @@ class AdBuilderAgent
         if ($this->isCancelCommand($text)) {
             Cache::forget(self::CACHE_PREFIX . $phone);
             return "❌ *Pembuatan iklan dibatalkan.*\n\nKetik *buat iklan* kapan saja untuk memulai lagi.";
+        }
+
+        // Meta-request: user asks to display image in preview → re-send preview with photo.
+        if ($this->isShowImageRequest($text)) {
+            $this->pushPreview($phone, $draft, $this->formatDraftPreview($draft, $onBehalfPasmal));
+            return '';
         }
 
         // Detect "on behalf pasmal" at review step
@@ -317,7 +332,12 @@ class AdBuilderAgent
                 $updState = ['step' => 'reviewing', 'draft' => $draft];
                 if ($onBehalfPasmal) $updState['on_behalf_pasmal'] = true;
                 Cache::put(self::CACHE_PREFIX . $phone, $updState, now()->addMinutes(self::CACHE_TTL_MINUTES));
-                return "✅ *" . ucfirst($field) . "* diperbarui!\n\n" . $this->formatDraftPreview($draft, $onBehalfPasmal);
+                $this->pushPreview(
+                    $phone,
+                    $draft,
+                    "✅ *" . ucfirst($field) . "* diperbarui!\n\n" . $this->formatDraftPreview($draft, $onBehalfPasmal)
+                );
+                return '';
             }
 
             return "❓ Field tidak dikenali. Field yang bisa diedit:\n"
@@ -331,11 +351,13 @@ class AdBuilderAgent
         }
 
         // Re-show preview with hint
-        return "ℹ️ Ketik salah satu perintah berikut:\n"
+        $hint = "ℹ️ Ketik salah satu perintah berikut:\n"
             . "• *ya* → posting iklan ke grup\n"
             . "• *edit [field] [nilai]* → ubah detail\n"
             . "• *batal* → batalkan\n\n"
-            . $this->formatDraftPreview($draft);
+            . $this->formatDraftPreview($draft, $onBehalfPasmal);
+        $this->pushPreview($phone, $draft, $hint);
+        return '';
     }
 
     // ── Internals ─────────────────────────────────────────────────────────────
@@ -368,6 +390,41 @@ class AdBuilderAgent
     private function isCancelCommand(string $text): bool
     {
         return (bool) preg_match('/^\s*(batal|cancel|hapus|stop|keluar)\s*$/iu', $text);
+    }
+
+    /**
+     * Detect meta-requests asking the bot to display/include the uploaded image
+     * in the preview (as opposed to product info to merge into the draft).
+     */
+    private function isShowImageRequest(string $text): bool
+    {
+        return (bool) preg_match(
+            '/\b(tampil\w*|tampilin|munculk\w*|muncul\w*|perlihatk\w*|lihatk\w*|kirim|tunjukk\w*|sertak\w*|lampirk\w*|include|show)\b[^\n]{0,40}\b(gambar|foto|image|picture|pic)\b/iu',
+            $text
+        ) || (bool) preg_match(
+            '/\b(gambar|foto|image|picture|pic)\w*\b[^\n]{0,40}\b(jangan\s+lupa|tampil\w*|muncul\w*|sertak\w*|lampirk\w*|tunjukk\w*|lihatk\w*|show)\b/iu',
+            $text
+        );
+    }
+
+    /**
+     * Send a preview message. If the draft has an image, send it as image+caption
+     * so the uploaded photo is visible inline; otherwise fall back to text.
+     */
+    private function pushPreview(string $phone, array $draft, string $caption): void
+    {
+        $mediaUrl = $draft['media_url'] ?? null;
+        try {
+            if ($mediaUrl) {
+                $this->whacenter->sendImageMessage($phone, $caption, $mediaUrl);
+                return;
+            }
+        } catch (\Exception $e) {
+            Log::warning('AdBuilderAgent::pushPreview image send failed, falling back to text', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+        $this->whacenter->sendMessage($phone, $caption);
     }
 
     private function formatDraftPreview(array $draft, bool $onBehalfPasmal = false): string
@@ -404,7 +461,7 @@ class AdBuilderAgent
 
         $locLine = !empty($draft['location']) ? "\n📍 *Lokasi:* {$draft['location']}" : '';
         $notesLine = !empty($draft['notes']) ? "\n\n💬 _Catatan AI: {$draft['notes']}_" : '';
-        $hasImage = !empty($draft['media_url']) ? "\n🖼️ _Foto produk tersimpan_" : '';
+        $hasImage = '';
         $onBehalfLine = $onBehalfPasmal ? "\n📋 *Atas nama:* Pasmal" : '';
 
         return "✨ *Preview Draft Iklan:*\n\n"
@@ -490,7 +547,7 @@ class AdBuilderAgent
         };
         $categoryLine = $category ? "📂 {$category->name}\n" : '';
         $locLine  = !empty($draft['location']) ? "📍 {$draft['location']}\n" : '';
-        $shortDesc = !empty($draft['description']) ? \Illuminate\Support\Str::limit(explode("\n", $draft['description'])[0], 120) : '';
+        $shortDesc = BroadcastAgent::extractWagDescription($draft['description'] ?? '');
         $descLine  = $shortDesc ? "_{$shortDesc}_\n" : '';
 
         $wagCaption = "🛍️ *{$draft['title']}*\n"
