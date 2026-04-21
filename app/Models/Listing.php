@@ -30,6 +30,9 @@ class Listing extends Model
         'condition',
         'status',
         'source_date',
+        'price_usyc',
+        'accepts_usyc',
+        'payment_status',
     ];
 
     protected $casts = [
@@ -38,6 +41,8 @@ class Listing extends Model
         'price' => 'decimal:2',
         'price_min' => 'decimal:2',
         'price_max' => 'decimal:2',
+        'price_usyc' => 'decimal:8',
+        'accepts_usyc' => 'boolean',
     ];
 
     public function message(): BelongsTo

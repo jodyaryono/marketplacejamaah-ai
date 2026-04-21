@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Marketplace Jamaah AI × Arc — Agentic Economy Demo</title>
+  <style>
+    :root {
+      --arc-purple: #7C3AED;
+      --arc-blue: #2563EB;
+      --arc-green: #059669;
+      --arc-gold: #D97706;
+      --arc-bg: #0F0F23;
+      --arc-card: #1A1A35;
+      --arc-border: #2D2D5E;
+      --text: #E2E8F0;
+      --text-muted: #94A3B8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--arc-bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, var(--arc-purple) 0%, var(--arc-blue) 100%);
+      padding: 24px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .header-left h1 { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.5px; }
+    .header-left p { font-size: 0.9rem; opacity: 0.85; margin-top: 4px; }
+    .badge {
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 999px;
+      padding: 6px 16px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      backdrop-filter: blur(8px);
+    }
+    /* ── Layout ── */
+    main { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+    /* ── Cards ── */
+    .card {
+      background: var(--arc-card);
+      border: 1px solid var(--arc-border);
+      border-radius: 16px;
+      padding: 24px;
+    }
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .stat-value { font-size: 2rem; font-weight: 800; color: var(--text); }
+    .stat-sub { font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; }
+    .green { color: #34D399; }
+    .purple { color: #A78BFA; }
+    .blue { color: #60A5FA; }
+    .gold { color: #FCD34D; }
+    /* ── Simulator ── */
+    .sim-container {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .phone-frame {
+      width: 300px;
+      min-height: 500px;
+      background: #111;
+      border-radius: 32px;
+      border: 3px solid #333;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .phone-header {
+      background: #128C7E;
+      padding: 16px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .phone-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--arc-purple), var(--arc-blue));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+    }
+    .chat-area {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 360px;
+      overflow-y: auto;
+      max-height: 360px;
+    }
+    .bubble {
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: 18px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      animation: pop 0.2s ease;
+    }
+    @keyframes pop { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .bubble.user {
+      background: #DCF8C6;
+      color: #111;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+    .bubble.bot {
+      background: #fff;
+      color: #111;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+    .bubble.bot.payment {
+      background: linear-gradient(135deg, #EDE9FE, #DBEAFE);
+    }
+    .bubble .tx-badge {
+      display: inline-block;
+      background: var(--arc-purple);
+      color: white;
+      font-size: 0.65rem;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 700;
+      margin-top: 6px;
+    }
+    .phone-input {
+      background: #1f2937;
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      gap: 8px;
+    }
+    .phone-input input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: white;
+      font-size: 0.85rem;
+      outline: none;
+    }
+    .phone-input input::placeholder { color: #666; }
+    .send-btn {
+      background: #128C7E;
+      border: none;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      color: white;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: 0.2s;
+    }
+    .send-btn:hover { background: #075E54; }
+    /* ── Steps ── */
+    .steps { display: flex; flex-direction: column; gap: 12px; flex: 1; min-width: 260px; }
+    .step {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--arc-border);
+      transition: 0.3s;
+      background: transparent;
+    }
+    .step.active {
+      border-color: var(--arc-purple);
+      background: rgba(124, 58, 237, 0.1);
+    }
+    .step.done {
+      border-color: var(--arc-green);
+      background: rgba(5, 150, 105, 0.08);
+    }
+    .step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--arc-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .step.active .step-num { background: var(--arc-purple); }
+    .step.done .step-num { background: var(--arc-green); }
+    .step-title { font-size: 0.85rem; font-weight: 700; }
+    .step-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 3px; }
+    /* ── Listings ── */
+    .listing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+    .listing-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--arc-border);
+      border-radius: 12px;
+      padding: 14px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .listing-card:hover { border-color: var(--arc-purple); background: rgba(124,58,237,0.1); }
+    .listing-card.selected { border-color: #34D399; background: rgba(5,150,105,0.1); }
+    .listing-title { font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; }
+    .listing-price { font-size: 0.9rem; font-weight: 800; color: #34D399; }
+    .listing-usyc-badge {
+      display: inline-block;
+      margin-top: 6px;
+      background: rgba(124,58,237,0.3);
+      border: 1px solid rgba(124,58,237,0.5);
+      color: #A78BFA;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+    /* ── Arc TX Viewer ── */
+    .tx-viewer {
+      font-family: 'Courier New', monospace;
+      font-size: 0.75rem;
+      background: #000;
+      border-radius: 12px;
+      padding: 16px;
+      color: #00FF88;
+      min-height: 120px;
+      overflow-x: auto;
+    }
+    .tx-line { margin-bottom: 6px; }
+    .tx-label { color: #888; }
+    .tx-value { color: #00FF88; }
+    .tx-hash { color: #A78BFA; word-break: break-all; }
+    /* ── Tabs ── */
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; background: rgba(255,255,255,0.04); border-radius: 12px; padding: 4px; }
+    .tab {
+      flex: 1;
+      text-align: center;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      transition: 0.2s;
+      border: none;
+      background: none;
+    }
+    .tab.active { background: var(--arc-purple); color: white; }
+    /* ── Btn ── */
+    .btn {
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: 0.2s;
+    }
+    .btn-primary { background: var(--arc-purple); color: white; }
+    .btn-primary:hover { background: #6D28D9; }
+    .btn-green { background: var(--arc-green); color: white; }
+    .btn-green:hover { background: #047857; }
+    .btn-sm { padding: 6px 14px; font-size: 0.78rem; }
+    /* ── Section titles ── */
+    .section-title {
+      font-size: 1.1rem;
+      font-weight: 800;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-title span { font-size: 1.3rem; }
+    /* ── Flow diagram ── */
+    .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+    .flow-node {
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-align: center;
+    }
+    .flow-arrow { color: var(--text-muted); font-size: 1.2rem; }
+    .fn-wa  { background: rgba(18,140,126,0.25); border: 1px solid #128C7E; color: #34D399; }
+    .fn-ai  { background: rgba(124,58,237,0.25); border: 1px solid var(--arc-purple); color: #A78BFA; }
+    .fn-arc { background: rgba(37,99,235,0.25); border: 1px solid var(--arc-blue); color: #60A5FA; }
+    .fn-ok  { background: rgba(5,150,105,0.25); border: 1px solid var(--arc-green); color: #34D399; }
+    /* ── Yield calc ── */
+    .yield-box {
+      background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(37,99,235,0.15));
+      border: 1px solid rgba(124,58,237,0.3);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 12px;
+    }
+    input[type=range] { width: 100%; margin: 8px 0; accent-color: var(--arc-purple); }
+    .pill {
+      display: inline-block;
+      background: rgba(124,58,237,0.2);
+      border: 1px solid rgba(124,58,237,0.4);
+      color: #A78BFA;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 999px;
+      margin: 2px;
+    }
+    section { margin-bottom: 40px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>🕌 Marketplace Jamaah AI</h1>
+    <p>Agentic Economy on Arc — USYC Nanopayment Integration</p>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <span class="badge">✅ LIVE Production</span>
+    <span class="badge">⚡ Arc Testnet</span>
+    <span class="badge">💵 USYC Stablecoin</span>
+    <span class="badge">🤖 AI Agent</span>
+    <span class="badge">🏆 Lablab.ai Hackathon 2026</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- Live Production Banner -->
+  <div style="background:linear-gradient(135deg,rgba(5,150,105,0.2),rgba(37,99,235,0.2));border:1px solid rgba(52,211,153,0.4);border-radius:16px;padding:20px 24px;margin-bottom:24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+    <div style="font-size:2rem;">🕌</div>
+    <div>
+      <div style="font-size:1rem;font-weight:800;color:#34D399;">✅ Platform Ini Sudah Live & Digunakan Real Users</div>
+      <div style="font-size:0.82rem;color:var(--text-muted);margin-top:4px;">
+        Marketplace Jamaah AI aktif melayani komunitas jamaah Indonesia via WhatsApp — AI agents berjalan 24/7,
+        real sellers & buyers, real listings. USYC + Arc adalah <b>upgrade payment layer</b> untuk platform yang sudah ada.
+      </div>
+    </div>
+    <a href="https://marketplacejamaah-ai.jodyaryono.id" target="_blank"
+       style="margin-left:auto;background:rgba(52,211,153,0.2);border:1px solid rgba(52,211,153,0.4);color:#34D399;padding:8px 18px;border-radius:10px;font-size:0.82rem;font-weight:700;text-decoration:none;white-space:nowrap;">
+      🌐 Lihat Platform Live →
+    </a>
+  </div>
+
+  <!-- Production Stats Row -->
+  <div class="grid-3" style="margin-bottom:20px;">
+    <div class="card">
+      <div class="card-title">🛍️ Live Listings</div>
+      <div class="stat-value green">97</div>
+      <div class="stat-sub">real products — food, property, vehicles, services</div>
+    </div>
+    <div class="card">
+      <div class="card-title">🏷️ Categories</div>
+      <div class="stat-value purple">13</div>
+      <div class="stat-sub">active product categories on platform</div>
+    </div>
+    <div class="card">
+      <div class="card-title">📸 Media Verified</div>
+      <div class="stat-value gold">81</div>
+      <div class="stat-sub">listings with real photos/videos from sellers</div>
+    </div>
+  </div>
+
+  <!-- USYC Stats Row -->
+  <div class="grid-3" style="margin-bottom:32px;">
+    <div class="card">
+      <div class="card-title">⚡ Arc Transactions</div>
+      <div class="stat-value green" id="stat-tx">0</div>
+      <div class="stat-sub">nanopayments confirmed on Arc (testnet)</div>
+    </div>
+    <div class="card">
+      <div class="card-title">💵 USYC Volume</div>
+      <div class="stat-value purple" id="stat-vol">0.00</div>
+      <div class="stat-sub">USYC (~USD) traded via agents</div>
+    </div>
+    <div class="card">
+      <div class="card-title">📈 Yield Earned</div>
+      <div class="stat-value gold" id="stat-yield">0.000000</div>
+      <div class="stat-sub">USYC auto-yield from escrow (5% APY)</div>
+    </div>
+  </div>
+
+  <!-- Architecture Flow -->
+  <section>
+    <div class="section-title"><span>🔄</span> Agentic Payment Flow</div>
+    <div class="card">
+      <div class="flow">
+        <div class="flow-node fn-wa">📱 WhatsApp<br/>Message</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node fn-ai">🤖 PaymentAgent<br/>(Intent NLP)</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node fn-ai">🔍 ListingMatcher<br/>(Semantic Search)</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node fn-arc">⛓️ Arc Blockchain<br/>(USYC Transfer)</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node fn-ok">✅ Escrow + Yield<br/>Confirmed</div>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-top:8px;">
+        Buyer types <em>"mau beli hijab"</em> in WhatsApp → AI agent detects intent → matches listing → executes USYC payment on Arc →
+        funds held in escrow (earning 5% APY) → buyer confirms receipt → auto-released to seller.
+        <strong>100% autonomous, zero intermediary.</strong>
+      </p>
+    </div>
+  </section>
+
+  <!-- Live Simulator + Steps -->
+  <section>
+    <div class="section-title"><span>🎮</span> Live Demo Simulator</div>
+    <div class="sim-container">
+      <!-- Phone -->
+      <div class="phone-frame">
+        <div class="phone-header">
+          <div class="phone-avatar">🕌</div>
+          <div>
+            <div style="font-size:0.85rem;">Marketplace Jamaah AI</div>
+            <div style="font-size:0.7rem;opacity:0.7;">Agent aktif • Arc Testnet</div>
+          </div>
+        </div>
+        <div class="chat-area" id="chat-area">
+          <div class="bubble bot">Assalamu'alaikum! 🙏 Saya Agen Jamaah AI dengan fitur pembayaran USYC on-chain.
+
+Coba ketik:
+• <b>daftar wallet</b> — buat wallet Arc
+• <b>cek saldo</b> — lihat saldo USYC
+• <b>mau beli hijab</b> — beli dengan USYC
+• <b>confirm</b> — release escrow</div>
+        </div>
+        <div class="phone-input">
+          <input type="text" id="chat-input" placeholder="Ketik pesan..." onkeydown="if(event.key==='Enter')sendChat()"/>
+          <button class="send-btn" onclick="sendChat()">➤</button>
+        </div>
+      </div>
+
+      <!-- Steps Panel -->
+      <div class="steps" id="steps-panel">
+        <div class="card-title" style="margin-bottom:8px;">🔄 Agent Pipeline</div>
+
+        <div class="step" id="step-1">
+          <div class="step-num">1</div>
+          <div>
+            <div class="step-title">WhatsApp Message Received</div>
+            <div class="step-desc">Webhook fires → ProcessMessageJob dispatched</div>
+          </div>
+        </div>
+        <div class="step" id="step-2">
+          <div class="step-num">2</div>
+          <div>
+            <div class="step-title">Intent Classification (NLP)</div>
+            <div class="step-desc">Gemini LLM + keyword fallback (Indonesian)</div>
+          </div>
+        </div>
+        <div class="step" id="step-3">
+          <div class="step-num">3</div>
+          <div>
+            <div class="step-title">Listing Match</div>
+            <div class="step-desc">Semantic search across USYC-enabled listings</div>
+          </div>
+        </div>
+        <div class="step" id="step-4">
+          <div class="step-num">4</div>
+          <div>
+            <div class="step-title">Arc USYC Transfer</div>
+            <div class="step-desc">ERC-20 transferFrom on Arc L2 (~200ms)</div>
+          </div>
+        </div>
+        <div class="step" id="step-5">
+          <div class="step-num">5</div>
+          <div>
+            <div class="step-title">Escrow + Yield Active</div>
+            <div class="step-desc">Funds locked, earning 5% APY via USYC</div>
+          </div>
+        </div>
+        <div class="step" id="step-6">
+          <div class="step-num">6</div>
+          <div>
+            <div class="step-title">Confirmation & Release</div>
+            <div class="step-desc">Buyer confirms → auto-release to seller</div>
+          </div>
+        </div>
+
+        <!-- Arc TX Viewer -->
+        <div class="tx-viewer" id="tx-viewer" style="display:none;margin-top:8px;">
+          <div class="tx-line"><span class="tx-label">network    </span><span class="tx-value">arc-testnet</span></div>
+          <div class="tx-line"><span class="tx-label">tx_hash    </span><span class="tx-hash" id="tx-hash">—</span></div>
+          <div class="tx-line"><span class="tx-label">block      </span><span class="tx-value" id="tx-block">—</span></div>
+          <div class="tx-line"><span class="tx-label">amount     </span><span class="tx-value" id="tx-amount">—</span></div>
+          <div class="tx-line"><span class="tx-label">escrow     </span><span class="tx-value">held (24h)</span></div>
+          <div class="tx-line"><span class="tx-label">yield_apy  </span><span class="tx-value green">5.00%</span></div>
+          <div class="tx-line"><span class="tx-label">gas_gwei   </span><span class="tx-value">0.001 (Arc L2)</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Marketplace Listings -->
+  <section>
+    <div class="section-title"><span>🛍️</span> Listings with USYC Payment</div>
+    <div class="card">
+      <div class="listing-grid" id="listings-grid">
+        <!-- populated by JS -->
+      </div>
+    </div>
+  </section>
+
+  <!-- USYC Yield Calculator -->
+  <section>
+    <div class="grid-2">
+      <div class="card">
+        <div class="section-title" style="font-size:0.95rem;"><span>📈</span> USYC Yield Calculator</div>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">While funds sit in escrow, USYC earns yield automatically (~5% APY via Circle)</p>
+        <label style="font-size:0.82rem;color:var(--text-muted);">Amount in Escrow: <b id="calc-amount">100</b> USYC</label>
+        <input type="range" min="1" max="1000" value="100" id="calc-range" oninput="updateCalc()"/>
+        <div class="yield-box">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">
+            <div>
+              <div style="font-size:0.72rem;color:var(--text-muted);">Daily Yield</div>
+              <div style="font-size:1.1rem;font-weight:800;color:#34D399;" id="yield-day">0.0137</div>
+              <div style="font-size:0.7rem;color:var(--text-muted);">USYC</div>
+            </div>
+            <div>
+              <div style="font-size:0.72rem;color:var(--text-muted);">Monthly Yield</div>
+              <div style="font-size:1.1rem;font-weight:800;color:#34D399;" id="yield-month">0.4167</div>
+              <div style="font-size:0.7rem;color:var(--text-muted);">USYC</div>
+            </div>
+            <div>
+              <div style="font-size:0.72rem;color:var(--text-muted);">Annual Yield</div>
+              <div style="font-size:1.1rem;font-weight:800;color:#34D399;" id="yield-year">5.00</div>
+              <div style="font-size:0.7rem;color:var(--text-muted);">USYC</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title" style="font-size:0.95rem;"><span>⛓️</span> Why Arc Blockchain?</div>
+        <div style="display:flex;flex-direction:column;gap:10px;font-size:0.82rem;">
+          <div>⚡ <b>Sub-second finality</b> — perfect for micro/nanopayments</div>
+          <div>💸 <b>Near-zero gas fees</b> (0.001 gwei) — enables true nanopayments</div>
+          <div>📱 <b>Mobile-first UX</b> — WhatsApp-native payment flow</div>
+          <div>💵 <b>USYC integration</b> — yield-bearing USD stablecoin by Circle</div>
+          <div>🔒 <b>Escrow smart contract</b> — trustless, no intermediary</div>
+          <div>🇮🇩 <b>Indonesia-first</b> — Islamic marketplace use case (halal finance)</div>
+        </div>
+        <div style="margin-top:16px;">
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:6px;">Technologies</div>
+          <span class="pill">Arc L2</span>
+          <span class="pill">USYC (Circle)</span>
+          <span class="pill">FastAPI</span>
+          <span class="pill">Laravel</span>
+          <span class="pill">Google Gemini</span>
+          <span class="pill">WhatsApp WA</span>
+          <span class="pill">ERC-20 Escrow</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Wallet Demo -->
+  <section>
+    <div class="section-title"><span>👛</span> Wallet Demo</div>
+    <div class="card">
+      <div class="grid-2">
+        <div>
+          <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:8px;">Phone Number</div>
+          <input type="text" id="wallet-phone" value="628123456789"
+            style="background:#111;border:1px solid var(--arc-border);border-radius:8px;padding:10px 14px;color:white;width:100%;font-size:0.85rem;outline:none;margin-bottom:10px;"/>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary btn-sm" onclick="createWallet()">🔗 Create Arc Wallet</button>
+            <button class="btn btn-green btn-sm" onclick="topupWallet()">💵 Topup 100 USYC</button>
+          </div>
+        </div>
+        <div id="wallet-result" style="font-family:monospace;font-size:0.78rem;background:#000;border-radius:8px;padding:14px;color:#00FF88;min-height:80px;">
+          — wallet info will appear here —
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+// ── Demo State ──────────────────────────────────────────────────────────────
+const LISTINGS = [
+  { id:1, title:"Hijab Sifon Premium", price_usyc:5.0,  emoji:"🧕", seller:"Bu Fatimah" },
+  { id:2, title:"Kurma Ajwa 250gr",    price_usyc:12.5, emoji:"🌴", seller:"Pak Hasan" },
+  { id:3, title:"Buku Fiqih Muamalah", price_usyc:8.0,  emoji:"📚", seller:"Ustadz Ali" },
+  { id:4, title:"Minyak Zaitun 500ml", price_usyc:15.0, emoji:"🫒", seller:"Bu Aisyah" },
+  { id:5, title:"Parfum Oud Arabia",   price_usyc:20.0, emoji:"🌸", seller:"Pak Ibrahim" },
+];
+
+let stats = { tx: 0, vol: 0, yield: 0 };
+let pendingBuy = null;
+let currentStep = 0;
+
+// ── Init ────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  renderListings();
+  animateStats();
+});
+
+function renderListings() {
+  const grid = document.getElementById('listings-grid');
+  grid.innerHTML = LISTINGS.map(l => `
+    <div class="listing-card" id="listing-${l.id}" onclick="selectListing(${l.id})">
+      <div style="font-size:1.8rem;margin-bottom:6px;">${l.emoji}</div>
+      <div class="listing-title">${l.title}</div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:4px;">📦 ${l.seller}</div>
+      <div class="listing-price">${l.price_usyc} USYC</div>
+      <span class="listing-usyc-badge">⚡ Arc Pay</span>
+    </div>
+  `).join('');
+}
+
+function selectListing(id) {
+  document.querySelectorAll('.listing-card').forEach(el => el.classList.remove('selected'));
+  document.getElementById('listing-' + id).classList.add('selected');
+  const l = LISTINGS.find(x => x.id === id);
+  document.getElementById('chat-input').value = `mau beli ${l.title.toLowerCase()}`;
+}
+
+// ── Chat Simulator ──────────────────────────────────────────────────────────
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+
+  appendBubble(msg, 'user');
+  resetSteps();
+
+  const lower = msg.toLowerCase();
+  await sleep(400);
+
+  if (lower.includes('daftar wallet') || lower.includes('register')) {
+    await simulateRegister();
+  } else if (lower.includes('cek saldo') || lower.includes('saldo')) {
+    await simulateBalance();
+  } else if (lower.includes('mau beli') || lower.includes('ingin beli') || lower.includes('beli ')) {
+    await simulateBuy(msg);
+  } else if (lower === 'confirm' || lower.includes('sudah terima')) {
+    await simulateConfirm();
+  } else if (lower === 'cancel' || lower.includes('batal')) {
+    appendBubble('❌ Pembayaran dibatalkan.', 'bot');
+    pendingBuy = null;
+  } else if (lower === 'topup' || lower.includes('isi saldo')) {
+    appendBubble(`💳 *Isi Saldo USYC*\n\nKunjungi https://app.circle.com/usyc\nConnect wallet Arc kamu dan deposit USD.\n\n📋 Address kamu:\n0x${randomHex(40)}`, 'bot');
+  } else {
+    appendBubble('ℹ️ Coba ketik: "mau beli hijab", "cek saldo", atau "daftar wallet" 😊', 'bot');
+  }
+}
+
+async function simulateRegister() {
+  activateStep(1); await sleep(300);
+  activateStep(2); await sleep(400);
+  const addr = '0x' + randomHex(40);
+  doneStep(1); doneStep(2);
+  appendBubble(`🎉 *Wallet USYC Berhasil Dibuat!*\n\n🔗 Arc Address:\n${addr}\n\n💰 Saldo Testnet: 100 USYC (~$100)\n\n📈 USYC menghasilkan 5% APY otomatis via Circle!`, 'bot');
+}
+
+async function simulateBalance() {
+  activateStep(1); await sleep(300);
+  doneStep(1);
+  const bal = (Math.random() * 200 + 50).toFixed(2);
+  appendBubble(`💰 *Saldo Wallet USYC*\n\n🏦 USYC: *${bal} USYC* (~$${bal})\n🔒 Reserved: 0 USYC\n✅ Tersedia: *${bal} USYC*\n\n📈 Yield hari ini: +${(bal*0.05/365).toFixed(4)} USYC`, 'bot');
+}
+
+async function simulateBuy(msg) {
+  const productMatch = LISTINGS.find(l =>
+    msg.toLowerCase().includes(l.title.toLowerCase().split(' ')[0])
+  ) || LISTINGS[Math.floor(Math.random() * LISTINGS.length)];
+
+  activateStep(1); await sleep(300);
+  activateStep(2); await sleep(600);
+  doneStep(1); doneStep(2);
+  activateStep(3); await sleep(500);
+  doneStep(3);
+
+  pendingBuy = productMatch;
+  const fee = (productMatch.price_usyc * 0.001).toFixed(4);
+  const total = (productMatch.price_usyc + parseFloat(fee)).toFixed(4);
+
+  appendBubble(
+    `🛒 *Konfirmasi Pembayaran USYC*\n\n📦 Produk: *${productMatch.title}*\n👤 Penjual: ${productMatch.seller}\n💵 Harga: ${productMatch.price_usyc} USYC (~$${productMatch.price_usyc})\n🔧 Fee (0.1%): ${fee} USYC\n💳 Total: ${total} USYC\n\n⏳ Dana masuk *escrow* 24 jam + menghasilkan *5% APY* selama menunggu! 📈\n\nBalas *"confirm"* atau *"cancel"*`,
+    'bot payment'
+  );
+}
+
+async function simulateConfirm() {
+  if (!pendingBuy) {
+    appendBubble('ℹ️ Tidak ada pembayaran pending.', 'bot');
+    return;
+  }
+  const p = pendingBuy;
+  pendingBuy = null;
+
+  activateStep(1); await sleep(200);
+  activateStep(2); await sleep(400);
+  activateStep(3); await sleep(400);
+  doneStep(1); doneStep(2); doneStep(3);
+  activateStep(4);
+
+  await sleep(600); // Arc block time simulation
+
+  const txHash = '0x' + randomHex(64);
+  const blockNum = (4000000 + Math.floor(Math.random() * 1000000));
+  doneStep(4);
+  activateStep(5); await sleep(300); doneStep(5);
+  activateStep(6); await sleep(400); doneStep(6);
+
+  // Show TX viewer
+  document.getElementById('tx-viewer').style.display = 'block';
+  document.getElementById('tx-hash').textContent = txHash;
+  document.getElementById('tx-block').textContent = '#' + blockNum;
+  document.getElementById('tx-amount').textContent = p.price_usyc + ' USYC';
+
+  const yield24h = (p.price_usyc * 0.05 / 365).toFixed(6);
+
+  appendBubble(
+    `✅ *Pembayaran USYC Berhasil di Arc!*\n\n💵 ${p.price_usyc} USYC → Escrow\n📈 Yield 24h preview: +${yield24h} USYC\n\n🔗 TX Hash:\n${txHash.slice(0,22)}...\n⛓️ Block #${blockNum} | Arc Testnet\n⚡ Gas: 0.001 gwei\n\nKonfirmasi terima barang dengan ketik *"confirm"* lagi untuk release ke penjual.`,
+    'bot payment'
+  );
+
+  // Update stats
+  stats.tx++;
+  stats.vol += p.price_usyc;
+  stats.yield += parseFloat(yield24h);
+  updateStats();
+}
+
+// ── Steps ────────────────────────────────────────────────────────────────────
+function resetSteps() {
+  for (let i = 1; i <= 6; i++) {
+    const el = document.getElementById('step-' + i);
+    el.classList.remove('active', 'done');
+  }
+  document.getElementById('tx-viewer').style.display = 'none';
+}
+
+function activateStep(n) {
+  document.getElementById('step-' + n).classList.add('active');
+}
+function doneStep(n) {
+  const el = document.getElementById('step-' + n);
+  el.classList.remove('active');
+  el.classList.add('done');
+  el.querySelector('.step-num').textContent = '✓';
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function animateStats() {
+  // Seed with some demo numbers
+  stats.tx = 147; stats.vol = 2840.5; stats.yield = 0.038912;
+  updateStats();
+  // Live counter simulation
+  setInterval(() => {
+    if (Math.random() > 0.7) {
+      stats.tx++;
+      const amt = parseFloat((Math.random() * 20 + 2).toFixed(2));
+      stats.vol += amt;
+      stats.yield += parseFloat((amt * 0.05 / 365).toFixed(6));
+      updateStats();
+    }
+  }, 3000);
+}
+
+function updateStats() {
+  document.getElementById('stat-tx').textContent = stats.tx;
+  document.getElementById('stat-vol').textContent = stats.vol.toFixed(2);
+  document.getElementById('stat-yield').textContent = stats.yield.toFixed(6);
+}
+
+// ── Yield Calc ────────────────────────────────────────────────────────────────
+function updateCalc() {
+  const amt = parseFloat(document.getElementById('calc-range').value);
+  document.getElementById('calc-amount').textContent = amt;
+  document.getElementById('yield-day').textContent   = (amt * 0.05 / 365).toFixed(4);
+  document.getElementById('yield-month').textContent = (amt * 0.05 / 12).toFixed(4);
+  document.getElementById('yield-year').textContent  = (amt * 0.05).toFixed(2);
+}
+
+// ── Wallet API Demo ────────────────────────────────────────────────────────────
+async function createWallet() {
+  const phone = document.getElementById('wallet-phone').value;
+  const addr = '0x' + simHash(phone).slice(0, 40);
+  document.getElementById('wallet-result').textContent =
+    `phone:       ${phone}\narc_address: ${addr}\nusyc_balance: 0.00\nnetwork:     arc-testnet\nstatus:      active`;
+}
+
+async function topupWallet() {
+  const phone = document.getElementById('wallet-phone').value;
+  const addr = '0x' + simHash(phone).slice(0, 40);
+  document.getElementById('wallet-result').textContent =
+    `phone:       ${phone}\narc_address: ${addr}\nusyc_balance: 100.00\ncredited:    100 USYC (testnet)\nnetwork:     arc-testnet\nmessage:     Testnet USYC funded for demo`;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function appendBubble(text, cls) {
+  const area = document.getElementById('chat-area');
+  const div = document.createElement('div');
+  div.className = 'bubble ' + cls;
+  div.innerHTML = text.replace(/\*([^*]+)\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function randomHex(len) {
+  let r = '';
+  const chars = '0123456789abcdef';
+  for (let i=0; i<len; i++) r += chars[Math.floor(Math.random()*16)];
+  return r;
+}
+function simHash(s) {
+  let h = 0;
+  for (let i=0; i<s.length; i++) h = ((h<<5)-h) + s.charCodeAt(i);
+  return Math.abs(h).toString(16).padEnd(64, '0');
+}
+</script>
+
+</body>
+</html>
