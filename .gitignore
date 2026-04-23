@@ -21,4 +21,40 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+/.claude
 /backups
+
+# Python / AI agent
+__pycache__/
+*.pyc
+ai_agent/.venv/
+ai_agent/venv/
+
+# Local debug / one-off scratch scripts (never commit)
+tmp_*
+dbg*.php
+debug_*.php
+debug_*.sh
+check_*.sh
+check_*.php
+fix_*.sh
+fix_*.py
+find_*.php
+find_*.py
+onboard_*.php
+recreate_*.sh
+restart_*.sh
+retry_*.sh
+test_*.sh
+cleanup_*.sh
+add_*.sh
+inject_*.py
+join_route.txt
+
+# Media dumps
+*.jpeg
+*.jpg
+!public/**/*.jpg
+!public/**/*.jpeg
+!resources/**/*.jpg
+!resources/**/*.jpeg

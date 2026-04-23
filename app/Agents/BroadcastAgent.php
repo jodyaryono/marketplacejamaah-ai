@@ -56,7 +56,7 @@ class BroadcastAgent
         $listingUrl   = url('/p/' . $listing->id);
         $categoryLine = $listing->category ? "📂 {$listing->category->name}\n" : '';
         $locLine      = $listing->location ? "📍 {$listing->location}\n" : '';
-        $shortDesc    = $listing->description ? \Illuminate\Support\Str::limit(explode("\n", $listing->description)[0], 120) : '';
+        $shortDesc    = self::extractWagDescription($listing->description ?? '');
         $descLine     = $shortDesc ? "_{$shortDesc}_\n" : '';
 
         $caption = "🛍️ *{$listing->title}*\n"
@@ -72,6 +72,33 @@ class BroadcastAgent
         } else {
             $this->whacenter->sendGroupMessage($group->group_name, $caption);
         }
+    }
+
+    /**
+     * Extract the AI-generated description for WAG captions.
+     * Prefers the [Analisis Gambar]: section; falls back to the longest paragraph.
+     */
+    public static function extractWagDescription(string $desc, int $limit = 200): string
+    {
+        if (empty($desc)) return '';
+
+        // Prefer the AI-analysis section
+        if (preg_match('/\[Analisis Gambar\]:\s*(.+)/si', $desc, $m)) {
+            return \Illuminate\Support\Str::limit(trim($m[1]), $limit);
+        }
+
+        // Find the longest paragraph — AI descriptions tend to be longer
+        $paragraphs = array_values(array_filter(
+            array_map('trim', preg_split('/\n+/', $desc)),
+            fn($p) => mb_strlen($p) > 40
+        ));
+
+        if (!empty($paragraphs)) {
+            usort($paragraphs, fn($a, $b) => mb_strlen($b) - mb_strlen($a));
+            return \Illuminate\Support\Str::limit($paragraphs[0], $limit);
+        }
+
+        return \Illuminate\Support\Str::limit(trim($desc), $limit);
     }
 
     private function updateAnalytics(Message $message): void

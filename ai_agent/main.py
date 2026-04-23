@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 LARAVEL_API_URL = os.getenv("LARAVEL_API_URL", "http://localhost:8000")
 LARAVEL_API_TOKEN = os.getenv("LARAVEL_API_TOKEN", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-ARC_RPC_URL = os.getenv("ARC_RPC_URL", "https://rpc.arc-testnet.io")
+ARC_RPC_URL = os.getenv("ARC_RPC_URL", "https://rpc.testnet.arc.network")
 ARC_TESTNET = os.getenv("ARC_TESTNET", "true").lower() == "true"
 
 # ── App ────────────────────────────────────────────────────────────────────

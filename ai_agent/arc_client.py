@@ -25,15 +25,18 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 # USYC token contract address on Arc (testnet)
-USYC_CONTRACT_TESTNET  = "0x1234567890AbcDEF1234567890abcdef12345678"
+USYC_CONTRACT_TESTNET  = "0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C"
 USYC_CONTRACT_MAINNET  = "0xUsycMainnetContractAddress0000000000000"
+
+# Arc explorer (testnet)
+ARC_EXPLORER_TESTNET = "https://testnet.arcscan.app"
 
 # Platform escrow contract
 ESCROW_CONTRACT = "0xEscrowContractAddress00000000000000000000"
 
 
 class ArcClient:
-    def __init__(self, rpc_url: str = "https://rpc.arc-testnet.io", testnet: bool = True):
+    def __init__(self, rpc_url: str = "https://rpc.testnet.arc.network", testnet: bool = True):
         self.rpc_url  = rpc_url
         self.testnet  = testnet
         self.contract = USYC_CONTRACT_TESTNET if testnet else USYC_CONTRACT_MAINNET

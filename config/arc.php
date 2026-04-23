@@ -9,14 +9,20 @@ return [
     */
 
     // RPC endpoint for Arc blockchain
-    'rpc_url' => env('ARC_RPC_URL', 'https://rpc.arc-testnet.io'),
+    'rpc_url' => env('ARC_RPC_URL', 'https://rpc.testnet.arc.network'),
+
+    // Arc blockchain explorer
+    'explorer_url' => env('ARC_EXPLORER_URL', 'https://testnet.arcscan.app'),
 
     // Operator wallet (custodial, holds user funds on their behalf)
     'operator_address' => env('ARC_OPERATOR_ADDRESS', '0x0000000000000000000000000000000000000000'),
     'operator_pk'      => env('ARC_OPERATOR_PK', ''),
 
     // USYC token contract address on Arc
-    'usyc_contract' => env('ARC_USYC_CONTRACT', '0x1234567890AbcDEF1234567890abcdef12345678'),
+    'usyc_contract' => env('ARC_USYC_CONTRACT', '0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C'),
+
+    // USDC (Arc testnet, reference)
+    'usdc_contract' => env('ARC_USDC_CONTRACT', '0x3600000000000000000000000000000000000000'),
 
     // Platform fee wallet
     'fee_address' => env('ARC_FEE_ADDRESS', '0x0000000000000000000000000000000000000000'),

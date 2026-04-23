@@ -1,66 +1,72 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Marketplace Jamaah AI
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+AI agent marketplace for the Muslim community — buy, sell, and offer products & services directly inside WhatsApp, with on-chain nanopayments settled in **USYC on Arc**.
 
-## About Laravel
+> Built for the **Agentic Economy on Arc** Hackathon — [lablab.ai](https://lablab.ai)
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## What it does
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Jamaah (congregation members) send a WhatsApp message like *"jual kurma ajwa 500g 120rb"* or *"cari jasa bersih AC Jakarta Selatan"*. An AI agent classifies the intent, extracts listing fields, matches buyers to sellers across jamaah groups, and when a deal is agreed it collects a small **per-transaction nanofee in USYC** on the Arc network — too small to be viable on traditional rails, but native to agentic commerce.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- **WhatsApp-native UX** — no app to install; the marketplace lives where the community already chats.
+- **AI ingestion & matching** — Python agent parses free-form Indonesian listings, normalizes phone numbers, and ranks matches.
+- **USYC nanopayments on Arc** — listing-boost fees, successful-match fees, and seller payouts settle on-chain via the Arc payment service.
+- **Public iklan baris** — listings also surface on a lightweight public landing page.
 
-## Learning Laravel
+## Tech stack
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+| Layer | Stack |
+|---|---|
+| Backend / orchestration | **Laravel 12** (PHP 8.2), Laravel Reverb, Spatie Permission, queues |
+| AI agent | **Python** (`ai_agent/` — intent classifier, listing matcher, Arc client) |
+| Payments | **USYC on Arc** (`app/Services/ArcPaymentService.php`, `config/arc.php`) |
+| Messaging gateway | Node.js WhatsApp gateway (`gateway/`) |
+| Frontend | Blade + **Vite + Tailwind v4** |
+| DB / cache | MySQL, Redis (via Laravel) |
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+## Repo layout
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- `app/Agents/BroadcastAgent.php` — broadcast / fan-out logic
+- `app/Jobs/ProcessMessageJob.php` — inbound WhatsApp message pipeline
+- `app/Services/ArcPaymentService.php` — USYC/Arc payment integration
+- `ai_agent/` — Python AI service (intent + matching + Arc client)
+- `gateway/` — Node WhatsApp gateway
+- `public/hackathon-demo.html` — hackathon demo page
+- `HACKATHON.md` — hackathon submission notes
+- `DEMO_SCRIPT.md` — demo walkthrough
+- `deploy-hackathon.sh` — deploy script for the hackathon VPS
 
-## Laravel Sponsors
+## Running locally
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Prerequisites: PHP 8.2+, Composer, Node 18+, Python 3.10+, MySQL, Redis.
 
-### Premium Partners
+```bash
+# 1. PHP / Laravel
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate --seed
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+# 2. Frontend
+npm install
+npm run dev        # or: npm run build
 
-## Contributing
+# 3. AI agent
+cd ai_agent
+pip install -r requirements.txt
+./start.sh
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+# 4. Queues + app
+php artisan queue:work
+php artisan serve
+```
 
-## Code of Conduct
+Set Arc / USYC credentials in `.env` (see `config/arc.php` for the expected keys).
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Hackathon
 
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+See [HACKATHON.md](HACKATHON.md) for the submission writeup and [DEMO_SCRIPT.md](DEMO_SCRIPT.md) for the demo flow.
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+MIT

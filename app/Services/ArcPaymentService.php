@@ -34,10 +34,10 @@ class ArcPaymentService
 
     public function __construct()
     {
-        $this->rpcUrl               = config('arc.rpc_url', 'https://rpc.arc-testnet.io');
+        $this->rpcUrl               = config('arc.rpc_url', 'https://rpc.testnet.arc.network');
         $this->operatorAddress      = config('arc.operator_address', '0x0000000000000000000000000000000000000000');
         $this->operatorPk           = config('arc.operator_pk', '');
-        $this->usycContractAddress  = config('arc.usyc_contract', '0xUsycContractAddressHere');
+        $this->usycContractAddress  = config('arc.usyc_contract', '0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C');
         $this->platformFeeAddress   = config('arc.fee_address', '0xPlatformFeeAddress');
         $this->testnet              = config('arc.testnet', true);
     }

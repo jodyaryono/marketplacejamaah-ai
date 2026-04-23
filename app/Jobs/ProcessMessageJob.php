@@ -12,6 +12,7 @@ use App\Agents\MasterCommandAgent;
 use App\Agents\MemberOnboardingAgent;
 use App\Agents\MessageModerationAgent;
 use App\Agents\MessageParserAgent;
+use App\Agents\PaymentAgent;
 use App\Models\Message;
 use App\Services\WhacenterService;
 use Illuminate\Bus\Queueable;
@@ -138,6 +139,12 @@ class ProcessMessageJob implements ShouldQueue
             if (is_null($message->whatsapp_group_id)) {
                 $handled = $onboarding->handleDirectMessage($message);
                 if (!$handled) {
+                    // ── USYC Payment Agent: check for payment intents first ──────────────
+                    $paymentAgent = app(PaymentAgent::class);
+                    $handled = $paymentAgent->handle($message);
+                    // ─────────────────────────────────────────────────────────────────────
+
+                    if (!$handled) {
                     $contact = \App\Models\Contact::where('phone_number', $message->sender_number)->first();
                     if ($contact) {
                         // Known contact (group member, registered or not) → AI replies contextually
@@ -171,6 +178,7 @@ class ProcessMessageJob implements ShouldQueue
                         }
                     }
                 }
+                    } // end !payment handled
                 $message->update(['is_processed' => true, 'processed_at' => now()]);
                 return;  // DMs are not processed through the ad/moderation pipeline
             }

@@ -10,54 +10,139 @@
 
 | Metric | Real Number |
 |--------|------------|
-| 🛍️ Active Listings | **97 products** |
-| 📦 Media-verified Listings | **81 products with photos/videos** |
+| 👥 Total Community Members | **253 contacts** |
+| ✅ Registered Active Members | **23 members** |
+| 🛍️ Total Listings Ever Posted | **181 listings** |
+| 📦 Currently Active Listings | **98 active products** |
+| 📱 WhatsApp Groups | **1 active jamaah group** |
+| 💬 Total Messages Processed | **1,834 messages** |
+| 💬 Messages (last 30 days) | **539 messages** |
 | 🏷️ Product Categories | **13 categories** |
+| 📅 Platform Running Since | **March 8, 2026** (~6 weeks live) |
 | 🌐 Live URL | [marketplacejamaah-ai.jodyaryono.id](https://marketplacejamaah-ai.jodyaryono.id) |
 | 🤖 AI Agents | Running **24/7** in production |
-| 📱 Channel | Real Indonesian jamaah WhatsApp groups |
 
-### Real Product Categories on Platform
-**Food & Beverages** (25) · **Services & Labor** (22) · **Property** (13) · **Basic Staples** (11) · **Vehicles** (8) · Electronics · Health & Beauty · Clothing & Fashion · Home Equipment · and more
+### Real Product Categories (Live Data)
+| Category | Active Listings |
+|----------|----------------|
+| 🍱 Food & Beverages (Makanan & Minuman) | 26 |
+| 🔧 Services (Jasa & Layanan) | 22 |
+| 🏠 Property (Properti) | 13 |
+| 🌾 Groceries (Sembako) | 11 |
+| 🚗 Vehicles (Kendaraan) | 8 |
+| 📦 Other (Lainnya) | 6 |
+| 🛋️ Home Goods (Peralatan Rumah) | 2 |
+| 💊 Health & Beauty (Kesehatan & Kecantikan) | 2 |
+| 📚 Books & Education (Buku & Pendidikan) | 2 |
+| ⚽ Hobbies & Sports (Hobi & Olahraga) | 2 |
+| 📱 Electronics (Elektronik) | 1 |
 
-### Sample Real Listings
-- 🏠 Properties (310 juta - 2.35 miliar IDR)
-- 🌴 Food products (kurma, sembako)
-- 🚗 Vehicle sales
-- 🕋 Hajj & Umroh services
-- 📋 SIM & administrative services
-
-**The USYC + Arc integration built for this hackathon adds the missing trustless payment layer to this already-functioning live marketplace.**
-
----
-
-## 🎯 Problem Statement
-
-Indonesia is home to **220+ million Muslims** — the largest Muslim population on Earth.
-WhatsApp groups are the *de facto* marketplace for Indonesian Islamic communities (jamaah).
-Products like hijabs, kurma, books, and halal goods are traded daily in thousands of groups,
-but payments are still fully manual (bank transfer, OVO, cash on delivery).
-
-**Pain points we observe from REAL users on our platform:**
-- Manual payment confirmation is slow and error-prone
-- No trustless escrow — buyer/seller trust is fragile, disputes happen
-- Small vendors can't afford payment gateway fees (2-3%)
-- Money sits idle while waiting for transactions to settle — no yield
+**The USYC + Arc integration built for this hackathon adds the missing trustless payment layer to this already-functioning live marketplace — serving 253 real community members in Indonesia.**
 
 ---
 
-## 💡 Our Solution: Agentic Economy with USYC Nanopayments
+## 🎯 The Real Problem — Meet Bu Fatimah
+
+> *"Bu Fatimah, 52 years old, hijab seller from Tangerang, Indonesia. She's fluent on WhatsApp, but has never once managed to upload a product to Tokopedia or Shopee. Too complicated, too many steps, afraid of making mistakes."*
+
+Indonesia has **220+ million Muslims** and tens of millions of small sellers like Bu Fatimah — housewives, market traders, small UMKM businesses — who:
+
+- ✅ **Know WhatsApp** — they use it every single day
+- ❌ **Can't upload to marketplaces** — too many forms, need proper photos, product descriptions, SKUs, shipping configurations, etc.
+- ❌ **Don't have an online store** — subscription costs, complicated setup
+- ❌ **Are not tech-savvy ("gaptek")** — comfortable with a smartphone, but not a laptop or complex web forms
+
+### What They Do Instead
+
+Bu Fatimah and millions of sellers like her use **WhatsApp Groups (WAG)** as their store:
+
+```
+Bu Fatimah posts a hijab photo in the jamaah WhatsApp Group
+→ Writes price & description in the caption
+→ Interested buyers DM her directly
+→ Payment via manual bank transfer
+→ Ships the item
+```
+
+Simple. Familiar. No technical skill required. **But full of problems:**
+
+- 🔴 Listings get buried under hundreds of group messages
+- 🔴 No records — products are impossible to find later
+- 🔴 Spam & irrelevant ads ruin the group experience
+- 🔴 Human admins burn out moderating the group 24 hours a day
+- 🔴 Manual bank transfer — prone to fraud, no escrow, no buyer protection
+- 🔴 No verifiable transaction records
+
+### The Insight
+
+> **Don't force Bu Fatimah to learn new technology. Bring the technology to where she already is — WhatsApp.**
+
+---
+
+## 💡 Our Solution — AI Admin WAG + USYC Nanopayments
+
+### How It Works (Zero Learning Curve)
+
+**Bu Fatimah does NOT need to:**
+- Open a website
+- Create an account
+- Upload photos to a form
+- Write a long product description
+- Learn anything new
+
+**Bu Fatimah only needs to:**
+1. **Join the WhatsApp Group** → AI Admin greets her automatically, asks for a brief intro
+2. **Post a photo + caption in the group** → AI reads it, extracts title/price/category automatically
+3. **Listing goes live on the website** → without Bu Fatimah ever touching the website
+4. **Buyer types "mau beli"** → AI Agent processes USYC payment on Arc automatically
+
+### AI Admin WAG — Working Behind the Scenes
+
+```
+New member requests to join the group
+    ↓
+AI Admin sends automatic DM: "Hi! Can we get acquainted? Name, city, buying or selling?"
+    ↓
+AI reads the reply → saves profile → approves/rejects join request
+    ↓
+Member posts photo + "hijab sifon 50rb" (hijab chiffon IDR 50,000)
+    ↓
+AI extracts: Title, Price, Category, Photo → listing goes live on website
+    ↓
+AI moderates: negative content, spam, hate speech → auto-warned/blocked
+    ↓
+Buyer DMs: "mau beli hijab" → AI checks USYC balance → processes escrow on Arc
+    ↓
+Both buyer and seller receive WhatsApp notifications → transaction complete
+```
+
+### Comparison
+
+| | Tokopedia/Shopee | Manual WAG | **Marketplace Jamaah AI** |
+|---|---|---|---|
+| Account required | ✅ Mandatory | ❌ None | ❌ Not required |
+| Product listing | Long form | Photo in group | **Photo in group → auto** |
+| Tech skill needed | Intermediate | Low | **Anyone can do it** |
+| Moderation | Automated | Human admin | **AI 24/7** |
+| Payment | Fee 2–3% | Manual transfer | **USYC on Arc, 0.1% fee** |
+| Escrow | Yes | No | **Smart contract on Arc** |
+| Yield during escrow | No | No | **5% APY via USYC** |
+| Target user | Tech-literate | Everyone | **Even non-tech users** |
+
+---
+
+## 💡 Core Innovation: Agentic Economy with USYC Nanopayments
 
 We integrated **USYC (USD Yield Coin) nanopayments on Arc blockchain** into the existing
-Marketplace Jamaah AI platform. Now, AI agents can autonomously handle the full payment lifecycle
-directly within WhatsApp — no apps, no bank transfers, no trust issues.
+Marketplace Jamaah AI platform. AI agents can now autonomously handle the full payment lifecycle
+directly within WhatsApp — no new apps, no bank transfers, no trust issues.
 
-### Core Innovation
+### What Makes This Different
 
 1. **WhatsApp → AI Agent → Arc Blockchain** in one seamless flow
 2. **Nanopayments** for small Indonesian marketplace transactions ($2–$50)
-3. **USYC escrow** that earns yield while buyer waits to confirm receipt
-4. **Agentic economy**: AI agent detects intent, matches listing, and executes on-chain — autonomously
+3. **USYC escrow** that earns yield while the buyer waits to confirm receipt
+4. **Agentic economy**: the AI agent detects intent, matches the listing, and executes on-chain — fully autonomously
 
 ---
 
@@ -96,7 +181,7 @@ WhatsApp Notification → Buyer & Seller
 ## 🔑 Key Features
 
 ### 1. USYC Nanopayment Flow
-- Buyer types `"mau beli [produk]"` in WhatsApp
+- Buyer types `"mau beli [product]"` in WhatsApp
 - Agent classifies intent (Indonesian NLP with Gemini LLM fallback)
 - Matches listing in marketplace database
 - Executes USYC transfer on Arc blockchain
@@ -106,10 +191,10 @@ WhatsApp Notification → Buyer & Seller
 ### 2. Yield-Bearing Escrow
 - While funds are in escrow, USYC earns ~5% APY (Circle's yield mechanism)
 - Small bonus yield goes to the party that waits
-- Even a $5 hijab purchase earns micro-yield during 24h escrow
+- Even a $5 hijab purchase earns micro-yield during a 24h escrow window
 
 ### 3. Arc L2 Advantages
-- **~200ms finality** — faster than bank transfer confirmation SMS
+- **~200ms finality** — faster than a bank transfer confirmation SMS
 - **Near-zero gas** (0.001 gwei) — enables true nanopayments
 - **USYC native** — USYC is the natural payment token on Arc
 
@@ -120,7 +205,7 @@ WhatsApp Notification → Buyer & Seller
 
 ### 5. Zero UX Friction
 - **No new app required** — buyers/sellers use WhatsApp as-is
-- **No seed phrases exposed** — custodial Arc wallets, phone-keyed
+- **No seed phrases exposed** — custodial Arc wallets, phone-number keyed
 - **No bank account needed** — USYC can be topped up via Circle
 
 ---
@@ -206,10 +291,12 @@ POST /intent/classify     — Debug intent classification
 |---------|--------|
 | `daftar wallet` | Create Arc wallet (100 USYC testnet) |
 | `cek saldo` | View USYC balance |
-| `mau beli [produk]` | Buy intent → escrow payment |
+| `mau beli [product]` | Buy intent → escrow payment |
 | `confirm` | Confirm receipt → release escrow |
 | `cancel` | Cancel pending payment |
 | `topup` | Top up USYC via Circle |
+
+> Note: Commands are intentionally in Indonesian — the natural language of the users. The AI handles English commands as well.
 
 ---
 
@@ -246,7 +333,7 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 ### 3. Demo Dashboard
-Open `public/hackathon-demo.html` in browser — no build needed.
+Open `public/hackathon-demo.html` in any browser — no build step needed.
 
 ---
 
@@ -267,10 +354,10 @@ Open `public/hackathon-demo.html` in browser — no build needed.
 |-----------|-------------|
 | **Agentic Economy** | AI agents autonomously execute real payments, not just chat |
 | **Arc Integration** | Native Arc L2 for USYC transfers + escrow smart contracts |
-| **USYC Innovation** | Yield-bearing escrow — money works even while locked |
-| **Real Use Case** | Live marketplace with 100+ Indonesian users, not a demo toy |
+| **USYC Innovation** | Yield-bearing escrow — money earns even while locked |
+| **Real Use Case** | Live marketplace with 250+ real Indonesian users — not a toy demo |
 | **Scale** | WhatsApp has 2B users; this model scales to any Muslim marketplace globally |
-| **Halal Finance** | Escrow removes riba (interest) risk in Islamic commerce |
+| **Halal Finance** | Escrow model eliminates riba (interest) risk in Islamic commerce |
 
 ---
 
@@ -279,7 +366,7 @@ Open `public/hackathon-demo.html` in browser — no build needed.
 **Jody Aryono** — Founder, Marketplace Jamaah AI
 - Email: jodyaryono@gmail.com
 - Platform: https://marketplacejamaah-ai.jodyaryono.id
-- Tech: Laravel + Python AI + WhatsApp Gateway + Arc Blockchain
+- Stack: Laravel + Python AI + WhatsApp Gateway + Arc Blockchain
 
 ---
 
