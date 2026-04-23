@@ -257,7 +257,7 @@
             <div class="info-box green mb-4">
                 <i class="bi bi-lightbulb-fill text-em"></i>
                 <div>
-                    <strong>Konsep Dasar:</strong> MarketplaceJamaah bekerja seperti grup jual-beli WhatsApp biasa — tapi setiap pesan yang kamu kirim di grup otomatis tampil sebagai iklan profesional di website ini. Bot AI kami menangani semua prosesnya secara otomatis.
+                    <strong>{{ $__t('Konsep Dasar:','Core Concept:') }}</strong> {{ $__t('MarketplaceJamaah bekerja seperti grup jual-beli WhatsApp biasa — tapi setiap pesan yang kamu kirim di grup otomatis tampil sebagai iklan profesional di website ini. Bot AI kami menangani semua prosesnya secara otomatis.','MarketplaceJamaah works like a regular WhatsApp buy-sell group — but every message you post automatically appears as a professional listing on this site. Our AI bot handles the whole process.') }}
                 </div>
             </div>
 
@@ -265,22 +265,22 @@
                 <div class="col-md-4">
                     <div class="step-card">
                         <div class="step-num bg-em-xs text-em">🏪</div>
-                        <div class="step-title">Marketplace Website</div>
-                        <div class="step-body">Tampilkan & temukan produk dari komunitas di website publik yang bisa diakses siapa saja.</div>
+                        <div class="step-title">{{ $__t('Marketplace Website','Marketplace Website') }}</div>
+                        <div class="step-body">{{ $__t('Tampilkan & temukan produk dari komunitas di website publik yang bisa diakses siapa saja.','Show & discover community products on a public site accessible to anyone.') }}</div>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="step-card">
                         <div class="step-num bg-amber text-amber">👥</div>
-                        <div class="step-title">WhatsApp Grup (WAG)</div>
-                        <div class="step-body">Kirim foto + deskripsi + harga di grup WA → iklan otomatis tayang di website dalam detik.</div>
+                        <div class="step-title">{{ $__t('WhatsApp Grup (WAG)','WhatsApp Group (WAG)') }}</div>
+                        <div class="step-body">{{ $__t('Kirim foto + deskripsi + harga di grup WA → iklan otomatis tayang di website dalam detik.','Send photo + description + price in the WA group → listing goes live on the site in seconds.') }}</div>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="step-card">
                         <div class="step-num bg-blue text-blue">🤖</div>
-                        <div class="step-title">Bot AI via WA Pribadi</div>
-                        <div class="step-body">Chat langsung dengan Bot AI lewat WA pribadi untuk kelola iklan, cari produk, dan banyak lagi.</div>
+                        <div class="step-title">{{ $__t('Bot AI via WA Pribadi','AI Bot via Personal WA') }}</div>
+                        <div class="step-body">{{ $__t('Chat langsung dengan Bot AI lewat WA pribadi untuk kelola iklan, cari produk, dan banyak lagi.','Chat directly with the AI bot via personal WA to manage listings, search products, and more.') }}</div>
                     </div>
                 </div>
             </div>
@@ -302,43 +302,43 @@
                     <div class="wag-step">
                         <div class="step-icon bg-em-xs" style="color:var(--em);">1️⃣</div>
                         <div class="step-content">
-                            <h5>Bergabung di Grup WhatsApp</h5>
-                            <p>Masuk ke grup WhatsApp Marketplace Jamaah. Bot akan menyapa kamu lewat WA pribadi dan membantu proses pendaftaran.</p>
+                            <h5>{{ $__t('Bergabung di Grup WhatsApp','Join the WhatsApp Group') }}</h5>
+                            <p>{{ $__t('Masuk ke grup WhatsApp Marketplace Jamaah. Bot akan menyapa kamu lewat WA pribadi dan membantu proses pendaftaran.','Join the Marketplace Jamaah WhatsApp group. The bot will greet you in a personal WA chat and help you register.') }}</p>
                         </div>
                     </div>
                     <div class="wag-step">
                         <div class="step-icon bg-amber">📸</div>
                         <div class="step-content">
-                            <h5>Kirim Foto atau Video Produk</h5>
-                            <p>Di grup, kirim foto/video produkmu. Sertakan <strong>nama produk, harga, kondisi, dan lokasi</strong> di caption.</p>
+                            <h5>{{ $__t('Kirim Foto atau Video Produk','Send a Product Photo or Video') }}</h5>
+                            <p>{!! $__t('Di grup, kirim foto/video produkmu. Sertakan <strong>nama produk, harga, kondisi, dan lokasi</strong> di caption.','In the group, send your product photo/video. Include <strong>product name, price, condition, and location</strong> in the caption.') !!}</p>
                         </div>
                     </div>
                     <div class="wag-step">
                         <div class="step-icon bg-blue" style="color:var(--blue);">🤖</div>
                         <div class="step-content">
-                            <h5>AI Proses Otomatis</h5>
-                            <p>Bot AI membaca pesanmu, membersihkan teks, menentukan kategori, dan membuat deskripsi iklan yang menarik.</p>
+                            <h5>{{ $__t('AI Proses Otomatis','AI Processes Automatically') }}</h5>
+                            <p>{{ $__t('Bot AI membaca pesanmu, membersihkan teks, menentukan kategori, dan membuat deskripsi iklan yang menarik.','The AI bot reads your message, cleans up the text, picks a category, and writes an attractive listing description.') }}</p>
                         </div>
                     </div>
                     <div class="wag-step">
                         <div class="step-icon bg-em-xs" style="color:var(--em);">🌐</div>
                         <div class="step-content">
-                            <h5>Iklan Tayang di Website</h5>
-                            <p>Dalam hitungan detik, iklanmu muncul di <strong>marketplacejamaah-ai.jodyaryono.id</strong> lengkap dengan foto, harga, dan link produk.</p>
+                            <h5>{{ $__t('Iklan Tayang di Website','Listing Appears on the Website') }}</h5>
+                            <p>{!! $__t('Dalam hitungan detik, iklanmu muncul di <strong>marketplacejamaah-ai.jodyaryono.id</strong> lengkap dengan foto, harga, dan link produk.','In seconds, your listing appears on <strong>marketplacejamaah-ai.jodyaryono.id</strong> with photo, price, and product link.') !!}</p>
                         </div>
                     </div>
                     <div class="wag-step">
                         <div class="step-icon" style="background:var(--purple-light);color:var(--purple);">🔔</div>
                         <div class="step-content">
-                            <h5>Dapat Konfirmasi via WA Pribadi</h5>
-                            <p>Bot mengirimkan konfirmasi ke WA pribadimu lengkap dengan link iklan, ID iklan, dan ringkasan produk.</p>
+                            <h5>{{ $__t('Dapat Konfirmasi via WA Pribadi','Receive Confirmation via Personal WA') }}</h5>
+                            <p>{{ $__t('Bot mengirimkan konfirmasi ke WA pribadimu lengkap dengan link iklan, ID iklan, dan ringkasan produk.','The bot sends you a confirmation in your personal WA with the listing link, ID, and product summary.') }}</p>
                         </div>
                     </div>
                 </div>
 
                 <div class="col-md-6">
                     <!-- Contoh pesan WAG -->
-                    <div class="mb-2" style="font-size:.8rem;font-weight:700;color:#6b7280;">CONTOH PESAN DI GRUP WA</div>
+                    <div class="mb-2" style="font-size:.8rem;font-weight:700;color:#6b7280;">{{ $__t('CONTOH PESAN DI GRUP WA','EXAMPLE MESSAGE IN WA GROUP') }}</div>
                     <div class="wa-bubble-wrap">
                         <div class="wa-chat">
                             <div class="wa-bubble user">
@@ -364,15 +364,15 @@
                     <div class="info-box amber mt-3">
                         <i class="bi bi-exclamation-triangle-fill text-amber"></i>
                         <div>
-                            <strong>Tips agar iklan tampil lebih baik:</strong><br>
-                            Sertakan harga yang jelas, kondisi produk (baru/bekas), dan lokasi kota. Foto yang terang dan produk terlihat jelas = lebih banyak calon pembeli.
+                            <strong>{{ $__t('Tips agar iklan tampil lebih baik:','Tips for better-looking listings:') }}</strong><br>
+                            {{ $__t('Sertakan harga yang jelas, kondisi produk (baru/bekas), dan lokasi kota. Foto yang terang dan produk terlihat jelas = lebih banyak calon pembeli.','Include a clear price, condition (new/used), and city. Bright, clear photos = more interested buyers.') }}
                         </div>
                     </div>
 
                     <div class="info-box green mt-2">
                         <i class="bi bi-lightning-charge-fill text-em"></i>
                         <div>
-                            <strong>Iklan lama otomatis diganti:</strong> Jika kamu kirim produk yang sama lagi, sistem otomatis menghapus iklan lama dan menampilkan yang terbaru.
+                            <strong>{{ $__t('Iklan lama otomatis diganti:','Old listings auto-replaced:') }}</strong> {{ $__t('Jika kamu kirim produk yang sama lagi, sistem otomatis menghapus iklan lama dan menampilkan yang terbaru.','If you post the same product again, the system automatically replaces the old listing with the new one.') }}
                         </div>
                     </div>
                 </div>
@@ -380,34 +380,34 @@
 
             <!-- Jenis konten yang didukung -->
             <div class="mt-4">
-                <div class="fw-700 mb-2" style="font-size:.88rem;color:#374151;">Jenis konten yang didukung di grup:</div>
+                <div class="fw-700 mb-2" style="font-size:.88rem;color:#374151;">{{ $__t('Jenis konten yang didukung di grup:','Content types supported in the group:') }}</div>
                 <div class="row g-2">
                     <div class="col-6 col-md-3">
                         <div class="text-center p-3 bg-white rounded-3 border" style="font-size:.82rem;">
                             <div style="font-size:1.5rem;">📸</div>
-                            <strong>Foto</strong><br>
+                            <strong>{{ $__t('Foto','Photo') }}</strong><br>
                             <span style="color:#6b7280;">JPG / PNG</span>
                         </div>
                     </div>
                     <div class="col-6 col-md-3">
                         <div class="text-center p-3 bg-white rounded-3 border" style="font-size:.82rem;">
                             <div style="font-size:1.5rem;">🎥</div>
-                            <strong>Video</strong><br>
+                            <strong>{{ $__t('Video','Video') }}</strong><br>
                             <span style="color:#6b7280;">MP4 / MOV</span>
                         </div>
                     </div>
                     <div class="col-6 col-md-3">
                         <div class="text-center p-3 bg-white rounded-3 border" style="font-size:.82rem;">
                             <div style="font-size:1.5rem;">📝</div>
-                            <strong>Teks saja</strong><br>
-                            <span style="color:#6b7280;">Iklan baris</span>
+                            <strong>{{ $__t('Teks saja','Text only') }}</strong><br>
+                            <span style="color:#6b7280;">{{ $__t('Iklan baris','Classified ad') }}</span>
                         </div>
                     </div>
                     <div class="col-6 col-md-3">
                         <div class="text-center p-3 bg-white rounded-3 border" style="font-size:.82rem;">
                             <div style="font-size:1.5rem;">📍</div>
-                            <strong>Lokasi</strong><br>
-                            <span style="color:#6b7280;">Via WA Pribadi</span>
+                            <strong>{{ $__t('Lokasi','Location') }}</strong><br>
+                            <span style="color:#6b7280;">{{ $__t('Via WA Pribadi','Via Personal WA') }}</span>
                         </div>
                     </div>
                 </div>
@@ -429,19 +429,19 @@
                     <div class="info-box blue mb-3">
                         <i class="bi bi-info-circle-fill text-blue"></i>
                         <div>
-                            Setelah bergabung di grup, Bot akan kirim pesan perkenalan ke WA pribadimu. Balas pesan itu — itulah cara kamu mulai berinteraksi dengan Bot AI.
+                            {{ $__t('Setelah bergabung di grup, Bot akan kirim pesan perkenalan ke WA pribadimu. Balas pesan itu — itulah cara kamu mulai berinteraksi dengan Bot AI.','After joining the group, the bot sends an intro message to your personal WA. Reply to it — that\'s how you start interacting with the AI bot.') }}
                         </div>
                     </div>
 
                     <div class="info-box green">
                         <i class="bi bi-shield-check-fill text-em"></i>
                         <div>
-                            <strong>Privasi terjaga:</strong> Semua percakapan di WA Pribadi hanya antara kamu dan Bot. Anggota grup lain tidak bisa melihat riwayat chat ini.
+                            <strong>{{ $__t('Privasi terjaga:','Privacy protected:') }}</strong> {{ $__t('Semua percakapan di WA Pribadi hanya antara kamu dan Bot. Anggota grup lain tidak bisa melihat riwayat chat ini.','All conversations in Personal WA are only between you and the bot. Other group members cannot see this chat history.') }}
                         </div>
                     </div>
                 </div>
                 <div class="col-md-6">
-                    <div class="mb-2" style="font-size:.8rem;font-weight:700;color:#6b7280;">CONTOH PERCAKAPAN</div>
+                    <div class="mb-2" style="font-size:.8rem;font-weight:700;color:#6b7280;">{{ $__t('CONTOH PERCAKAPAN','EXAMPLE CONVERSATION') }}</div>
                     <div class="wa-bubble-wrap">
                         <div class="wa-chat">
                             <div class="wa-bubble bot">
@@ -480,132 +480,132 @@
 
             <!-- Kategori 1: Iklan -->
             <h5 class="fw-800 mb-3" style="color:#111827;font-size:1rem;">
-                <span style="background:var(--em-xlight);color:var(--em);padding:.2rem .6rem;border-radius:8px;">🛍️ Kelola Iklan</span>
+                <span style="background:var(--em-xlight);color:var(--em);padding:.2rem .6rem;border-radius:8px;">🛍️ {{ $__t('Kelola Iklan','Manage Listings') }}</span>
             </h5>
             <div class="mb-4">
                 <div class="cmd-card">
                     <div class="cmd-icon bg-em-xs text-em">📸</div>
                     <div>
-                        <div class="cmd-title">Buat Iklan Baru via Bot</div>
-                        <div class="cmd-desc">Kirim foto produk ke WA Pribadi Bot — AI otomatis buat draft iklan profesional, kamu tinggal review & setuju.</div>
-                        <div class="cmd-example">Ketik: "buat iklan" atau langsung kirim foto</div>
+                        <div class="cmd-title">{{ $__t('Buat Iklan Baru via Bot','Create a New Listing via Bot') }}</div>
+                        <div class="cmd-desc">{{ $__t('Kirim foto produk ke WA Pribadi Bot — AI otomatis buat draft iklan profesional, kamu tinggal review & setuju.','Send a product photo to the bot on Personal WA — AI drafts a professional listing; you just review & approve.') }}</div>
+                        <div class="cmd-example">{{ $__t('Ketik','Type') }}: "buat iklan" {{ $__t('atau langsung kirim foto','or just send a photo') }}</div>
                     </div>
                 </div>
                 <div class="cmd-card">
                     <div class="cmd-icon bg-amber text-amber">✏️</div>
                     <div>
-                        <div class="cmd-title">Edit Iklan</div>
-                        <div class="cmd-desc">Ubah judul, harga, deskripsi, atau lokasi iklanmu. Sebutkan ID iklan dan perubahan yang diinginkan.</div>
-                        <div class="cmd-example">Ketik: "edit iklan #142" atau "ubah harga iklan 142 jadi 30rb"</div>
+                        <div class="cmd-title">{{ $__t('Edit Iklan','Edit Listing') }}</div>
+                        <div class="cmd-desc">{{ $__t('Ubah judul, harga, deskripsi, atau lokasi iklanmu. Sebutkan ID iklan dan perubahan yang diinginkan.','Change title, price, description, or location. Mention the listing ID and your desired change.') }}</div>
+                        <div class="cmd-example">{{ $__t('Ketik','Type') }}: "edit iklan #142" {{ $__t('atau','or') }} "ubah harga iklan 142 jadi 30rb"</div>
                     </div>
                 </div>
                 <div class="cmd-card">
                     <div class="cmd-icon bg-blue text-blue">📋</div>
                     <div>
-                        <div class="cmd-title">Lihat Iklanku</div>
-                        <div class="cmd-desc">Tampilkan daftar semua iklan aktif milikmu lengkap dengan ID, judul, dan status.</div>
-                        <div class="cmd-example">Ketik: "iklan saya" atau "lihat iklanku"</div>
+                        <div class="cmd-title">{{ $__t('Lihat Iklanku','View My Listings') }}</div>
+                        <div class="cmd-desc">{{ $__t('Tampilkan daftar semua iklan aktif milikmu lengkap dengan ID, judul, dan status.','Show the list of all your active listings with ID, title, and status.') }}</div>
+                        <div class="cmd-example">{{ $__t('Ketik','Type') }}: "iklan saya" {{ $__t('atau','or') }} "lihat iklanku"</div>
                     </div>
                 </div>
                 <div class="cmd-card">
                     <div class="cmd-icon" style="background:var(--rose-light);color:var(--rose);">✅</div>
                     <div>
-                        <div class="cmd-title">Tandai Terjual</div>
-                        <div class="cmd-desc">Nonaktifkan iklan setelah produk berhasil terjual. Iklan hilang dari website secara otomatis.</div>
-                        <div class="cmd-example">Ketik: "terjual #142" atau "laku iklan 142"</div>
+                        <div class="cmd-title">{{ $__t('Tandai Terjual','Mark as Sold') }}</div>
+                        <div class="cmd-desc">{{ $__t('Nonaktifkan iklan setelah produk berhasil terjual. Iklan hilang dari website secara otomatis.','Deactivate a listing after it\'s sold. The listing disappears from the site automatically.') }}</div>
+                        <div class="cmd-example">{{ $__t('Ketik','Type') }}: "terjual #142" {{ $__t('atau','or') }} "laku iklan 142"</div>
                     </div>
                 </div>
                 <div class="cmd-card">
                     <div class="cmd-icon" style="background:var(--purple-light);color:var(--purple);">🔄</div>
                     <div>
-                        <div class="cmd-title">Aktifkan Kembali Iklan</div>
-                        <div class="cmd-desc">Aktifkan lagi iklan yang sebelumnya telah ditandai terjual atau dinonaktifkan.</div>
-                        <div class="cmd-example">Ketik: "aktifkan #142" atau "aktifkan kembali iklan 142"</div>
+                        <div class="cmd-title">{{ $__t('Aktifkan Kembali Iklan','Reactivate Listing') }}</div>
+                        <div class="cmd-desc">{{ $__t('Aktifkan lagi iklan yang sebelumnya telah ditandai terjual atau dinonaktifkan.','Re-activate a listing previously marked as sold or deactivated.') }}</div>
+                        <div class="cmd-example">{{ $__t('Ketik','Type') }}: "aktifkan #142" {{ $__t('atau','or') }} "aktifkan kembali iklan 142"</div>
                     </div>
                 </div>
             </div>
 
             <!-- Kategori 2: Cari Produk -->
             <h5 class="fw-800 mb-3" style="color:#111827;font-size:1rem;">
-                <span style="background:var(--blue-light);color:var(--blue);padding:.2rem .6rem;border-radius:8px;">🔍 Cari Produk & Penjual</span>
+                <span style="background:var(--blue-light);color:var(--blue);padding:.2rem .6rem;border-radius:8px;">🔍 {{ $__t('Cari Produk & Penjual','Find Products & Sellers') }}</span>
             </h5>
             <div class="mb-4">
                 <div class="cmd-card">
                     <div class="cmd-icon bg-blue text-blue">🛒</div>
                     <div>
-                        <div class="cmd-title">Cari Produk</div>
-                        <div class="cmd-desc">Cari produk yang tersedia di marketplace. Bot akan tampilkan produk relevan beserta harga dan link.</div>
-                        <div class="cmd-example">Ketik: "ada jual kerudung?" atau "cari madu asli"</div>
+                        <div class="cmd-title">{{ $__t('Cari Produk','Search Products') }}</div>
+                        <div class="cmd-desc">{{ $__t('Cari produk yang tersedia di marketplace. Bot akan tampilkan produk relevan beserta harga dan link.','Search products available on the marketplace. The bot shows relevant items with price and link.') }}</div>
+                        <div class="cmd-example">{{ $__t('Ketik','Type') }}: "ada jual kerudung?" {{ $__t('atau','or') }} "cari madu asli"</div>
                     </div>
                 </div>
                 <div class="cmd-card">
                     <div class="cmd-icon bg-em-xs text-em">👤</div>
                     <div>
-                        <div class="cmd-title">Cari Penjual</div>
-                        <div class="cmd-desc">Temukan penjual berdasarkan kategori atau nama produk yang mereka jual.</div>
-                        <div class="cmd-example">Ketik: "cari penjual makanan" atau "siapa yang jual batik?"</div>
+                        <div class="cmd-title">{{ $__t('Cari Penjual','Find Sellers') }}</div>
+                        <div class="cmd-desc">{{ $__t('Temukan penjual berdasarkan kategori atau nama produk yang mereka jual.','Find sellers by category or by the products they sell.') }}</div>
+                        <div class="cmd-example">{{ $__t('Ketik','Type') }}: "cari penjual makanan" {{ $__t('atau','or') }} "siapa yang jual batik?"</div>
                     </div>
                 </div>
                 <div class="cmd-card">
                     <div class="cmd-icon bg-amber text-amber">📂</div>
                     <div>
-                        <div class="cmd-title">Lihat Kategori</div>
-                        <div class="cmd-desc">Tampilkan semua kategori produk yang tersedia di marketplace.</div>
-                        <div class="cmd-example">Ketik: "kategori apa saja?" atau "daftar kategori"</div>
+                        <div class="cmd-title">{{ $__t('Lihat Kategori','View Categories') }}</div>
+                        <div class="cmd-desc">{{ $__t('Tampilkan semua kategori produk yang tersedia di marketplace.','Show all product categories available on the marketplace.') }}</div>
+                        <div class="cmd-example">{{ $__t('Ketik','Type') }}: "kategori apa saja?" {{ $__t('atau','or') }} "daftar kategori"</div>
                     </div>
                 </div>
                 <div class="cmd-card">
                     <div class="cmd-icon" style="background:var(--purple-light);color:var(--purple);">📍</div>
                     <div>
-                        <div class="cmd-title">Cari Produk Terdekat</div>
-                        <div class="cmd-desc">Bagikan lokasi WA kamu → Bot cari produk di sekitar lokasimu secara otomatis.</div>
-                        <div class="cmd-example">Kirim <strong>Lokasi</strong> WhatsApp → pilih opsi <em>"Cari produk di sekitar lokasi ini"</em></div>
+                        <div class="cmd-title">{{ $__t('Cari Produk Terdekat','Find Nearby Products') }}</div>
+                        <div class="cmd-desc">{{ $__t('Bagikan lokasi WA kamu → Bot cari produk di sekitar lokasimu secara otomatis.','Share your WA location → bot finds nearby products automatically.') }}</div>
+                        <div class="cmd-example">{!! $__t('Kirim <strong>Lokasi</strong> WhatsApp → pilih opsi <em>"Cari produk di sekitar lokasi ini"</em>','Send a WhatsApp <strong>Location</strong> → choose <em>"Search products near this location"</em>') !!}</div>
                     </div>
                 </div>
             </div>
 
             <!-- Kategori 3: Profil & Akun -->
             <h5 class="fw-800 mb-3" style="color:#111827;font-size:1rem;">
-                <span style="background:var(--purple-light);color:var(--purple);padding:.2rem .6rem;border-radius:8px;">👤 Profil & Akun</span>
+                <span style="background:var(--purple-light);color:var(--purple);padding:.2rem .6rem;border-radius:8px;">👤 {{ $__t('Profil & Akun','Profile & Account') }}</span>
             </h5>
             <div class="mb-4">
                 <div class="cmd-card">
                     <div class="cmd-icon" style="background:var(--purple-light);color:var(--purple);">🗂️</div>
                     <div>
-                        <div class="cmd-title">Update Lokasi Bisnis</div>
-                        <div class="cmd-desc">Bagikan lokasi WA → pilih opsi update lokasi bisnis agar pembeli tahu kamu berjualan dari mana.</div>
-                        <div class="cmd-example">Kirim <strong>Lokasi</strong> WhatsApp → pilih opsi <em>"Update lokasi bisnis saya"</em></div>
+                        <div class="cmd-title">{{ $__t('Update Lokasi Bisnis','Update Business Location') }}</div>
+                        <div class="cmd-desc">{{ $__t('Bagikan lokasi WA → pilih opsi update lokasi bisnis agar pembeli tahu kamu berjualan dari mana.','Share a WA location → pick "update business location" so buyers know where you operate from.') }}</div>
+                        <div class="cmd-example">{!! $__t('Kirim <strong>Lokasi</strong> WhatsApp → pilih opsi <em>"Update lokasi bisnis saya"</em>','Send a WhatsApp <strong>Location</strong> → choose <em>"Update my business location"</em>') !!}</div>
                     </div>
                 </div>
                 <div class="cmd-card">
                     <div class="cmd-icon bg-blue text-blue">🪪</div>
                     <div>
-                        <div class="cmd-title">Scan KTP (Verifikasi Identitas)</div>
-                        <div class="cmd-desc">Kirim foto KTP → Bot AI membaca dan mengisi data profilmu secara otomatis (nama, alamat, dll).</div>
-                        <div class="cmd-example">Ketik: "scan KTP" → lalu kirim foto KTP</div>
+                        <div class="cmd-title">{{ $__t('Scan KTP (Verifikasi Identitas)','Scan ID Card (Identity Verification)') }}</div>
+                        <div class="cmd-desc">{{ $__t('Kirim foto KTP → Bot AI membaca dan mengisi data profilmu secara otomatis (nama, alamat, dll).','Send an ID card photo → the AI bot reads it and auto-fills your profile (name, address, etc).') }}</div>
+                        <div class="cmd-example">{{ $__t('Ketik','Type') }}: "scan KTP" → {{ $__t('lalu kirim foto KTP','then send the ID photo') }}</div>
                     </div>
                 </div>
                 <div class="cmd-card">
                     <div class="cmd-icon bg-em-xs text-em">📞</div>
                     <div>
-                        <div class="cmd-title">Hubungi Admin</div>
-                        <div class="cmd-desc">Bot meneruskan pesanmu ke admin untuk masalah yang perlu penanganan manusia.</div>
-                        <div class="cmd-example">Ketik: "hubungi admin" atau "minta bantuan admin"</div>
+                        <div class="cmd-title">{{ $__t('Hubungi Admin','Contact Admin') }}</div>
+                        <div class="cmd-desc">{{ $__t('Bot meneruskan pesanmu ke admin untuk masalah yang perlu penanganan manusia.','The bot forwards your message to the admin for issues that need a human.') }}</div>
+                        <div class="cmd-example">{{ $__t('Ketik','Type') }}: "hubungi admin" {{ $__t('atau','or') }} "minta bantuan admin"</div>
                     </div>
                 </div>
             </div>
 
             <!-- Kategori 4: Lainnya -->
             <h5 class="fw-800 mb-3" style="color:#111827;font-size:1rem;">
-                <span style="background:var(--amber-light);color:#92400e;padding:.2rem .6rem;border-radius:8px;">ℹ️ Lainnya</span>
+                <span style="background:var(--amber-light);color:#92400e;padding:.2rem .6rem;border-radius:8px;">ℹ️ {{ $__t('Lainnya','Other') }}</span>
             </h5>
             <div class="mb-2">
                 <div class="cmd-card">
                     <div class="cmd-icon bg-amber text-amber">❓</div>
                     <div>
-                        <div class="cmd-title">Bantuan / Daftar Perintah</div>
-                        <div class="cmd-desc">Tampilkan daftar lengkap fitur dan cara penggunaan bot langsung di chat.</div>
-                        <div class="cmd-example">Ketik: "bantuan" atau "help"</div>
+                        <div class="cmd-title">{{ $__t('Bantuan / Daftar Perintah','Help / Command List') }}</div>
+                        <div class="cmd-desc">{{ $__t('Tampilkan daftar lengkap fitur dan cara penggunaan bot langsung di chat.','Show the full feature list and bot usage directly in chat.') }}</div>
+                        <div class="cmd-example">{{ $__t('Ketik','Type') }}: "bantuan" {{ $__t('atau','or') }} "help"</div>
                     </div>
                 </div>
             </div>
@@ -625,29 +625,29 @@
                 <div class="col-md-6 col-lg-3">
                     <div class="step-card text-center">
                         <div class="step-num bg-em-xs text-em mx-auto" style="font-size:1.5rem;width:52px;height:52px;">🔍</div>
-                        <div class="step-title mt-2">Cari Produk</div>
-                        <div class="step-body">Browse website atau chat bot dengan kata kunci produk yang dicari.</div>
+                        <div class="step-title mt-2">{{ $__t('Cari Produk','Search Products') }}</div>
+                        <div class="step-body">{{ $__t('Browse website atau chat bot dengan kata kunci produk yang dicari.','Browse the site or chat the bot with keywords for the product you want.') }}</div>
                     </div>
                 </div>
                 <div class="col-md-6 col-lg-3">
                     <div class="step-card text-center">
                         <div class="step-num bg-amber mx-auto" style="font-size:1.5rem;width:52px;height:52px;">📄</div>
-                        <div class="step-title mt-2">Lihat Detail</div>
-                        <div class="step-body">Klik produk untuk melihat foto lengkap, deskripsi, harga, dan info penjual.</div>
+                        <div class="step-title mt-2">{{ $__t('Lihat Detail','View Detail') }}</div>
+                        <div class="step-body">{{ $__t('Klik produk untuk melihat foto lengkap, deskripsi, harga, dan info penjual.','Click a product to see the full photo, description, price, and seller info.') }}</div>
                     </div>
                 </div>
                 <div class="col-md-6 col-lg-3">
                     <div class="step-card text-center">
                         <div class="step-num bg-blue text-blue mx-auto" style="font-size:1.5rem;width:52px;height:52px;">💬</div>
-                        <div class="step-title mt-2">Hubungi Penjual</div>
-                        <div class="step-body">Klik tombol "Chat Penjual" — otomatis terhubung ke WA penjual.</div>
+                        <div class="step-title mt-2">{{ $__t('Hubungi Penjual','Contact Seller') }}</div>
+                        <div class="step-body">{{ $__t('Klik tombol "Chat Penjual" — otomatis terhubung ke WA penjual.','Click the "Chat Seller" button — opens WA with the seller directly.') }}</div>
                     </div>
                 </div>
                 <div class="col-md-6 col-lg-3">
                     <div class="step-card text-center">
                         <div class="step-num" style="background:var(--purple-light);color:var(--purple);font-size:1.5rem;width:52px;height:52px;margin:auto;">🤝</div>
-                        <div class="step-title mt-2">Sepakati & Bayar</div>
-                        <div class="step-body">Negosiasi harga dan metode pengiriman langsung dengan penjual di WA.</div>
+                        <div class="step-title mt-2">{{ $__t('Sepakati & Bayar','Agree & Pay') }}</div>
+                        <div class="step-body">{{ $__t('Negosiasi harga dan metode pengiriman langsung dengan penjual di WA.','Negotiate price and shipping directly with the seller on WA.') }}</div>
                     </div>
                 </div>
             </div>
@@ -655,7 +655,7 @@
             <div class="info-box amber mt-4">
                 <i class="bi bi-shield-exclamation text-amber"></i>
                 <div>
-                    <strong>Penting:</strong> MarketplaceJamaah <strong>bukan</strong> perantara transaksi. Kami menyediakan platform listing saja. Selalu berhati-hati dalam bertransaksi — pastikan kamu kenal atau percaya kepada penjual, terutama untuk transaksi bernilai besar.
+                    <strong>{{ $__t('Penting:','Important:') }}</strong> {!! $__t('MarketplaceJamaah <strong>bukan</strong> perantara transaksi. Kami menyediakan platform listing saja. Selalu berhati-hati dalam bertransaksi — pastikan kamu kenal atau percaya kepada penjual, terutama untuk transaksi bernilai besar.','MarketplaceJamaah is <strong>not</strong> a transaction intermediary. We only provide a listing platform. Always be careful — make sure you know or trust the seller, especially for high-value transactions.') !!}
                 </div>
             </div>
         </div>
@@ -672,7 +672,7 @@
 
             <div class="row g-4">
                 <div class="col-md-6">
-                    <div class="mb-2" style="font-size:.8rem;font-weight:700;color:#6b7280;">SESI AD BUILDER — LANGKAH DEMI LANGKAH</div>
+                    <div class="mb-2" style="font-size:.8rem;font-weight:700;color:#6b7280;">{{ $__t('SESI AD BUILDER — LANGKAH DEMI LANGKAH','AD BUILDER SESSION — STEP BY STEP') }}</div>
                     <div class="wa-bubble-wrap">
                         <div class="wa-chat">
                             <div class="wa-bubble user">
@@ -722,7 +722,7 @@
                 </div>
 
                 <div class="col-md-6">
-                    <div class="mb-2" style="font-size:.8rem;font-weight:700;color:#6b7280;">CONTOH EDIT IKLAN</div>
+                    <div class="mb-2" style="font-size:.8rem;font-weight:700;color:#6b7280;">{{ $__t('CONTOH EDIT IKLAN','EDIT LISTING EXAMPLE') }}</div>
                     <div class="wa-bubble-wrap mb-3">
                         <div class="wa-chat">
                             <div class="wa-bubble user">
@@ -738,7 +738,7 @@
                         </div>
                     </div>
 
-                    <div class="mb-2" style="font-size:.8rem;font-weight:700;color:#6b7280;">CONTOH TANDAI TERJUAL</div>
+                    <div class="mb-2" style="font-size:.8rem;font-weight:700;color:#6b7280;">{{ $__t('CONTOH TANDAI TERJUAL','MARK AS SOLD EXAMPLE') }}</div>
                     <div class="wa-bubble-wrap mb-3">
                         <div class="wa-chat">
                             <div class="wa-bubble user">
@@ -753,7 +753,7 @@
                         </div>
                     </div>
 
-                    <div class="mb-2" style="font-size:.8rem;font-weight:700;color:#6b7280;">CONTOH CARI PRODUK</div>
+                    <div class="mb-2" style="font-size:.8rem;font-weight:700;color:#6b7280;">{{ $__t('CONTOH CARI PRODUK','PRODUCT SEARCH EXAMPLE') }}</div>
                     <div class="wa-bubble-wrap">
                         <div class="wa-chat">
                             <div class="wa-bubble user">
@@ -790,81 +790,81 @@
 
             <div class="faq-item">
                 <div class="faq-q" onclick="toggleFaq(this)">
-                    Apakah harus bayar untuk pasang iklan?
+                    {{ $__t('Apakah harus bayar untuk pasang iklan?','Do I have to pay to post a listing?') }}
                     <i class="bi bi-plus-lg faq-icon"></i>
                 </div>
                 <div class="faq-a">
-                    <strong>Tidak ada biaya sama sekali.</strong> MarketplaceJamaah gratis untuk semua anggota komunitas jamaah. Pasang iklan sebanyak yang kamu mau tanpa biaya.
+                    <strong>{{ $__t('Tidak ada biaya sama sekali.','No cost at all.') }}</strong> {{ $__t('MarketplaceJamaah gratis untuk semua anggota komunitas jamaah. Pasang iklan sebanyak yang kamu mau tanpa biaya.','MarketplaceJamaah is free for all jamaah community members. Post as many listings as you want at no cost.') }}
                 </div>
             </div>
 
             <div class="faq-item">
                 <div class="faq-q" onclick="toggleFaq(this)">
-                    Bagaimana cara bergabung di grup WhatsApp?
+                    {{ $__t('Bagaimana cara bergabung di grup WhatsApp?','How do I join the WhatsApp group?') }}
                     <i class="bi bi-plus-lg faq-icon"></i>
                 </div>
                 <div class="faq-a">
-                    Hubungi admin marketplace untuk mendapatkan link undangan grup. Setelah bergabung, Bot AI akan secara otomatis menyapa kamu lewat WA pribadi dan membimbing proses pendaftaran.
+                    {{ $__t('Hubungi admin marketplace untuk mendapatkan link undangan grup. Setelah bergabung, Bot AI akan secara otomatis menyapa kamu lewat WA pribadi dan membimbing proses pendaftaran.','Contact the marketplace admin for a group invite link. Once you join, the AI bot automatically greets you in personal WA and guides you through registration.') }}
                 </div>
             </div>
 
             <div class="faq-item">
                 <div class="faq-q" onclick="toggleFaq(this)">
-                    Berapa lama iklan saya akan tayang?
+                    {{ $__t('Berapa lama iklan saya akan tayang?','How long does my listing stay live?') }}
                     <i class="bi bi-plus-lg faq-icon"></i>
                 </div>
                 <div class="faq-a">
-                    Iklan tayang selama produk masih tersedia. Iklan akan otomatis hilang jika kamu menandainya sebagai terjual, dihapus dari grup, atau jika kamu keluar dari grup. Tidak ada batas waktu tayangnya selama statusnya aktif.
+                    {{ $__t('Iklan tayang selama produk masih tersedia. Iklan akan otomatis hilang jika kamu menandainya sebagai terjual, dihapus dari grup, atau jika kamu keluar dari grup. Tidak ada batas waktu tayangnya selama statusnya aktif.','Listings stay live while the product is available. They disappear automatically when marked sold, deleted from the group, or when you leave the group. No time limit while active.') }}
                 </div>
             </div>
 
             <div class="faq-item">
                 <div class="faq-q" onclick="toggleFaq(this)">
-                    Apakah bisa pasang iklan tanpa foto?
+                    {{ $__t('Apakah bisa pasang iklan tanpa foto?','Can I post a listing without a photo?') }}
                     <i class="bi bi-plus-lg faq-icon"></i>
                 </div>
                 <div class="faq-a">
-                    Bisa! Kirim teks saja di grup → iklan akan tampil sebagai <em>iklan baris</em> di bagian bawah website. Tapi iklan dengan foto/video punya tampilan yang jauh lebih menarik dan lebih mudah ditemukan oleh pembeli.
+                    {!! $__t('Bisa! Kirim teks saja di grup → iklan akan tampil sebagai <em>iklan baris</em> di bagian bawah website. Tapi iklan dengan foto/video punya tampilan yang jauh lebih menarik dan lebih mudah ditemukan oleh pembeli.','Yes! Send text-only in the group → it shows as a <em>classified ad</em> at the bottom of the site. But listings with photo/video look much better and are easier to find.') !!}
                 </div>
             </div>
 
             <div class="faq-item">
                 <div class="faq-q" onclick="toggleFaq(this)">
-                    Bot tidak merespons pesan saya — apa yang harus dilakukan?
+                    {{ $__t('Bot tidak merespons pesan saya — apa yang harus dilakukan?','The bot doesn\'t respond to my message — what should I do?') }}
                     <i class="bi bi-plus-lg faq-icon"></i>
                 </div>
                 <div class="faq-a">
-                    Coba kirim pesan <code>bantuan</code> atau <code>halo</code> ke nomor Bot. Jika masih tidak merespons, hubungi admin. Pastikan kamu mengirim DM ke nomor Bot, bukan ke grup. Bot hanya aktif membalas pesan di WA Pribadi, bukan di dalam grup.
+                    {!! $__t('Coba kirim pesan <code>bantuan</code> atau <code>halo</code> ke nomor Bot. Jika masih tidak merespons, hubungi admin. Pastikan kamu mengirim DM ke nomor Bot, bukan ke grup. Bot hanya aktif membalas pesan di WA Pribadi, bukan di dalam grup.','Try sending <code>bantuan</code> or <code>halo</code> to the bot number. If still no response, contact the admin. Make sure you DM the bot number, not the group. The bot replies in Personal WA only, not inside the group.') !!}
                 </div>
             </div>
 
             <div class="faq-item">
                 <div class="faq-q" onclick="toggleFaq(this)">
-                    Apakah MarketplaceJamaah memproses pembayaran?
+                    {{ $__t('Apakah MarketplaceJamaah memproses pembayaran?','Does MarketplaceJamaah process payments?') }}
                     <i class="bi bi-plus-lg faq-icon"></i>
                 </div>
                 <div class="faq-a">
-                    Tidak. MarketplaceJamaah adalah platform listing — kami hanya mempertemukan penjual dan pembeli. Semua transaksi dilakukan secara mandiri antara pembeli dan penjual lewat WhatsApp atau cara yang mereka sepakati.
+                    {{ $__t('Tidak. MarketplaceJamaah adalah platform listing — kami hanya mempertemukan penjual dan pembeli. Semua transaksi dilakukan secara mandiri antara pembeli dan penjual lewat WhatsApp atau cara yang mereka sepakati.','No. MarketplaceJamaah is a listing platform — we only match sellers and buyers. All transactions happen independently between buyer and seller via WhatsApp or their agreed method.') }}
                 </div>
             </div>
 
             <div class="faq-item">
                 <div class="faq-q" onclick="toggleFaq(this)">
-                    Bisa pasang lebih dari satu iklan?
+                    {{ $__t('Bisa pasang lebih dari satu iklan?','Can I post more than one listing?') }}
                     <i class="bi bi-plus-lg faq-icon"></i>
                 </div>
                 <div class="faq-a">
-                    Tentu! Kamu bisa pasang iklan sebanyak yang kamu inginkan. Setiap pesan foto/video/teks baru yang kamu kirim di grup akan diproses sebagai iklan terpisah. Untuk produk yang sama, sistem otomatis mengganti iklan lama dengan yang baru.
+                    {{ $__t('Tentu! Kamu bisa pasang iklan sebanyak yang kamu inginkan. Setiap pesan foto/video/teks baru yang kamu kirim di grup akan diproses sebagai iklan terpisah. Untuk produk yang sama, sistem otomatis mengganti iklan lama dengan yang baru.','Of course! Post as many listings as you want. Every new photo/video/text in the group is processed as a separate listing. For the same product, the system automatically replaces the old listing with the new one.') }}
                 </div>
             </div>
 
             <div class="faq-item">
                 <div class="faq-q" onclick="toggleFaq(this)">
-                    Apakah semua produk boleh dijual?
+                    {{ $__t('Apakah semua produk boleh dijual?','Can any product be sold here?') }}
                     <i class="bi bi-plus-lg faq-icon"></i>
                 </div>
                 <div class="faq-a">
-                    MarketplaceJamaah khusus untuk produk <strong>halal</strong>. Dilarang menjual produk yang mengandung riba, produk haram (alkohol, rokok, dll), produk ilegal, atau produk yang menipu. Admin berhak menghapus iklan dan memblokir pengguna yang melanggar ketentuan.
+                    {!! $__t('MarketplaceJamaah khusus untuk produk <strong>halal</strong>. Dilarang menjual produk yang mengandung riba, produk haram (alkohol, rokok, dll), produk ilegal, atau produk yang menipu. Admin berhak menghapus iklan dan memblokir pengguna yang melanggar ketentuan.','MarketplaceJamaah is specifically for <strong>halal</strong> products. Selling interest-based products, haram items (alcohol, cigarettes, etc.), illegal goods, or deceptive products is prohibited. Admins may remove listings and block users who violate the rules.') !!}
                 </div>
             </div>
         </div>
