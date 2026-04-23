@@ -654,7 +654,7 @@
                             <div class="media" style="display:grid; place-items:center;"><i class="bi bi-box-seam" style="font-size:2.6rem; color:var(--em-mid);"></i></div>
                         @endif
                         <div class="body">
-                            @if($heroSecondary->category)<span class="cat">{{ $heroSecondary->category->name }}</span>@endif
+                            @if($heroSecondary->category)<span class="cat">{{ \App\Support\SiteLocale::category($heroSecondary->category->name) }}</span>@endif
                             <h4>{{ $heroSecondary->title }}</h4>
                             <div class="price">{{ $heroSecondary->price_formatted ?? $tr('hero_price_nego') }}</div>
                         </div>
@@ -672,7 +672,7 @@
                             <div class="media" style="display:grid; place-items:center;"><i class="bi bi-box-seam" style="font-size:3rem; color:var(--em-mid);"></i></div>
                         @endif
                         <div class="body">
-                            @if($heroPrimary->category)<span class="cat">{{ $heroPrimary->category->name }}</span>@endif
+                            @if($heroPrimary->category)<span class="cat">{{ \App\Support\SiteLocale::category($heroPrimary->category->name) }}</span>@endif
                             <h4>{{ $heroPrimary->title }}</h4>
                             <div class="price">{{ $heroPrimary->price_formatted ?? $tr('hero_price_nego') }}</div>
                             <div class="meta"><i class="bi bi-person-circle" style="color:var(--em);"></i> {{ $heroPrimary->contact?->name ?: ($heroPrimary->contact_name ?: $tr('seller_word')) }}</div>
@@ -771,7 +771,7 @@
                 @foreach($categories as $cat)
                     <a href="{{ url('/') }}?{{ http_build_query(array_merge($qBase, ['category_id' => $cat->id])) }}"
                        class="cat-pill {{ request('category_id') == $cat->id ? 'active' : '' }}">
-                        {{ $cat->name }}
+                        {{ \App\Support\SiteLocale::category($cat->name) }}
                     </a>
                 @endforeach
             </div>
@@ -805,7 +805,7 @@
                 <a href="{{ url('/') }}?{{ http_build_query(array_merge($qBase, ['category_id' => $tc->id])) }}"
                    class="topcat-item" style="background:{{ $bg }};">
                     <span class="rank">#{{ $rank }}</span>
-                    {{ $tc->name }}
+                    {{ \App\Support\SiteLocale::category($tc->name) }}
                     <span class="cnt">{{ $tc->listings_count }}</span>
                 </a>
             @endforeach

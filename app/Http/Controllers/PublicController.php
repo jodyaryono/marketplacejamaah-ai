@@ -12,8 +12,12 @@ class PublicController extends Controller
     /**
      * Public listing detail — accessible without admin login
      */
-    public function listingDetail(int $id)
+    public function listingDetail(int $id, Request $request)
     {
+        if ($request->filled('lang') && in_array($request->lang, ['id', 'en'], true)) {
+            session(['site_locale' => $request->lang]);
+        }
+
         $listing = Listing::with(['category', 'contact', 'message'])
             ->where('status', 'active')
             ->findOrFail($id);
@@ -69,8 +73,12 @@ class PublicController extends Controller
     /**
      * Public seller profile
      */
-    public function sellerProfile(string $phone)
+    public function sellerProfile(string $phone, Request $request)
     {
+        if ($request->filled('lang') && in_array($request->lang, ['id', 'en'], true)) {
+            session(['site_locale' => $request->lang]);
+        }
+
         $phone = preg_replace('/\D/', '', $phone);
         $contact = Contact::where('phone_number', $phone)
             ->where('is_registered', true)

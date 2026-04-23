@@ -1,3 +1,7 @@
+@php
+    $__loc = \App\Support\SiteLocale::get();
+    $__t = fn($id, $en) => $__loc === 'en' ? $en : $id;
+@endphp
 @extends('layouts.public')
 @section('title', $listing->title . ' — Marketplace Jamaah')
 @section('description', Str::limit(strip_tags($listing->description ?? $listing->title), 160))
@@ -52,9 +56,9 @@
     <div class="container">
         <nav style="font-size:.8rem;" aria-label="breadcrumb">
             <ol class="breadcrumb mb-0" style="--bs-breadcrumb-divider:'›';">
-                <li class="breadcrumb-item"><a href="{{ route('landing') }}" style="color:#059669;font-weight:600;">Beranda</a></li>
+                <li class="breadcrumb-item"><a href="{{ route('landing') }}" style="color:#059669;font-weight:600;">{{ $__t('Beranda','Home') }}</a></li>
                 @if($listing->category)
-                <li class="breadcrumb-item"><a href="{{ route('landing', ['category_id' => $listing->category_id]) }}" style="color:#059669;font-weight:600;">{{ $listing->category->name }}</a></li>
+                <li class="breadcrumb-item"><a href="{{ route('landing', ['category_id' => $listing->category_id]) }}" style="color:#059669;font-weight:600;">{{ \App\Support\SiteLocale::category($listing->category->name) }}</a></li>
                 @endif
                 <li class="breadcrumb-item active" style="color:#6b7280;">{{ Str::limit($listing->title, 50) }}</li>
             </ol>
@@ -90,7 +94,7 @@
                     @endif
                 @else
                     <div style="height:240px;background:#f0fdf4;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#6b7280;">
-                        <div class="text-center"><i class="bi bi-image" style="font-size:3rem;color:#a7f3d0;"></i><div class="mt-2">Tidak ada foto</div></div>
+                        <div class="text-center"><i class="bi bi-image" style="font-size:3rem;color:#a7f3d0;"></i><div class="mt-2">{{ $__t('Tidak ada foto','No photos') }}</div></div>
                     </div>
                 @endif
 
@@ -104,14 +108,14 @@
                     }
                 @endphp
                 <div class="mt-3 pt-3" style="border-top:1px solid #e5e7eb;">
-                    <div style="font-size:.82rem;font-weight:600;color:#374151;margin-bottom:.5rem;"><i class="bi bi-play-btn-fill me-1" style="color:#4285f4;"></i>Video Produk</div>
+                    <div style="font-size:.82rem;font-weight:600;color:#374151;margin-bottom:.5rem;"><i class="bi bi-play-btn-fill me-1" style="color:#4285f4;"></i>{{ $__t('Video Produk','Product Video') }}</div>
                     @if($gdEmbed)
                     <div style="position:relative;padding-bottom:56.25%;height:0;border-radius:12px;overflow:hidden;">
                         <iframe src="{{ $gdEmbed }}" frameborder="0" allowfullscreen
                             style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe>
                     </div>
                     @else
-                    <a href="{{ $listing->gdrive_url }}" target="_blank" class="btn btn-sm" style="background:#e8f0fe;color:#1a73e8;border:none;"><i class="bi bi-play-btn me-1"></i>Tonton Video di Google Drive</a>
+                    <a href="{{ $listing->gdrive_url }}" target="_blank" class="btn btn-sm" style="background:#e8f0fe;color:#1a73e8;border:none;"><i class="bi bi-play-btn me-1"></i>{{ $__t('Tonton Video di Google Drive','Watch Video on Google Drive') }}</a>
                     @endif
                 </div>
                 @endif
@@ -120,19 +124,19 @@
             {{-- Title + Price --}}
             <div class="detail-card">
                 <div class="d-flex flex-wrap gap-2 mb-2">
-                    @if($listing->category)<span class="badge-category"><i class="bi bi-tag me-1"></i>{{ $listing->category->name }}</span>@endif
-                    <span class="badge-condition">{{ $listing->condition === 'new' ? '✨ Baru' : ($listing->condition === 'used' ? '♻️ Bekas' : '❓ Kondisi N/A') }}</span>
+                    @if($listing->category)<span class="badge-category"><i class="bi bi-tag me-1"></i>{{ \App\Support\SiteLocale::category($listing->category->name) }}</span>@endif
+                    <span class="badge-condition">{{ $listing->condition === 'new' ? ($__t('✨ Baru','✨ New')) : ($listing->condition === 'used' ? $__t('♻️ Bekas','♻️ Used') : $__t('❓ Kondisi N/A','❓ Condition N/A')) }}</span>
                     @if($listing->location)<span style="font-size:.75rem;color:#6b7280;"><i class="bi bi-geo-alt me-1"></i>{{ $listing->location }}</span>@endif
                 </div>
                 <h1 style="font-size:1.4rem;font-weight:800;color:#111827;margin-bottom:.6rem;">{{ $listing->title }}</h1>
                 <div class="price-tag">{{ $listing->price_formatted }}</div>
-                <div style="font-size:.75rem;color:#9ca3af;margin-top:.3rem;">Diposting {{ $listing->source_date?->diffForHumans() ?? $listing->created_at->diffForHumans() }}</div>
+                <div style="font-size:.75rem;color:#9ca3af;margin-top:.3rem;">{{ $__t('Diposting','Posted') }} {{ $listing->source_date?->diffForHumans() ?? $listing->created_at->diffForHumans() }}</div>
             </div>
 
             {{-- Description --}}
             <div class="detail-card">
-                <h5 style="font-weight:700;margin-bottom:1rem;color:#111827;">Deskripsi Produk</h5>
-                <div style="color:#374151;line-height:1.9;white-space:pre-wrap;font-size:.9rem;">{{ preg_replace('/\[Analisis Gambar\]:\s*/i', '', $listing->description) ?: 'Tidak ada deskripsi tambahan.' }}</div>
+                <h5 style="font-weight:700;margin-bottom:1rem;color:#111827;">{{ $__t('Deskripsi Produk','Product Description') }}</h5>
+                <div style="color:#374151;line-height:1.9;white-space:pre-wrap;font-size:.9rem;">{{ preg_replace('/\[Analisis Gambar\]:\s*/i', '', $listing->description) ?: $__t('Tidak ada deskripsi tambahan.','No additional description.') }}</div>
             </div>
         </div>
 
@@ -140,9 +144,9 @@
         <div class="col-12 col-lg-4">
             {{-- Seller card --}}
             <div class="seller-card mb-3">
-                <h6 style="font-weight:700;color:#111827;margin-bottom:1rem;"><i class="bi bi-person-circle me-2" style="color:#059669;"></i>Info Penjual</h6>
+                <h6 style="font-weight:700;color:#111827;margin-bottom:1rem;"><i class="bi bi-person-circle me-2" style="color:#059669;"></i>{{ $__t('Info Penjual','Seller Info') }}</h6>
                 @php
-                    $sellerName   = $listing->contact?->name ?? $listing->contact_name ?? 'Penjual';
+                    $sellerName   = $listing->contact?->name ?? $listing->contact_name ?? $__t('Penjual','Seller');
                     $normalizePhone = function ($raw) {
                         $digits = preg_replace('/\D/', '', (string) ($raw ?? ''));
                         if (!$digits) return null;
@@ -154,6 +158,11 @@
                     $sellerPhone  = $normalizePhone($listing->contact_number) ?: $normalizePhone($listing->contact?->phone_number);
                     $sellerInitial = mb_strtoupper(mb_substr($sellerName, 0, 1));
                     $sellProducts  = $listing->contact?->sell_products ?? null;
+                    $waMsgTmpl = $__t(
+                        'Halo, saya tertarik dengan %s yang Anda jual di Marketplace Jamaah: %s',
+                        'Hi, I\'m interested in %s you\'re selling on Marketplace Jamaah: %s'
+                    );
+                    $waMsg = sprintf($waMsgTmpl, $listing->title, url('/p/' . $listing->id));
                 @endphp
                 <div class="d-flex align-items-center gap-3 mb-3">
                     <div class="seller-avatar">{{ $sellerInitial }}</div>
@@ -165,56 +174,54 @@
                 </div>
 
                 @if($sellerPhone)
-                <a href="https://wa.me/{{ $sellerPhone }}?text={{ urlencode('Halo, saya tertarik dengan ' . $listing->title . ' yang Anda jual di Marketplace Jamaah: ' . url('/p/' . $listing->id)) }}"
+                <a href="https://wa.me/{{ $sellerPhone }}?text={{ urlencode($waMsg) }}"
                    target="_blank" class="btn-wa w-100 justify-content-center mb-2">
-                    <i class="bi bi-whatsapp" style="font-size:1.1rem;"></i> Chat Penjual via WhatsApp
+                    <i class="bi bi-whatsapp" style="font-size:1.1rem;"></i> {{ $__t('Chat Penjual via WhatsApp','Chat Seller on WhatsApp') }}
                 </a>
                 @else
                 <div class="w-100 mb-2" style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:.7rem .9rem;font-size:.82rem;color:#92400e;">
-                    <i class="bi bi-exclamation-triangle-fill me-1"></i>Nomor WhatsApp penjual tidak tersedia untuk iklan ini.
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ $__t('Nomor WhatsApp penjual tidak tersedia untuk iklan ini.','Seller WhatsApp number not available for this listing.') }}
                 </div>
                 @endif
 
                 @if($listing->contact)
                 <a href="{{ route('public.seller', $listing->contact->phone_number) }}" class="btn btn-sm w-100" style="background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;border-radius:10px;font-weight:600;">
-                    <i class="bi bi-shop me-1"></i>Lihat Semua Iklan Penjual
+                    <i class="bi bi-shop me-1"></i>{{ $__t('Lihat Semua Iklan Penjual','See All Seller Listings') }}
                 </a>
                 @endif
             </div>
 
             {{-- Share --}}
             <div class="detail-card" style="background:#f8fafc;">
-                <h6 style="font-weight:700;color:#111827;margin-bottom:.8rem;"><i class="bi bi-share me-2" style="color:#6366f1;"></i>Bagikan</h6>
+                <h6 style="font-weight:700;color:#111827;margin-bottom:.8rem;"><i class="bi bi-share me-2" style="color:#6366f1;"></i>{{ $__t('Bagikan','Share') }}</h6>
                 <div class="d-flex gap-2 flex-wrap">
                     <a href="https://wa.me/?text={{ urlencode($listing->title . ' — ' . url('/p/' . $listing->id)) }}" target="_blank"
                        class="btn btn-sm" style="background:#dcfce7;color:#15803d;border:none;border-radius:8px;font-weight:600;">
                         <i class="bi bi-whatsapp"></i> WA
                     </a>
                     <button id="btnNativeShare" onclick="nativeShare()" class="btn btn-sm d-none" style="background:#ede9fe;color:#6d28d9;border:none;border-radius:8px;font-weight:600;">
-                        <i class="bi bi-box-arrow-up"></i> Bagikan
+                        <i class="bi bi-box-arrow-up"></i> {{ $__t('Bagikan','Share') }}
                     </button>
                     <button id="btnCopyLink" onclick="copyLink()" class="btn btn-sm" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-weight:600;">
-                        <i class="bi bi-link-45deg"></i> Salin Link
+                        <i class="bi bi-link-45deg"></i> {{ $__t('Salin Link','Copy Link') }}
                     </button>
                     @if(count($listing->media_urls ?? []))
                     <button id="btnCopyImg" onclick="copyWithImage()" class="btn btn-sm" style="background:#e0f2fe;color:#0369a1;border:none;border-radius:8px;font-weight:600;">
-                        <i class="bi bi-image"></i> Salin + Foto
+                        <i class="bi bi-image"></i> {{ $__t('Salin + Foto','Copy + Photo') }}
                     </button>
                     @endif
                 </div>
             </div>
 
-            {{-- ID Iklan --}}
             <div style="font-size:.75rem;color:#9ca3af;text-align:center;margin-top:.5rem;">
-                ID Iklan: #{{ str_pad($listing->id, 5, '0', STR_PAD_LEFT) }}
+                {{ $__t('ID Iklan','Listing ID') }}: #{{ str_pad($listing->id, 5, '0', STR_PAD_LEFT) }}
             </div>
         </div>
     </div>
 
-    {{-- Related --}}
     @if($related->count())
     <div class="mt-5">
-        <h4 style="font-weight:800;color:#111827;margin-bottom:1.2rem;">Produk Serupa</h4>
+        <h4 style="font-weight:800;color:#111827;margin-bottom:1.2rem;">{{ $__t('Produk Serupa','Similar Products') }}</h4>
         <div class="row g-3">
             @foreach($related as $rel)
             <div class="col-6 col-md-4 col-lg-2">
@@ -245,8 +252,10 @@
 const _pageUrl   = '{{ url('/p/' . $listing->id) }}';
 const _pageTitle = @json($listing->title);
 const _firstImg  = @json($listing->media_urls[0] ?? null);
+const _LBL_COPIED    = @json($__t('Tersalin!','Copied!'));
+const _LBL_PHOTO_OK  = @json($__t('Foto Tersalin!','Photo Copied!'));
+const _LBL_BOTH_OK   = @json($__t('Link+Foto Tersalin!','Link + Photo Copied!'));
 
-// Show native share button if supported
 if (navigator.share) document.getElementById('btnNativeShare')?.classList.remove('d-none');
 
 function switchMedia(url, isVideo, el) {
@@ -288,7 +297,7 @@ function copyLink() {
     navigator.clipboard.writeText(_pageUrl).then(() => {
         const btn = document.getElementById('btnCopyLink');
         const orig = btn.innerHTML;
-        btn.innerHTML = '<i class="bi bi-check-lg"></i> Tersalin!';
+        btn.innerHTML = '<i class="bi bi-check-lg"></i> ' + _LBL_COPIED;
         btn.style.background = '#dcfce7'; btn.style.color = '#15803d';
         setTimeout(() => { btn.innerHTML = orig; btn.style.background = '#f3f4f6'; btn.style.color = '#374151'; }, 2000);
     });
@@ -302,15 +311,14 @@ async function copyWithImage() {
         const blob = await resp.blob();
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
         const orig = btn.innerHTML;
-        btn.innerHTML = '<i class="bi bi-check-lg"></i> Foto Tersalin!';
+        btn.innerHTML = '<i class="bi bi-check-lg"></i> ' + _LBL_PHOTO_OK;
         btn.style.background = '#dcfce7'; btn.style.color = '#15803d';
         setTimeout(() => { btn.innerHTML = orig; btn.style.background = '#e0f2fe'; btn.style.color = '#0369a1'; }, 2500);
     } catch (e) {
-        // Fallback: copy rich text with image URL
         const text = `${_pageTitle}\n${_pageUrl}\n\nFoto: ${_firstImg}`;
         navigator.clipboard.writeText(text).then(() => {
             const orig = btn.innerHTML;
-            btn.innerHTML = '<i class="bi bi-check-lg"></i> Link+Foto Tersalin!';
+            btn.innerHTML = '<i class="bi bi-check-lg"></i> ' + _LBL_BOTH_OK;
             btn.style.background = '#dcfce7'; btn.style.color = '#15803d';
             setTimeout(() => { btn.innerHTML = orig; btn.style.background = '#e0f2fe'; btn.style.color = '#0369a1'; }, 2500);
         });

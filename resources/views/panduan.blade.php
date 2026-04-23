@@ -1,10 +1,18 @@
+@php
+    $__loc = \App\Support\SiteLocale::get();
+    $__t = fn($id, $en) => $__loc === 'en' ? $en : $id;
+    $__langUrl = function($target) {
+        $qs = array_merge(request()->query(), ['lang' => $target]);
+        return url()->current() . '?' . http_build_query($qs);
+    };
+@endphp
 <!DOCTYPE html>
-<html lang="id">
+<html lang="{{ $__loc }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panduan Penggunaan — MarketplaceJamaah AI</title>
-    <meta name="description" content="Panduan lengkap cara menggunakan MarketplaceJamaah: jual beli lewat WhatsApp Grup, interaksi dengan Bot AI via WA pribadi, dan fitur-fitur unggulan.">
+    <title>{{ $__t('Panduan Penggunaan — MarketplaceJamaah AI','User Guide — MarketplaceJamaah AI') }}</title>
+    <meta name="description" content="{{ $__t('Panduan lengkap cara menggunakan MarketplaceJamaah: jual beli lewat WhatsApp Grup, interaksi dengan Bot AI via WA pribadi, dan fitur-fitur unggulan.','Complete guide to using MarketplaceJamaah: trading in WhatsApp groups, interacting with the AI bot via personal WA, and key features.') }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -198,15 +206,19 @@
                 <div class="brand-logo"><i class="bi bi-shop"></i></div>
                 <div>
                     <div class="brand-name">Marketplace<span>Jamaah</span></div>
-                    <div class="brand-sub">Jual Beli Komunitas</div>
+                    <div class="brand-sub">{{ $__t('Jual Beli Komunitas','Community Marketplace') }}</div>
                 </div>
             </a>
             <div class="d-flex gap-2 align-items-center flex-wrap justify-content-end">
+                <div style="display:inline-flex; padding:3px; background:#f1f5f9; border-radius:999px; border:1px solid #e5e7eb;">
+                    <a href="{{ $__langUrl('id') }}" style="padding:.25rem .65rem; border-radius:999px; font-size:.72rem; font-weight:800; color:{{ $__loc==='id'?'#fff':'#475569' }}; background:{{ $__loc==='id'?'#0b1220':'transparent' }}; text-decoration:none;">ID</a>
+                    <a href="{{ $__langUrl('en') }}" style="padding:.25rem .65rem; border-radius:999px; font-size:.72rem; font-weight:800; color:{{ $__loc==='en'?'#fff':'#475569' }}; background:{{ $__loc==='en'?'#0b1220':'transparent' }}; text-decoration:none;">EN</a>
+                </div>
                 <a href="{{ route('landing') }}" class="btn-nav-outline d-none d-sm-flex">
-                    <i class="bi bi-grid"></i> Produk
+                    <i class="bi bi-grid"></i> {{ $__t('Produk','Products') }}
                 </a>
-                <a href="{{ route('marketing-tools') }}" class="btn-nav-outline d-none d-md-flex">
-                    <i class="bi bi-stars"></i> Fitur
+                <a href="{{ url('/fitur') }}" class="btn-nav-outline d-none d-md-flex">
+                    <i class="bi bi-stars"></i> {{ $__t('Fitur','Features') }}
                 </a>
             </div>
         </div>
@@ -216,14 +228,19 @@
 <!-- ── Hero ── -->
 <section class="hero-panduan">
     <div class="container position-relative">
-        <div class="badge-pill"><i class="bi bi-book me-1"></i>Panduan Lengkap</div>
-        <h1>Cara Menggunakan<br><span>MarketplaceJamaah</span></h1>
-        <p>Jual beli produk halal cukup lewat WhatsApp — tidak perlu aplikasi lain, tidak perlu daftar akun.</p>
+        <div class="badge-pill"><i class="bi bi-book me-1"></i>{{ $__t('Panduan Lengkap','Full Guide') }}</div>
+        <h1>{{ $__t('Cara Menggunakan','How to Use') }}<br><span>MarketplaceJamaah</span></h1>
+        <p>{{ $__t('Jual beli produk halal cukup lewat WhatsApp — tidak perlu aplikasi lain, tidak perlu daftar akun.','Buy and sell halal products through WhatsApp — no other apps, no account registration.') }}</p>
+        @if($__loc==='en')
+            <div style="margin:1rem auto 0; max-width:620px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); border-radius:12px; padding:.7rem 1rem; color:#d1fae5; font-size:.85rem;">
+                <i class="bi bi-info-circle me-1"></i> The bot itself speaks Indonesian. Commands like <code style="background:rgba(0,0,0,.3); color:#6ee7b7; padding:.1rem .4rem; border-radius:4px;">iklan saya</code> and <code style="background:rgba(0,0,0,.3); color:#6ee7b7; padding:.1rem .4rem; border-radius:4px;">edit #ID</code> must be typed as-is.
+            </div>
+        @endif
         <div class="toc-pills">
-            <a href="#pasang-iklan-wag" class="toc-pill"><i class="bi bi-people me-1"></i>Pasang Iklan via Grup</a>
-            <a href="#wapri-bot" class="toc-pill"><i class="bi bi-robot me-1"></i>WA Pribadi & Bot AI</a>
-            <a href="#perintah-bot" class="toc-pill"><i class="bi bi-chat-dots me-1"></i>Perintah Bot</a>
-            <a href="#beli-produk" class="toc-pill"><i class="bi bi-bag-check me-1"></i>Cara Beli</a>
+            <a href="#pasang-iklan-wag" class="toc-pill"><i class="bi bi-people me-1"></i>{{ $__t('Pasang Iklan via Grup','Post via Group') }}</a>
+            <a href="#wapri-bot" class="toc-pill"><i class="bi bi-robot me-1"></i>{{ $__t('WA Pribadi & Bot AI','Personal WA & AI Bot') }}</a>
+            <a href="#perintah-bot" class="toc-pill"><i class="bi bi-chat-dots me-1"></i>{{ $__t('Perintah Bot','Bot Commands') }}</a>
+            <a href="#beli-produk" class="toc-pill"><i class="bi bi-bag-check me-1"></i>{{ $__t('Cara Beli','How to Buy') }}</a>
             <a href="#faq" class="toc-pill"><i class="bi bi-question-circle me-1"></i>FAQ</a>
         </div>
     </div>
@@ -275,9 +292,9 @@
     ═══════════════════════════════════════════════════════════ -->
     <div class="row justify-content-center mb-5" id="pasang-iklan-wag">
         <div class="col-lg-10">
-            <div class="section-label">WhatsApp Grup</div>
-            <div class="section-title">Cara Pasang Iklan di Grup WA</div>
-            <p class="section-lead mb-4">Semudah chat biasa — tidak perlu login, tidak perlu isi form, tidak perlu aplikasi lain.</p>
+            <div class="section-label">{{ $__t('WhatsApp Grup','WhatsApp Group') }}</div>
+            <div class="section-title">{{ $__t('Cara Pasang Iklan di Grup WA','How to Post a Listing in the WA Group') }}</div>
+            <p class="section-lead mb-4">{{ $__t('Semudah chat biasa — tidak perlu login, tidak perlu isi form, tidak perlu aplikasi lain.','As easy as chatting — no login, no forms, no other apps.') }}</p>
 
             <div class="row g-4">
                 <div class="col-md-6">
@@ -403,9 +420,9 @@
     ═══════════════════════════════════════════════════════════ -->
     <div class="row justify-content-center mb-5" id="wapri-bot">
         <div class="col-lg-10">
-            <div class="section-label">WA Pribadi (DM)</div>
-            <div class="section-title">Interaksi dengan Bot AI Lewat WA Pribadi</div>
-            <p class="section-lead mb-4">Bot AI siap membantu 24 jam — tidak perlu hafal perintah khusus, cukup chat natural dalam Bahasa Indonesia.</p>
+            <div class="section-label">{{ $__t('WA Pribadi (DM)','Personal WA (DM)') }}</div>
+            <div class="section-title">{{ $__t('Interaksi dengan Bot AI Lewat WA Pribadi','Chat with the AI Bot via Personal WA') }}</div>
+            <p class="section-lead mb-4">{{ $__t('Bot AI siap membantu 24 jam — tidak perlu hafal perintah khusus, cukup chat natural dalam Bahasa Indonesia.','The AI bot is ready 24/7 — no special commands needed, just chat naturally in Indonesian.') }}</p>
 
             <div class="row g-4 mb-4">
                 <div class="col-md-6">
@@ -457,9 +474,9 @@
     ═══════════════════════════════════════════════════════════ -->
     <div class="row justify-content-center mb-5" id="perintah-bot">
         <div class="col-lg-10">
-            <div class="section-label">Panduan Perintah</div>
-            <div class="section-title">Apa Saja yang Bisa Kamu Minta ke Bot?</div>
-            <p class="section-lead mb-4">Tulis pesan natural dalam Bahasa Indonesia — Bot AI memahami maksudmu tanpa perlu perintah kaku.</p>
+            <div class="section-label">{{ $__t('Panduan Perintah','Command Guide') }}</div>
+            <div class="section-title">{{ $__t('Apa Saja yang Bisa Kamu Minta ke Bot?','What Can You Ask the Bot?') }}</div>
+            <p class="section-lead mb-4">{{ $__t('Tulis pesan natural dalam Bahasa Indonesia — Bot AI memahami maksudmu tanpa perlu perintah kaku.','Write natural messages in Indonesian — the AI bot understands intent without rigid commands.') }}</p>
 
             <!-- Kategori 1: Iklan -->
             <h5 class="fw-800 mb-3" style="color:#111827;font-size:1rem;">
@@ -600,9 +617,9 @@
     ═══════════════════════════════════════════════════════════ -->
     <div class="row justify-content-center mb-5" id="beli-produk">
         <div class="col-lg-10">
-            <div class="section-label">Untuk Pembeli</div>
-            <div class="section-title">Cara Membeli Produk</div>
-            <p class="section-lead mb-4">MarketplaceJamaah adalah platform listing — transaksi dilakukan langsung antara pembeli dan penjual.</p>
+            <div class="section-label">{{ $__t('Untuk Pembeli','For Buyers') }}</div>
+            <div class="section-title">{{ $__t('Cara Membeli Produk','How to Buy') }}</div>
+            <p class="section-lead mb-4">{{ $__t('MarketplaceJamaah adalah platform listing — transaksi dilakukan langsung antara pembeli dan penjual.','MarketplaceJamaah is a listing platform — transactions happen directly between buyer and seller.') }}</p>
 
             <div class="row g-3">
                 <div class="col-md-6 col-lg-3">
@@ -649,9 +666,9 @@
     ═══════════════════════════════════════════════════════════ -->
     <div class="row justify-content-center mb-5">
         <div class="col-lg-10">
-            <div class="section-label">Contoh Nyata</div>
-            <div class="section-title">Sesi Lengkap Buat Iklan via WA Pribadi</div>
-            <p class="section-lead mb-4">Kamu bisa buat iklan yang lebih kaya lewat WA Pribadi menggunakan fitur Ad Builder AI.</p>
+            <div class="section-label">{{ $__t('Contoh Nyata','Real Example') }}</div>
+            <div class="section-title">{{ $__t('Sesi Lengkap Buat Iklan via WA Pribadi','Full Session: Create a Listing via Personal WA') }}</div>
+            <p class="section-lead mb-4">{{ $__t('Kamu bisa buat iklan yang lebih kaya lewat WA Pribadi menggunakan fitur Ad Builder AI.','Create richer listings via Personal WA using the AI Ad Builder.') }}</p>
 
             <div class="row g-4">
                 <div class="col-md-6">
@@ -768,8 +785,8 @@
     <div class="row justify-content-center mb-5" id="faq">
         <div class="col-lg-10">
             <div class="section-label">FAQ</div>
-            <div class="section-title">Pertanyaan yang Sering Ditanyakan</div>
-            <p class="section-lead mb-4">Temukan jawaban untuk pertanyaan umum seputar MarketplaceJamaah.</p>
+            <div class="section-title">{{ $__t('Pertanyaan yang Sering Ditanyakan','Frequently Asked Questions') }}</div>
+            <p class="section-lead mb-4">{{ $__t('Temukan jawaban untuk pertanyaan umum seputar MarketplaceJamaah.','Find answers to common questions about MarketplaceJamaah.') }}</p>
 
             <div class="faq-item">
                 <div class="faq-q" onclick="toggleFaq(this)">
@@ -860,16 +877,16 @@
         <div class="col-lg-8">
             <div class="text-center p-4 p-md-5 rounded-4" style="background:linear-gradient(135deg,#022c22,#065f46);color:#fff;">
                 <div style="font-size:2.5rem;margin-bottom:.5rem;">🕌</div>
-                <h3 class="fw-900 mb-2" style="color:#fff;">Siap Bergabung?</h3>
+                <h3 class="fw-900 mb-2" style="color:#fff;">{{ $__t('Siap Bergabung?','Ready to Join?') }}</h3>
                 <p style="color:#a7f3d0;max-width:480px;margin:0 auto 1.5rem;font-size:.95rem;">
-                    Gabung komunitas jamaah yang jual beli dengan mudah, amanah, dan berkah lewat WhatsApp.
+                    {{ $__t('Gabung komunitas jamaah yang jual beli dengan mudah, amanah, dan berkah lewat WhatsApp.','Join the jamaah community trading easily, honestly, and with blessings through WhatsApp.') }}
                 </p>
                 <div class="d-flex gap-2 justify-content-center flex-wrap">
                     <a href="{{ route('landing') }}" class="btn-nav-primary">
-                        <i class="bi bi-shop"></i> Lihat Produk
+                        <i class="bi bi-shop"></i> {{ $__t('Lihat Produk','View Products') }}
                     </a>
-                    <a href="{{ route('marketing-tools') }}" style="background:rgba(255,255,255,.12);color:#fff;border:1.5px solid rgba(255,255,255,.25);border-radius:10px;font-size:.82rem;font-weight:700;padding:.48rem 1.2rem;text-decoration:none;display:inline-flex;align-items:center;gap:.35rem;">
-                        <i class="bi bi-stars"></i> Lihat Semua Fitur
+                    <a href="{{ url('/fitur') }}" style="background:rgba(255,255,255,.12);color:#fff;border:1.5px solid rgba(255,255,255,.25);border-radius:10px;font-size:.82rem;font-weight:700;padding:.48rem 1.2rem;text-decoration:none;display:inline-flex;align-items:center;gap:.35rem;">
+                        <i class="bi bi-stars"></i> {{ $__t('Lihat Semua Fitur','See All Features') }}
                     </a>
                 </div>
             </div>
@@ -883,11 +900,11 @@
 <footer class="pub-footer">
     <div class="container">
         <div class="d-flex flex-column flex-md-row align-items-center justify-content-between gap-3">
-            <div>© {{ date('Y') }} MarketplaceJamaah · Jual beli komunitas halal Indonesia</div>
+            <div>© {{ date('Y') }} MarketplaceJamaah · {{ $__t('Jual beli komunitas halal Indonesia','Halal Indonesia community marketplace') }}</div>
             <div class="d-flex gap-3 flex-wrap">
-                <a href="{{ route('landing') }}">Beranda</a>
-                <a href="{{ route('marketing-tools') }}">Fitur</a>
-                <a href="{{ route('panduan') }}">Panduan</a>
+                <a href="{{ route('landing') }}">{{ $__t('Beranda','Home') }}</a>
+                <a href="{{ url('/fitur') }}">{{ $__t('Fitur','Features') }}</a>
+                <a href="{{ route('panduan') }}">{{ $__t('Panduan','Guide') }}</a>
                 <a href="{{ route('release-notes') }}">Release Notes</a>
             </div>
         </div>

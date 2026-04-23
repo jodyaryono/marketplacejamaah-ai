@@ -1,10 +1,14 @@
+@php
+    $__loc = \App\Support\SiteLocale::get();
+    $__t = fn($id, $en) => $__loc === 'en' ? $en : $id;
+@endphp
 <!DOCTYPE html>
-<html lang="id">
+<html lang="{{ $__loc }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Release Notes — MarketplaceJamaah AI</title>
-    <meta name="description" content="Catatan perubahan dan pembaruan fitur MarketplaceJamaah AI — semua update terbaru platform marketplace komunitas WhatsApp.">
+    <meta name="description" content="{{ $__t('Catatan perubahan dan pembaruan fitur MarketplaceJamaah AI — semua update terbaru platform marketplace komunitas WhatsApp.','Changelog and feature updates for MarketplaceJamaah AI — all latest updates from the WhatsApp community marketplace.') }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -218,7 +222,7 @@
 <section class="page-hero">
     <div class="container position-relative" style="z-index:2;">
         <div class="eyebrow"><i class="bi bi-journal-code"></i>&nbsp;Changelog &bull; Release Notes</div>
-        <h1>Update &amp; <em>Release Notes</em></h1>
+        <h1>{{ $__t('Update','Updates') }} &amp; <em>Release Notes</em></h1>
         <p class="lead">
             Semua perubahan, fitur baru, perbaikan bug, dan peningkatan platform MarketplaceJamaah AI dicatat di sini secara kronologis.
         </p>
@@ -701,7 +705,7 @@
 <footer class="site-footer">
     <div class="container">
         <div class="footer-logo">Marketplace<span>Jamaah</span> <span style="color:rgba(255,255,255,.4);font-weight:400;font-size:.85rem;"> AI</span></div>
-        <p>Platform marketplace komunitas WhatsApp berbasis AI &bull; <a href="{{ url('/') }}">Lihat Produk</a> &bull; <a href="{{ url('/marketing-tools') }}">Fitur &amp; Cara Kerja</a> &bull; <a href="{{ url('/release-notes') }}">Release Notes</a></p>
+        <p>{{ $__t('Platform marketplace komunitas WhatsApp berbasis AI','AI-powered WhatsApp community marketplace') }} &bull; <a href="{{ url('/') }}">{{ $__t('Lihat Produk','View Products') }}</a> &bull; <a href="{{ url('/fitur') }}">{{ $__t('Fitur & Cara Kerja','Features & How It Works') }}</a> &bull; <a href="{{ url('/release-notes') }}">Release Notes</a></p>
     </div>
 </footer>
 

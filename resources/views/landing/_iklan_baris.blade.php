@@ -1,4 +1,8 @@
 {{-- Iklan Baris partial — teks tanpa foto, dipakai untuk initial render & AJAX load-more --}}
+@php
+    $__loc = \App\Support\SiteLocale::get();
+    $__t = fn($id, $en) => $__loc === 'en' ? $en : $id;
+@endphp
 @foreach($listings as $listing)
 @php
     $normalize = function ($raw) {
@@ -10,20 +14,20 @@
         return preg_match('/^62\d{8,13}$/', $digits) ? $digits : null;
     };
     $waPhone = $normalize($listing->contact_number) ?: $normalize($listing->contact?->phone_number);
-    $waText  = urlencode('Halo, saya tertarik dengan "' . $listing->title . '". Apakah masih tersedia?');
+    $waText  = urlencode(\App\Support\SiteLocale::waSellerMessage($listing->title));
     $waLink  = $waPhone ? 'https://wa.me/' . $waPhone . '?text=' . $waText : null;
-    $sellerName = $listing->contact?->name ?: ($listing->contact_name ?: 'Penjual');
+    $sellerName = $listing->contact?->name ?: ($listing->contact_name ?: $__t('Penjual','Seller'));
     $sellerLocation = $listing->location ?: $listing->contact?->address;
 
     if ($listing->price_label)                                   $priceDisplay = \Illuminate\Support\Str::limit(trim($listing->price_label), 22);
     elseif ($listing->price_min && $listing->price_max)          $priceDisplay = 'Rp ' . number_format($listing->price_min,0,',','.') . '–' . number_format($listing->price_max,0,',','.');
     elseif ($listing->price && $listing->price > 0)              $priceDisplay = 'Rp ' . number_format($listing->price,0,',','.');
-    else                                                         $priceDisplay = 'Harga Hubungi Penjual';
+    else                                                         $priceDisplay = $__t('Harga Hubungi Penjual','Price on Request');
 @endphp
 <div class="iklan-baris-row" onclick="window.location='/p/{{ $listing->id }}'" style="cursor:pointer;">
     <div class="iklan-baris-main">
         @if($listing->category)
-            <span class="iklan-baris-cat">{{ $listing->category->name }}</span>
+            <span class="iklan-baris-cat">{{ \App\Support\SiteLocale::category($listing->category->name) }}</span>
         @endif
         <div class="iklan-baris-title">{{ $listing->title }}</div>
         @if($listing->description)
@@ -42,7 +46,7 @@
     @if($waLink)
         <a href="{{ $waLink }}" target="_blank" rel="noopener" class="iklan-baris-wa"
            onclick="event.stopPropagation();">
-            <i class="bi bi-whatsapp"></i><span class="d-none d-sm-inline">Hubungi</span><span class="d-inline d-sm-none">WA</span>
+            <i class="bi bi-whatsapp"></i><span class="d-none d-sm-inline">{{ $__t('Hubungi','Contact') }}</span><span class="d-inline d-sm-none">WA</span>
         </a>
     @else
         <a href="/p/{{ $listing->id }}" class="iklan-baris-wa iklan-baris-wa--detail"

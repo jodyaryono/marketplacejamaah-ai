@@ -115,13 +115,19 @@ class LandingController extends Controller
         return view('marketing-tools', compact('totalActive', 'totalSellers', 'totalCategories', 'locale'));
     }
 
-    public function panduan()
+    public function panduan(Request $request)
     {
+        if ($request->filled('lang') && in_array($request->lang, ['id', 'en'], true)) {
+            session(['site_locale' => $request->lang]);
+        }
         return view('panduan');
     }
 
-    public function releaseNotes()
+    public function releaseNotes(Request $request)
     {
+        if ($request->filled('lang') && in_array($request->lang, ['id', 'en'], true)) {
+            session(['site_locale' => $request->lang]);
+        }
         return view('release-notes');
     }
 
