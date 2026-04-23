@@ -199,6 +199,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
     <title>{{ $tr('meta_title') }}</title>
     <meta name="description" content="{{ $tr('meta_desc') }}">
     <link rel="canonical" href="{{ url('/fitur') }}">

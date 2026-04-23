@@ -11,6 +11,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
     <title>{{ $__t('Panduan Penggunaan — MarketplaceJamaah AI','User Guide — MarketplaceJamaah AI') }}</title>
     <meta name="description" content="{{ $__t('Panduan lengkap cara menggunakan MarketplaceJamaah: jual beli lewat WhatsApp Grup, interaksi dengan Bot AI via WA pribadi, dan fitur-fitur unggulan.','Complete guide to using MarketplaceJamaah: trading in WhatsApp groups, interacting with the AI bot via personal WA, and key features.') }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">

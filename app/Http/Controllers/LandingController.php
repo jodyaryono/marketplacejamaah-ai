@@ -27,13 +27,7 @@ class LandingController extends Controller
             ->where('status', 'active')
             ->whereNotNull('media_urls')
             ->whereRaw("media_urls::text != '[]'")
-            ->orderByRaw("
-                CASE WHEN (price IS NOT NULL AND price > 0)
-                          OR (price_label IS NOT NULL AND price_label <> '')
-                          OR (price_min IS NOT NULL AND price_min > 0)
-                     THEN 0 ELSE 1 END,
-                created_at DESC
-            ");
+            ->orderByDesc('created_at');
         $this->deduplicateByContactTitle($query);
         $this->applyFilters($query, $request);
         $listings = $query->paginate($perPageMedia)->withQueryString();
@@ -44,13 +38,7 @@ class LandingController extends Controller
             ->where(function ($q) {
                 $q->whereNull('media_urls')->orWhereRaw("media_urls::text = '[]'");
             })
-            ->orderByRaw("
-                CASE WHEN (price IS NOT NULL AND price > 0)
-                          OR (price_label IS NOT NULL AND price_label <> '')
-                          OR (price_min IS NOT NULL AND price_min > 0)
-                     THEN 0 ELSE 1 END,
-                created_at DESC
-            ");
+            ->orderByDesc('created_at');
         $this->deduplicateByContactTitle($textQuery);
         $this->applyFilters($textQuery, $request);
         $textListings = $textQuery->paginate($perPageText)->withQueryString();
@@ -141,13 +129,7 @@ class LandingController extends Controller
 
         $query = Listing::with(['category', 'contact'])
             ->where('status', 'active')
-            ->orderByRaw("
-                CASE WHEN (price IS NOT NULL AND price > 0)
-                          OR (price_label IS NOT NULL AND price_label <> '')
-                          OR (price_min IS NOT NULL AND price_min > 0)
-                     THEN 0 ELSE 1 END,
-                created_at DESC
-            ");
+            ->orderByDesc('created_at');
         $this->deduplicateByContactTitle($query);
 
         if ($isText) {
