@@ -12,6 +12,13 @@ class LandingController extends Controller
 {
     public function index(Request $request)
     {
+        // ── Locale resolution (?lang=en|id, persisted in session) ──
+        if ($request->filled('lang') && in_array($request->lang, ['id', 'en'], true)) {
+            session(['site_locale' => $request->lang]);
+        }
+        $locale = session('site_locale', 'id');
+        if (!in_array($locale, ['id', 'en'], true)) $locale = 'id';
+
         $perPageMedia = (int) Setting::get('landing_listings_with_media', 6);
         $perPageText  = (int) Setting::get('landing_listings_text', 10);
 
@@ -89,15 +96,23 @@ class LandingController extends Controller
             ->limit(5)
             ->get();
 
-        return view('landing', compact('listings', 'textListings', 'categories', 'totalActive', 'heroListings', 'topCategories'));
+        return view('landing', compact('listings', 'textListings', 'categories', 'totalActive', 'heroListings', 'topCategories', 'locale'));
     }
 
-    public function marketingTools()
+    public function marketingTools(Request $request)
     {
         $totalActive = Listing::where('status', 'active')->count();
         $totalSellers = \App\Models\Contact::whereHas('listings', fn($q) => $q->where('status', 'active'))->count();
         $totalCategories = Category::where('is_active', true)->count();
-        return view('marketing-tools', compact('totalActive', 'totalSellers', 'totalCategories'));
+
+        // ── Locale resolution (?lang=en|id, persisted in session) ──
+        if ($request->filled('lang') && in_array($request->lang, ['id', 'en'], true)) {
+            session(['site_locale' => $request->lang]);
+        }
+        $locale = session('site_locale', 'id');
+        if (!in_array($locale, ['id', 'en'], true)) $locale = 'id';
+
+        return view('marketing-tools', compact('totalActive', 'totalSellers', 'totalCategories', 'locale'));
     }
 
     public function panduan()

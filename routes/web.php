@@ -20,6 +20,8 @@ use Illuminate\Support\Facades\Route;
 // Public landing page
 Route::get('/', [LandingController::class, 'index'])->name('landing');
 Route::get('/marketing-tools', [LandingController::class, 'marketingTools'])->name('marketing-tools');
+Route::get('/fitur', [LandingController::class, 'marketingTools'])->name('fitur');
+Route::get('/features', [LandingController::class, 'marketingTools'])->name('features');
 Route::get('/panduan', [LandingController::class, 'panduan'])->name('panduan');
 Route::get('/release-notes', [LandingController::class, 'releaseNotes'])->name('release-notes');
 
