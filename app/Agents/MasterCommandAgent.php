@@ -65,6 +65,10 @@ class MasterCommandAgent
                 return true;
             }
 
+            // Acknowledgment instan supaya user tahu bot lagi proses (parsing AI + eksekusi
+            // bisa makan beberapa detik). Tampil seperti typing indicator manual.
+            $this->reply("⏳ Sebentar ya, lagi menyiapkan data...");
+
             $result = $this->parseAndExecute($command, $message);
 
             $duration = (int) ((microtime(true) - $start) * 1000);
@@ -88,10 +92,20 @@ class MasterCommandAgent
 
     private function parseAndExecute(string $command, Message $message): array
     {
-        // Fast-path keyword routing — bypass AI for unambiguous bulk commands.
+        // Fast-path keyword routing — bypass AI for unambiguous commands.
+        // Hemat 1 round-trip Gemini + lebih reliable (AI kadang misparse).
         $lower = strtolower($command);
         if (preg_match('/\bapprove\b.*\b(semua|all|pending)\b/u', $lower)) {
             return $this->execApproveAllPending();
+        }
+        if (preg_match('/\b(health[\s\-]?check|cek[\s\-]?(kesehatan|sehat|sistem))\b/u', $lower)) {
+            return $this->execHealthCheck();
+        }
+        if (preg_match('/\b(status|info)\b/u', $lower) && strlen($lower) <= 20) {
+            return $this->execStatus();
+        }
+        if (preg_match('/\b(help|bantuan|menu|perintah)\b/u', $lower) && strlen($lower) <= 20) {
+            return $this->execHelp();
         }
 
         $promptTemplate = Setting::get('prompt_master_command', 'Kamu asisten marketplace. Perintah: {command}. Jawab JSON action.');
