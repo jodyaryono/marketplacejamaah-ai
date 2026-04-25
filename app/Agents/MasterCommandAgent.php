@@ -119,17 +119,26 @@ class MasterCommandAgent
 
     private function execApproveAllPending(): array
     {
-        $affected = Contact::where('onboarding_status', 'pending')
-            ->where('is_blocked', false)
+        // Approve dua kategori sekaligus:
+        //  1. pending   — sudah dapat DM tapi belum balas
+        //  2. stuck     — onboarding_status NULL & belum registered (tidak pernah dapat DM)
+        // Kebijakan: anggota grup auto-valid, no manual approval.
+        $affected = Contact::where('is_blocked', false)
+            ->where(function ($q) {
+                $q->where('onboarding_status', 'pending')
+                  ->orWhere(function ($q2) {
+                      $q2->whereNull('onboarding_status')->where('is_registered', false);
+                  });
+            })
             ->update([
                 'onboarding_status' => 'completed',
                 'is_registered' => true,
             ]);
 
         if ($affected === 0) {
-            $this->reply("✅ Tidak ada kontak `pending` yang perlu di-approve. Semua sudah bersih! 🎉");
+            $this->reply("✅ Tidak ada kontak yang perlu di-approve. Semua sudah bersih! 🎉");
         } else {
-            $this->reply("✅ Berhasil approve *{$affected} kontak* yang sebelumnya pending.\n\nMereka sekarang resmi terdaftar tanpa perlu balas DM perkenalan.");
+            $this->reply("✅ Berhasil approve *{$affected} kontak* (termasuk pending & stuck).\n\nMereka sekarang resmi terdaftar tanpa perlu balas DM perkenalan.");
         }
 
         return ['approved_count' => $affected];
@@ -287,21 +296,18 @@ class MasterCommandAgent
     {
         $issues = [];
 
-        // 1. Auto-approve siapapun yang masih nyangkut di status 'pending'.
-        // Sejak kebijakan no-manual-approval, status pending tidak boleh ada lagi.
-        // Ini self-healing — kalau ada path lama yang masih bikin pending, ke-clean otomatis.
-        $autoApproved = Contact::where('onboarding_status', 'pending')
-            ->where('is_blocked', false)
+        // 1. Auto-approve semua kontak yang nyangkut: pending + stuck (null & belum registered).
+        // Kebijakan no-manual-approval: anggota grup auto-valid, tidak perlu balas DM.
+        $autoApproved = Contact::where('is_blocked', false)
+            ->where(function ($q) {
+                $q->where('onboarding_status', 'pending')
+                  ->orWhere(function ($q2) {
+                      $q2->whereNull('onboarding_status')->where('is_registered', false);
+                  });
+            })
             ->update(['onboarding_status' => 'completed', 'is_registered' => true]);
 
-        // 2. Kontak tanpa onboarding_status tapi sudah > 1 hari (stuck / tidak dapat DM)
-        $stuckContacts = Contact::whereNull('onboarding_status')
-            ->where('is_registered', false)
-            ->where('is_blocked', false)
-            ->where('created_at', '<', now()->subDay())
-            ->get(['name', 'phone_number', 'created_at']);
-
-        // 3. Kontak dengan warning tinggi tapi belum banned
+        // 2. Kontak dengan warning tinggi tapi belum banned
         $highWarning = Contact::where('warning_count', '>=', 2)
             ->where('is_blocked', false)
             ->get(['name', 'phone_number', 'warning_count', 'total_violations']);
@@ -322,19 +328,7 @@ class MasterCommandAgent
 
         // Auto-approval notice (kalau ada yang baru saja diapprove tahap ini)
         if ($autoApproved > 0) {
-            $report .= "✅ *Auto-approved {$autoApproved} kontak* yang masih `pending` (kebijakan: no manual approval).\n\n";
-        }
-
-        // Stuck (no onboarding DM received)
-        if ($stuckContacts->count()) {
-            $count = $stuckContacts->count();
-            $report .= "🔴 *Stuck — tidak dapat DM onboarding ({$count} orang):*\n";
-            foreach ($stuckContacts as $c) {
-                $since = \Carbon\Carbon::parse($c->created_at)->diffForHumans();
-                $report .= "   • *{$c->name}* ({$c->phone_number}) — bergabung {$since}\n";
-            }
-            $report .= "\n";
-            $issues[] = 'stuck_onboarding';
+            $report .= "✅ *Auto-approved {$autoApproved} kontak* (pending + stuck) — kebijakan no-manual-approval.\n\n";
         }
 
         // High warning

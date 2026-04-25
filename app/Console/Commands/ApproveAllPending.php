@@ -9,11 +9,18 @@ class ApproveAllPending extends Command
 {
     protected $signature = 'members:approve-pending {--dry-run}';
 
-    protected $description = 'Bulk-approve all contacts stuck at onboarding_status=pending (mark as registered + completed)';
+    protected $description = 'Bulk-approve all contacts stuck at pending OR null status (mark as registered + completed)';
 
     public function handle(): int
     {
-        $query = Contact::where('onboarding_status', 'pending')->where('is_blocked', false);
+        // Approve dua kategori: pending + stuck (null status & belum registered).
+        $query = Contact::where('is_blocked', false)
+            ->where(function ($q) {
+                $q->where('onboarding_status', 'pending')
+                  ->orWhere(function ($q2) {
+                      $q2->whereNull('onboarding_status')->where('is_registered', false);
+                  });
+            });
         $count = $query->count();
 
         if ($count === 0) {
