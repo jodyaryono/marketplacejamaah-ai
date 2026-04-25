@@ -10,7 +10,8 @@ Artisan::command('inspire', function () {
 
 Schedule::command('gateway:verify --quiet-ok')->everyThirtyMinutes();
 
-Schedule::command('hadith:send')->everyMinute();
+// NOTE: hadith:send is already registered in bootstrap/app.php withSchedule().
+// Do NOT re-register here — double registration causes the hadith to be sent twice.
 
 Schedule::command('listings:expire --days=30')->dailyAt('02:00');
 
