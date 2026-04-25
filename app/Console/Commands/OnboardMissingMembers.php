@@ -115,7 +115,7 @@ class OnboardMissingMembers extends Command
                     . 'Eh, saya belum kenal nih — boleh tau nama Kakak siapa? 😊';
 
                 $wa->sendMessage($phone, $intro);
-                $contact->update(['onboarding_status' => 'pending']);
+                $contact->update(['onboarding_status' => 'completed', 'is_registered' => true]);
                 $stats['sent']++;
 
                 Log::info("OnboardMissingMembers: sent DM to {$phone}");

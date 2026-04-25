@@ -140,7 +140,7 @@
                     </div>
                     <div class="d-flex justify-content-between mb-1">
                         <span class="text-muted">Job failed</span>
-                        <strong id="queue-failed" class="{{ ($lastQueuePing['failed'] ?? 0) > 0 ? 'text-danger' : '' }}">{{ $lastQueuePing ? $lastQueuePing['failed'] : '-' }}</strong>
+                        <strong id="queue-failed" class="{{ ($lastQueuePing['recent_failed'] ?? 0) > 0 ? 'text-danger' : (($lastQueuePing['failed'] ?? 0) > 0 ? 'text-muted' : '') }}">{{ $lastQueuePing ? ($lastQueuePing['failed'] . (($lastQueuePing['recent_failed'] ?? 0) > 0 ? " ({$lastQueuePing['recent_failed']} dlm 1 jam)" : '')) : '-' }}</strong>
                     </div>
                     <div class="d-flex justify-content-between mb-2">
                         <span class="text-muted">Sukses 1 jam terakhir</span>
@@ -587,8 +587,9 @@ async function pingQueue() {
         document.getElementById('queue-dot').className = 'status-dot ' + (data.ok ? 'ok' : 'fail');
         document.getElementById('queue-pending').textContent = data.pending ?? '-';
         const failedEl = document.getElementById('queue-failed');
-        failedEl.textContent = data.failed ?? '-';
-        failedEl.className = (data.failed > 0) ? 'text-danger' : '';
+        const recent = data.recent_failed ?? 0;
+        failedEl.textContent = (data.failed ?? '-') + (recent > 0 ? ` (${recent} dlm 1 jam)` : '');
+        failedEl.className = recent > 0 ? 'text-danger' : ((data.failed ?? 0) > 0 ? 'text-muted' : '');
         document.getElementById('queue-success').textContent = data.success_last_1h ?? '-';
         document.getElementById('queue-ping-result').textContent = data.ok
             ? `✅ OK · ${data.latency}ms`

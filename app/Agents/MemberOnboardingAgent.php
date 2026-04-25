@@ -71,7 +71,9 @@ class MemberOnboardingAgent
 
             $this->whacenter->sendMessage($message->sender_number, $intro);
 
-            $contact->update(['onboarding_status' => 'pending']);
+            // Auto-approve: anggota grup dianggap sah tanpa perlu balas DM dulu.
+            // Kalau mereka balas, BotQueryAgent yang handle (bukan onboarding lagi).
+            $contact->update(['onboarding_status' => 'completed', 'is_registered' => true]);
 
             $log->update(['status' => 'success', 'output_payload' => ['action' => 'onboarding_dm_sent']]);
         } catch (\Exception $e) {
@@ -173,7 +175,7 @@ class MemberOnboardingAgent
             // Conversational response — AI crafted a natural reply
             if ($type === 'conversation') {
                 $reply = $parsed['reply'] ?? '';
-                if ($reply) {
+                if ($reply && !$this->isDuplicateOfLastBotMessage($message->sender_number, $reply)) {
                     $this->whacenter->sendMessage($message->sender_number, $reply);
                 }
                 $log->update(['status' => 'skipped', 'output_payload' => ['reason' => 'conversation', 'reply' => $reply]]);
@@ -218,7 +220,9 @@ class MemberOnboardingAgent
                     else
                         $reply = "Oke *{$sapaan}*! Di grup ini ada jual beli, kamu tertarik jualan, belanja, atau dua-duanya? 😊";
                 }
-                $this->whacenter->sendMessage($message->sender_number, $reply);
+                if (!$this->isDuplicateOfLastBotMessage($message->sender_number, $reply)) {
+                    $this->whacenter->sendMessage($message->sender_number, $reply);
+                }
                 $log->update(['status' => 'skipped', 'output_payload' => ['reason' => 'partial_data', 'parsed' => $parsed]]);
                 return true;
             }
@@ -331,7 +335,9 @@ class MemberOnboardingAgent
 
             if (!$parsed || ($parsed['type'] ?? '') === 'conversation') {
                 $reply = $parsed['reply'] ?? "Boleh cerita dong *{$senderName}*, {$roleContext} apa nih? 😊";
-                $this->whacenter->sendMessage($message->sender_number, $reply);
+                if (!$this->isDuplicateOfLastBotMessage($message->sender_number, $reply)) {
+                    $this->whacenter->sendMessage($message->sender_number, $reply);
+                }
                 $log->update(['status' => 'skipped', 'output_payload' => ['reason' => 'conversation', 'parsed' => $parsed]]);
                 return true;
             }
@@ -568,7 +574,9 @@ class MemberOnboardingAgent
 
             if (!$parsed || ($parsed['type'] ?? '') === 'conversation') {
                 $reply = $parsed['reply'] ?? "Maaf ya *{$senderName}*, bisa kasih tau nama, kota, dan mau jualan/belanja? Contoh: _\"{$senderName}, Jakarta, mau jualan\"_ 🙏";
-                $this->whacenter->sendMessage($message->sender_number, $reply);
+                if (!$this->isDuplicateOfLastBotMessage($message->sender_number, $reply)) {
+                    $this->whacenter->sendMessage($message->sender_number, $reply);
+                }
                 $log->update(['status' => 'skipped', 'output_payload' => ['reason' => 'conversation_or_failed', 'parsed' => $parsed]]);
                 return true;
             }
@@ -741,6 +749,31 @@ class MemberOnboardingAgent
             $log->update(['status' => 'failed', 'error' => $e->getMessage()]);
             throw $e;
         }
+    }
+
+    /**
+     * Prevent the bot from sending the exact same question/reply it sent last.
+     * Protects against loops where the AI can't extract new data from a confused
+     * reply and keeps asking the same thing.
+     */
+    private function isDuplicateOfLastBotMessage(string $phone, string $reply): bool
+    {
+        $normalize = fn(string $s) => trim(preg_replace('/\s+/u', ' ', $s));
+        $target = $normalize($reply);
+        if ($target === '') {
+            return false;
+        }
+
+        $lastBotMsg = Message::where('sender_number', 'bot')
+            ->where('recipient_number', $phone)
+            ->orderByDesc('created_at')
+            ->value('raw_body');
+
+        if (!$lastBotMsg) {
+            return false;
+        }
+
+        return $normalize($lastBotMsg) === $target;
     }
 
     private function fallbackParse(string $text): array

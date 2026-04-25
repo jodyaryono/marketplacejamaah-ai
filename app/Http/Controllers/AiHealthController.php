@@ -228,19 +228,27 @@ class AiHealthController extends Controller
         try {
             $pending = DB::table('jobs')->count();
             $failed = DB::table('failed_jobs')->count();
+            // Recent failures are the actionable signal; stale failed_jobs rows
+            // shouldn't keep the indicator red forever.
+            $recentFailed = DB::table('failed_jobs')
+                ->where('failed_at', '>=', now()->subHour())
+                ->count();
             $stuck = AgentLog::where('status', 'processing')
                 ->where('created_at', '<', now()->subMinutes(5))
                 ->count();
             $successH = AgentLog::where('status', 'success')
                 ->where('created_at', '>=', now()->subHour())
                 ->count();
+            // Worker is alive if it processed something recently OR has nothing to do.
+            $workerAlive = $successH > 0 || $pending === 0;
             $ms = (int) ((microtime(true) - $start) * 1000);
 
             $payload = [
-                'ok' => $failed === 0 && $stuck === 0,
+                'ok' => $workerAlive && $stuck === 0 && $recentFailed === 0,
                 'latency' => $ms,
                 'pending' => (int) $pending,
                 'failed' => (int) $failed,
+                'recent_failed' => (int) $recentFailed,
                 'stuck' => (int) $stuck,
                 'success_last_1h' => (int) $successH,
                 'at' => now()->format('H:i:s'),
@@ -261,18 +269,55 @@ class AiHealthController extends Controller
     {
         $start = microtime(true);
         try {
-            // Supervisor processes
             $processes = [];
+            $source = 'none';
+
+            // Strategy 1: try supervisorctl. May fail silently if PHP-FPM user
+            // (www-data) lacks access to /var/run/supervisor.sock — that's fine,
+            // we fall through to ps below.
             $raw = @shell_exec('supervisorctl status 2>/dev/null') ?? '';
             foreach (explode("\n", trim($raw)) as $line) {
-                if (!trim($line))
+                if (!trim($line)) {
                     continue;
+                }
                 if (preg_match('/^(\S+)\s+(\S+)\s*(.*)$/', $line, $m)) {
                     $processes[] = [
                         'name' => $m[1],
                         'status' => $m[2],
                         'detail' => trim($m[3]),
                     ];
+                }
+            }
+            if (!empty($processes)) {
+                $source = 'supervisor';
+            }
+
+            // Strategy 2: fall back to ps if supervisorctl returned nothing.
+            // We look for the workers we actually care about by command line.
+            if (empty($processes)) {
+                $psRaw = @shell_exec('ps -eo pid,args 2>/dev/null') ?? '';
+                $patterns = [
+                    'queue-worker' => '/artisan\s+queue:work/',
+                    'reverb' => '/artisan\s+reverb:start/',
+                    'scheduler' => '/artisan\s+schedule:(run|work)/',
+                ];
+                $found = array_fill_keys(array_keys($patterns), 0);
+                foreach (explode("\n", $psRaw) as $line) {
+                    foreach ($patterns as $name => $rx) {
+                        if (preg_match($rx, $line)) {
+                            $found[$name]++;
+                        }
+                    }
+                }
+                foreach ($found as $name => $count) {
+                    $processes[] = [
+                        'name' => $name,
+                        'status' => $count > 0 ? 'RUNNING' : 'STOPPED',
+                        'detail' => $count > 0 ? "{$count} proses" : 'tidak terdeteksi',
+                    ];
+                }
+                if ($psRaw !== '') {
+                    $source = 'ps';
                 }
             }
 
@@ -286,14 +331,32 @@ class AiHealthController extends Controller
 
             $ms = (int) ((microtime(true) - $start) * 1000);
 
-            // ok = all marketplacejamaah processes RUNNING
-            $appProcs = array_filter($processes, fn($p) => str_contains($p['name'], 'marketplacejamaah') || $p['name'] === 'integrasi-wa');
-            $allOk = count($appProcs) > 0 && count(array_filter($appProcs, fn($p) => $p['status'] !== 'RUNNING')) === 0;
+            // Determine "ok": at least the queue worker should be running.
+            // For supervisor source, every app process must be RUNNING.
+            // For ps source, queue-worker must be RUNNING (reverb is optional).
+            if ($source === 'supervisor') {
+                $appProcs = array_filter(
+                    $processes,
+                    fn($p) => str_contains($p['name'], 'marketplacejamaah') || $p['name'] === 'integrasi-wa'
+                );
+                $allOk = count($appProcs) > 0
+                    && count(array_filter($appProcs, fn($p) => $p['status'] !== 'RUNNING')) === 0;
+            } elseif ($source === 'ps') {
+                $queueRunning = collect($processes)
+                    ->first(fn($p) => $p['name'] === 'queue-worker' && $p['status'] === 'RUNNING');
+                $allOk = (bool) $queueRunning;
+            } else {
+                // Couldn't run ps either — likely shell_exec disabled. Don't
+                // claim red just because we can't introspect; surface as unknown.
+                $allOk = true;
+                $processes = [['name' => '(introspeksi tidak tersedia)', 'status' => 'UNKNOWN', 'detail' => 'shell_exec disabled atau supervisor tidak terpasang']];
+            }
 
             $payload = [
                 'ok' => $allOk,
                 'latency' => $ms,
                 'processes' => $processes,
+                'source' => $source,
                 'disk_free_gb' => round($diskFree / 1073741824, 1),
                 'disk_used_pct' => $diskUsed,
                 'load_1m' => $load[0] ?? null,

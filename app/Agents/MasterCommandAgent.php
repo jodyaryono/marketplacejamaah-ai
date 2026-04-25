@@ -88,6 +88,12 @@ class MasterCommandAgent
 
     private function parseAndExecute(string $command, Message $message): array
     {
+        // Fast-path keyword routing — bypass AI for unambiguous bulk commands.
+        $lower = strtolower($command);
+        if (preg_match('/\bapprove\b.*\b(semua|all|pending)\b/u', $lower)) {
+            return $this->execApproveAllPending();
+        }
+
         $promptTemplate = Setting::get('prompt_master_command', 'Kamu asisten marketplace. Perintah: {command}. Jawab JSON action.');
         $prompt = str_replace('{command}', $command, $promptTemplate);
 
@@ -97,6 +103,7 @@ class MasterCommandAgent
         return match ($action) {
             'system_health_report' => $this->execSystemHealthReport(),
             'health_check' => $this->execHealthCheck(),
+            'approve_all_pending' => $this->execApproveAllPending(),
             'send_dm' => $this->execSendDm($parsed),
             'send_group' => $this->execSendGroup($parsed),
             'ban_user' => $this->execBanUser($parsed),
@@ -108,6 +115,24 @@ class MasterCommandAgent
             'help' => $this->execHelp(),
             default => $this->execUnknown($command),
         };
+    }
+
+    private function execApproveAllPending(): array
+    {
+        $affected = Contact::where('onboarding_status', 'pending')
+            ->where('is_blocked', false)
+            ->update([
+                'onboarding_status' => 'completed',
+                'is_registered' => true,
+            ]);
+
+        if ($affected === 0) {
+            $this->reply("✅ Tidak ada kontak `pending` yang perlu di-approve. Semua sudah bersih! 🎉");
+        } else {
+            $this->reply("✅ Berhasil approve *{$affected} kontak* yang sebelumnya pending.\n\nMereka sekarang resmi terdaftar tanpa perlu balas DM perkenalan.");
+        }
+
+        return ['approved_count' => $affected];
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -262,10 +287,12 @@ class MasterCommandAgent
     {
         $issues = [];
 
-        // 1. Kontak pending onboarding (belum complete, belum banned)
-        $pendingOnboarding = Contact::where('onboarding_status', 'pending')
+        // 1. Auto-approve siapapun yang masih nyangkut di status 'pending'.
+        // Sejak kebijakan no-manual-approval, status pending tidak boleh ada lagi.
+        // Ini self-healing — kalau ada path lama yang masih bikin pending, ke-clean otomatis.
+        $autoApproved = Contact::where('onboarding_status', 'pending')
             ->where('is_blocked', false)
-            ->get(['name', 'phone_number', 'onboarding_status', 'created_at']);
+            ->update(['onboarding_status' => 'completed', 'is_registered' => true]);
 
         // 2. Kontak tanpa onboarding_status tapi sudah > 1 hari (stuck / tidak dapat DM)
         $stuckContacts = Contact::whereNull('onboarding_status')
@@ -293,16 +320,9 @@ class MasterCommandAgent
         $report = "🏥 *Health Check Marketplace Jamaah*\n";
         $report .= '_' . now()->format('d/m/Y H:i') . ' WIB_' . "\n\n";
 
-        // Pending approval
-        if ($pendingOnboarding->count()) {
-            $count = $pendingOnboarding->count();
-            $report .= "🟡 *Perlu di-approve manual ({$count} orang):*\n";
-            foreach ($pendingOnboarding as $c) {
-                $since = \Carbon\Carbon::parse($c->created_at)->diffForHumans();
-                $report .= "   • *{$c->name}* ({$c->phone_number}) — sejak {$since}\n";
-            }
-            $report .= "\n";
-            $issues[] = 'pending_onboarding';
+        // Auto-approval notice (kalau ada yang baru saja diapprove tahap ini)
+        if ($autoApproved > 0) {
+            $report .= "✅ *Auto-approved {$autoApproved} kontak* yang masih `pending` (kebijakan: no manual approval).\n\n";
         }
 
         // Stuck (no onboarding DM received)

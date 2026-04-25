@@ -18,3 +18,8 @@ Schedule::command('listings:expire --days=30')->dailyAt('02:00');
 Schedule::command('agent-logs:prune --days=30')->dailyAt('03:00');
 
 Schedule::command('messages:prune')->hourly();
+
+// Safety net: auto-approve sisa kontak `pending` setiap 10 menit.
+// Sejak kebijakan no-manual-approval, status pending tidak dipakai lagi —
+// ini cuma jaring kalau ada path lama / migrasi yang masih bikin pending.
+Schedule::command('members:approve-pending')->everyTenMinutes()->withoutOverlapping();
