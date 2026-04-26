@@ -109,26 +109,35 @@ class AiHealthController extends Controller
      */
     public function pingGemini(GeminiService $gemini)
     {
-        // Test primary (Gemini) directly via HTTP — bypass the auto-fallback in
-        // generateContent() so we can report Gemini status independently from Groq.
-        $primary = $this->pingGeminiDirect();
-
-        // Always also test the Groq fallback so user knows if at least the
-        // backup AI works when Gemini is down.
-        $fallback = $gemini->pingGroqFallback();
-
-        // Card is green if EITHER path works (system can still serve AI).
-        $payload = [
-            'ok' => $primary['ok'] || $fallback['ok'],
-            'latency' => $primary['latency'],
-            'response' => $primary['response'] ?? '(no response)',
-            'error' => $primary['ok'] ? null : ($primary['error'] ?? 'Gemini gagal'),
-            'fallback' => [
-                'ok' => $fallback['ok'],
-                'model' => $fallback['model'] ?? 'groq',
-                'response' => $fallback['response'] ?? '',
-                'error' => $fallback['error'],
+        // Ping all configured AI models — primary text (Gemini) + fallback text (Groq).
+        // Vision models are listed but not pinged (they need image input + cost more).
+        $models = [
+            $this->pingGeminiText() + ['provider' => 'Gemini', 'role' => 'primary text', 'type' => 'text'],
+            $this->pingGroqText($gemini) + ['provider' => 'Groq', 'role' => 'fallback text', 'type' => 'text'],
+            [
+                'provider' => 'Gemini',
+                'role' => 'vision (image analysis)',
+                'type' => 'vision',
+                'model' => config('services.gemini.model', '-'),
+                'ok' => null, // not pinged — informational only
+                'configured' => !empty(config('services.gemini.api_key')),
             ],
+            [
+                'provider' => 'Groq',
+                'role' => 'vision fallback',
+                'type' => 'vision',
+                'model' => config('services.groq.vision_model', '-'),
+                'ok' => null,
+                'configured' => !empty(config('services.groq.api_key')),
+            ],
+        ];
+
+        // Card is green if at least one TEXT model works (system can still respond).
+        $textOk = collect($models)->where('type', 'text')->contains(fn($m) => $m['ok'] === true);
+
+        $payload = [
+            'ok' => $textOk,
+            'models' => $models,
             'at' => now()->format('H:i:s'),
         ];
         Cache::put('health_gemini_last', $payload, now()->addHours(6));
@@ -136,14 +145,14 @@ class AiHealthController extends Controller
     }
 
     /**
-     * Direct HTTP call to Gemini, no fallback, no caching. Returns latency + ok/error.
+     * Direct HTTP ping to Gemini text endpoint (no fallback, no caching).
      */
-    private function pingGeminiDirect(): array
+    private function pingGeminiText(): array
     {
         $start = microtime(true);
+        $model = config('services.gemini.model', 'gemini-flash-latest');
         try {
             $apiKey = config('services.gemini.api_key');
-            $model = config('services.gemini.model', 'gemini-2.0-flash');
             $endpoint = rtrim(config('services.gemini.endpoint', 'https://generativelanguage.googleapis.com/v1beta/models'), '/');
             $url = "{$endpoint}/{$model}:generateContent";
             $resp = Http::timeout(15)->post($url . '?key=' . urlencode($apiKey), [
@@ -152,14 +161,21 @@ class AiHealthController extends Controller
             ]);
             $ms = (int) ((microtime(true) - $start) * 1000);
             if ($resp->failed()) {
-                return ['ok' => false, 'latency' => $ms, 'response' => null, 'error' => 'HTTP ' . $resp->status() . ': ' . mb_substr($resp->body(), 0, 150)];
+                return ['model' => $model, 'ok' => false, 'latency' => $ms, 'error' => 'HTTP ' . $resp->status() . ': ' . mb_substr(strip_tags($resp->body()), 0, 120)];
             }
             $text = trim($resp->json('candidates.0.content.parts.0.text') ?? '');
-            return ['ok' => str_contains(strtolower($text), 'pong'), 'latency' => $ms, 'response' => $text, 'error' => null];
+            return ['model' => $model, 'ok' => str_contains(strtolower($text), 'pong'), 'latency' => $ms, 'response' => $text, 'error' => null];
         } catch (\Throwable $e) {
-            $ms = (int) ((microtime(true) - $start) * 1000);
-            return ['ok' => false, 'latency' => $ms, 'response' => null, 'error' => $e->getMessage()];
+            return ['model' => $model, 'ok' => false, 'latency' => (int)((microtime(true) - $start) * 1000), 'error' => $e->getMessage()];
         }
+    }
+
+    private function pingGroqText(GeminiService $gemini): array
+    {
+        $start = microtime(true);
+        $r = $gemini->pingGroqFallback();
+        $ms = (int) ((microtime(true) - $start) * 1000);
+        return ['model' => $r['model'] ?? config('services.groq.model'), 'ok' => $r['ok'], 'latency' => $ms, 'response' => $r['response'] ?? '', 'error' => $r['error']];
     }
 
     /**

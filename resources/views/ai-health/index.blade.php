@@ -58,31 +58,32 @@
                     <span id="gemini-dot" class="status-dot {{ $lastGeminiPing ? ($lastGeminiPing['ok'] ? 'ok' : 'fail') : 'unknown' }}"></span>
                 </div>
                 <div style="font-size:.78rem;color:#374151;">
-                    <div class="d-flex justify-content-between mb-1">
-                        <span class="text-muted">API Key</span>
-                        <code style="font-size:.72rem;color:#6b7280;">{{ $geminiKeyMasked }}</code>
-                    </div>
                     <div class="d-flex justify-content-between mb-2">
                         <span class="text-muted">Ping terakhir</span>
                         <span id="gemini-last-at">{{ $lastGeminiPing ? $lastGeminiPing['at'] : '-' }}</span>
                     </div>
-                    <div id="gemini-ping-result" class="mb-1" style="font-size:.72rem;color:#6b7280;min-height:16px;">
-                        @if($lastGeminiPing)
-                            @if(($lastGeminiPing['error'] ?? null) === null)
-                                ✅ Gemini · {{ $lastGeminiPing['latency'] ?? '-' }}ms — {{ $lastGeminiPing['response'] ?? '' }}
-                            @else
-                                ❌ Gemini: {{ $lastGeminiPing['error'] }}
-                            @endif
-                        @endif
-                    </div>
-                    <div id="gemini-fallback-result" class="mb-2" style="font-size:.72rem;min-height:16px;">
-                        @if(!empty($lastGeminiPing['fallback']))
-                            <span class="text-muted">Fallback ({{ $lastGeminiPing['fallback']['model'] ?? 'groq' }}):</span>
-                            @if($lastGeminiPing['fallback']['ok'] ?? false)
-                                <span class="text-success">✅ OK</span>
-                            @else
-                                <span class="text-danger">❌ {{ $lastGeminiPing['fallback']['error'] ?? 'gagal' }}</span>
-                            @endif
+                    <div id="gemini-models-list" class="mb-2" style="font-size:.7rem;">
+                        @if(!empty($lastGeminiPing['models']))
+                            @foreach($lastGeminiPing['models'] as $m)
+                                <div class="d-flex justify-content-between align-items-start mb-1" style="border-bottom:1px dashed #e5e7eb;padding-bottom:3px;">
+                                    <div style="flex:1;min-width:0;">
+                                        <div><strong>{{ $m['provider'] }}</strong> <span class="text-muted">— {{ $m['role'] }}</span></div>
+                                        <div class="text-muted" style="font-size:.65rem;word-break:break-all;">{{ $m['model'] }}</div>
+                                    </div>
+                                    <div class="text-end ms-2" style="white-space:nowrap;">
+                                        @if($m['ok'] === true)
+                                            <span class="text-success">✅ OK</span>
+                                            @if(!empty($m['latency'])) <span class="text-muted" style="font-size:.65rem;">{{ $m['latency'] }}ms</span> @endif
+                                        @elseif($m['ok'] === false)
+                                            <span class="text-danger" title="{{ $m['error'] ?? '' }}">❌</span>
+                                        @else
+                                            <span class="text-muted" style="font-size:.65rem;">{{ ($m['configured'] ?? false) ? 'configured' : 'not set' }}</span>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endforeach
+                        @else
+                            <div class="text-muted">Klik Test Ping untuk lihat status semua model.</div>
                         @endif
                     </div>
                 </div>
@@ -533,22 +534,26 @@ async function pingGemini() {
         const dot = document.getElementById('gemini-dot');
         dot.className = 'status-dot ' + (data.ok ? 'ok' : 'fail');
         document.getElementById('gemini-last-at').textContent = data.at ?? '-';
-        const primaryEl = document.getElementById('gemini-ping-result');
-        if (!data.error) {
-            primaryEl.textContent = `✅ Gemini · ${data.latency}ms — ${data.response}`;
-            primaryEl.style.color = '';
-        } else {
-            primaryEl.textContent = `❌ Gemini: ${data.error}`;
-            primaryEl.style.color = '#dc2626';
-        }
-        const fbEl = document.getElementById('gemini-fallback-result');
-        if (data.fallback) {
-            const fb = data.fallback;
-            fbEl.innerHTML = `<span class="text-muted">Fallback (${fb.model || 'groq'}):</span> ` +
-                (fb.ok ? '<span class="text-success">✅ OK</span>'
-                       : `<span class="text-danger">❌ ${fb.error || 'gagal'}</span>`);
-        } else {
-            fbEl.textContent = '';
+        const listEl = document.getElementById('gemini-models-list');
+        const escape = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        if (data.models && data.models.length) {
+            listEl.innerHTML = data.models.map(m => {
+                let statusHtml;
+                if (m.ok === true) {
+                    statusHtml = `<span class="text-success">✅ OK</span>` + (m.latency ? ` <span class="text-muted" style="font-size:.65rem;">${m.latency}ms</span>` : '');
+                } else if (m.ok === false) {
+                    statusHtml = `<span class="text-danger" title="${escape(m.error || '')}">❌</span>`;
+                } else {
+                    statusHtml = `<span class="text-muted" style="font-size:.65rem;">${m.configured ? 'configured' : 'not set'}</span>`;
+                }
+                return `<div class="d-flex justify-content-between align-items-start mb-1" style="border-bottom:1px dashed #e5e7eb;padding-bottom:3px;">
+                    <div style="flex:1;min-width:0;">
+                        <div><strong>${escape(m.provider)}</strong> <span class="text-muted">— ${escape(m.role)}</span></div>
+                        <div class="text-muted" style="font-size:.65rem;word-break:break-all;">${escape(m.model)}</div>
+                    </div>
+                    <div class="text-end ms-2" style="white-space:nowrap;">${statusHtml}</div>
+                </div>`;
+            }).join('');
         }
         document.getElementById('btn-ping-gemini').innerHTML = '<i class="bi bi-send me-1"></i> Test Ping';
     } catch(e) {

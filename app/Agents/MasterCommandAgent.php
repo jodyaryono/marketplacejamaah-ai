@@ -366,10 +366,12 @@ class MasterCommandAgent
             })
             ->update(['onboarding_status' => 'completed', 'is_registered' => true]);
 
-        // 2. Kontak dengan warning tinggi tapi belum banned
-        $highWarning = Contact::where('warning_count', '>=', 2)
+        // 2. Auto-clear semua peringatan. Kebijakan: tidak ada peringatan manual yang
+        // perlu di-review. Sistem moderasi tetap aktif (auto-warn + auto-ban kalau threshold
+        // tercapai dalam 1 sesi), tapi peringatan tidak akan terakumulasi & dilaporkan.
+        $resetWarnings = Contact::where('warning_count', '>', 0)
             ->where('is_blocked', false)
-            ->get(['name', 'phone_number', 'warning_count', 'total_violations']);
+            ->update(['warning_count' => 0, 'total_violations' => 0]);
 
         // 4. Listing tanpa KATEGORI (data benar-benar bermasalah).
         // NULL price tidak dianggap masalah — banyak iklan legit pakai "harga nego/hubungi"
@@ -390,15 +392,9 @@ class MasterCommandAgent
             $report .= "✅ *Auto-approved {$autoApproved} kontak* (pending + stuck) — kebijakan no-manual-approval.\n\n";
         }
 
-        // High warning
-        if ($highWarning->count()) {
-            $count = $highWarning->count();
-            $report .= "⚠️ *Peringatan tinggi — perlu perhatian admin ({$count} orang):*\n";
-            foreach ($highWarning as $c) {
-                $report .= "   • *{$c->name}* ({$c->phone_number}) — {$c->warning_count}x peringatan, {$c->total_violations}x pelanggaran\n";
-            }
-            $report .= "\n";
-            $issues[] = 'high_warning';
+        // Auto-cleared warnings notice
+        if ($resetWarnings > 0) {
+            $report .= "🧹 *Reset peringatan {$resetWarnings} kontak* — kebijakan no-manual-warning-review.\n\n";
         }
 
         // Incomplete listings
