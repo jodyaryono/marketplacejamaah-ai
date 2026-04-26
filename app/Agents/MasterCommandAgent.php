@@ -59,6 +59,14 @@ class MasterCommandAgent
         try {
             $command = trim($message->raw_body ?? '');
 
+            // Abaikan tipe non-text (location, image, sticker, audio, video, document, contact).
+            // Master DM yang share lokasi / kirim foto bukan command — jangan trigger AI parser.
+            $type = $message->message_type ?? 'conversation';
+            if (!in_array($type, ['conversation', 'extendedTextMessage', 'text'], true)) {
+                $log->update(['status' => 'skipped', 'output_payload' => ['reason' => 'non_text_type', 'type' => $type]]);
+                return true;
+            }
+
             if ($command === '') {
                 $this->reply('Halo Master! 👋 Silakan ketik perintah yang ingin dijalankan.');
                 $log->update(['status' => 'skipped']);
@@ -107,6 +115,12 @@ class MasterCommandAgent
         if (preg_match('/\b(help|bantuan|menu|perintah)\b/u', $lower) && strlen($lower) <= 20) {
             return $this->execHelp();
         }
+        // "hapus peringatan 628..." / "reset warning 628..." / "clear warning all"
+        if (preg_match('/\b(hapus|reset|clear)\s+(peringatan|warning|warn)\b/u', $lower)) {
+            $phone = $this->normalizePhone($command);
+            $isAll = preg_match('/\b(semua|all)\b/u', $lower);
+            return $this->execResetWarning($phone, (bool) $isAll);
+        }
 
         $promptTemplate = Setting::get('prompt_master_command', 'Kamu asisten marketplace. Perintah: {command}. Jawab JSON action.');
         $prompt = str_replace('{command}', $command, $promptTemplate);
@@ -118,6 +132,10 @@ class MasterCommandAgent
             'system_health_report' => $this->execSystemHealthReport(),
             'health_check' => $this->execHealthCheck(),
             'approve_all_pending' => $this->execApproveAllPending(),
+            'reset_warning' => $this->execResetWarning(
+                $this->normalizePhone($parsed['phone'] ?? ''),
+                (bool) ($parsed['all'] ?? false)
+            ),
             'send_dm' => $this->execSendDm($parsed),
             'send_group' => $this->execSendGroup($parsed),
             'ban_user' => $this->execBanUser($parsed),
@@ -129,6 +147,33 @@ class MasterCommandAgent
             'help' => $this->execHelp(),
             default => $this->execUnknown($command),
         };
+    }
+
+    private function execResetWarning(string $phone, bool $all = false): array
+    {
+        if ($all) {
+            $affected = Contact::where('warning_count', '>', 0)
+                ->where('is_blocked', false)
+                ->update(['warning_count' => 0, 'total_violations' => 0]);
+            $this->reply("✅ Reset peringatan untuk *{$affected} kontak*.");
+            return ['reset_all' => true, 'count' => $affected];
+        }
+
+        if ($phone === '') {
+            $this->reply("⚠️ Format: `hapus peringatan 628xxx` atau `hapus peringatan semua`.");
+            return ['error' => 'no_phone'];
+        }
+
+        $contact = Contact::where('phone_number', $phone)->first();
+        if (!$contact) {
+            $this->reply("⚠️ Kontak *{$phone}* tidak ditemukan.");
+            return ['error' => 'not_found'];
+        }
+
+        $contact->update(['warning_count' => 0, 'total_violations' => 0]);
+        $name = $contact->name ?? $phone;
+        $this->reply("✅ Peringatan untuk *{$name}* ({$phone}) sudah di-reset ke 0.");
+        return ['reset' => $phone];
     }
 
     private function execApproveAllPending(): array
@@ -326,10 +371,10 @@ class MasterCommandAgent
             ->where('is_blocked', false)
             ->get(['name', 'phone_number', 'warning_count', 'total_violations']);
 
-        // 4. Listing tanpa kategori atau tanpa harga (data tidak lengkap)
-        $incompleteListing = Listing::where(function ($q) {
-            $q->whereNull('price')->orWhereNull('category_id');
-        })
+        // 4. Listing tanpa KATEGORI (data benar-benar bermasalah).
+        // NULL price tidak dianggap masalah — banyak iklan legit pakai "harga nego/hubungi"
+        // tanpa angka, AI extractor sengaja tidak mengisi price.
+        $incompleteListing = Listing::whereNull('category_id')
             ->where('status', 'active')
             ->count();
 
@@ -358,7 +403,7 @@ class MasterCommandAgent
 
         // Incomplete listings
         if ($incompleteListing > 0) {
-            $report .= "📦 *Iklan data tidak lengkap:* {$incompleteListing} iklan aktif tanpa harga/kategori\n\n";
+            $report .= "📦 *Iklan tanpa kategori:* {$incompleteListing} iklan aktif (susah dicari di filter kategori)\n\n";
             $issues[] = 'incomplete_listings';
         }
 
