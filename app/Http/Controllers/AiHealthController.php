@@ -109,28 +109,56 @@ class AiHealthController extends Controller
      */
     public function pingGemini(GeminiService $gemini)
     {
+        // Test primary (Gemini) directly via HTTP — bypass the auto-fallback in
+        // generateContent() so we can report Gemini status independently from Groq.
+        $primary = $this->pingGeminiDirect();
+
+        // Always also test the Groq fallback so user knows if at least the
+        // backup AI works when Gemini is down.
+        $fallback = $gemini->pingGroqFallback();
+
+        // Card is green if EITHER path works (system can still serve AI).
+        $payload = [
+            'ok' => $primary['ok'] || $fallback['ok'],
+            'latency' => $primary['latency'],
+            'response' => $primary['response'] ?? '(no response)',
+            'error' => $primary['ok'] ? null : ($primary['error'] ?? 'Gemini gagal'),
+            'fallback' => [
+                'ok' => $fallback['ok'],
+                'model' => $fallback['model'] ?? 'groq',
+                'response' => $fallback['response'] ?? '',
+                'error' => $fallback['error'],
+            ],
+            'at' => now()->format('H:i:s'),
+        ];
+        Cache::put('health_gemini_last', $payload, now()->addHours(6));
+        return response()->json($payload);
+    }
+
+    /**
+     * Direct HTTP call to Gemini, no fallback, no caching. Returns latency + ok/error.
+     */
+    private function pingGeminiDirect(): array
+    {
         $start = microtime(true);
         try {
-            $result = $gemini->generateContent('Reply with the single word: PONG');
+            $apiKey = config('services.gemini.api_key');
+            $model = config('services.gemini.model', 'gemini-2.0-flash');
+            $endpoint = rtrim(config('services.gemini.endpoint', 'https://generativelanguage.googleapis.com/v1beta/models'), '/');
+            $url = "{$endpoint}/{$model}:generateContent";
+            $resp = Http::timeout(15)->post($url . '?key=' . urlencode($apiKey), [
+                'contents' => [['parts' => [['text' => 'Reply with the single word: PONG']]]],
+                'generationConfig' => ['temperature' => 0, 'maxOutputTokens' => 16],
+            ]);
             $ms = (int) ((microtime(true) - $start) * 1000);
-            $ok = $result && str_contains(strtolower($result), 'pong');
-
-            $payload = [
-                'ok' => $ok,
-                'latency' => $ms,
-                'response' => trim($result ?? '(no response)'),
-                'at' => now()->format('H:i:s'),
-            ];
-            Cache::put('health_gemini_last', $payload, now()->addHours(6));
-            return response()->json($payload);
+            if ($resp->failed()) {
+                return ['ok' => false, 'latency' => $ms, 'response' => null, 'error' => 'HTTP ' . $resp->status() . ': ' . mb_substr($resp->body(), 0, 150)];
+            }
+            $text = trim($resp->json('candidates.0.content.parts.0.text') ?? '');
+            return ['ok' => str_contains(strtolower($text), 'pong'), 'latency' => $ms, 'response' => $text, 'error' => null];
         } catch (\Throwable $e) {
-            $payload = [
-                'ok' => false,
-                'error' => $e->getMessage(),
-                'at' => now()->format('H:i:s'),
-            ];
-            Cache::put('health_gemini_last', $payload, now()->addHours(6));
-            return response()->json($payload, 500);
+            $ms = (int) ((microtime(true) - $start) * 1000);
+            return ['ok' => false, 'latency' => $ms, 'response' => null, 'error' => $e->getMessage()];
         }
     }
 
@@ -272,24 +300,32 @@ class AiHealthController extends Controller
             $processes = [];
             $source = 'none';
 
-            // Strategy 1: try supervisorctl. May fail silently if PHP-FPM user
-            // (www-data) lacks access to /var/run/supervisor.sock — that's fine,
-            // we fall through to ps below.
-            $raw = @shell_exec('supervisorctl status 2>/dev/null') ?? '';
-            foreach (explode("\n", trim($raw)) as $line) {
-                if (!trim($line)) {
-                    continue;
+            // Strategy 1: try supervisorctl. May fail if PHP-FPM user (www-data)
+            // lacks access to /var/run/supervisor.sock — supervisorctl prints
+            // "error: <class 'PermissionError'>..." to STDOUT (not stderr) in
+            // some versions, so we detect that pattern explicitly and skip.
+            $raw = trim(@shell_exec('supervisorctl status 2>/dev/null') ?? '');
+            $isSupervisorError = $raw === ''
+                || str_starts_with($raw, 'error:')
+                || str_contains($raw, 'PermissionError')
+                || str_contains($raw, 'refused connection');
+
+            if (!$isSupervisorError) {
+                foreach (explode("\n", $raw) as $line) {
+                    if (!trim($line)) {
+                        continue;
+                    }
+                    if (preg_match('/^(\S+)\s+(\S+)\s*(.*)$/', $line, $m)) {
+                        $processes[] = [
+                            'name' => $m[1],
+                            'status' => $m[2],
+                            'detail' => trim($m[3]),
+                        ];
+                    }
                 }
-                if (preg_match('/^(\S+)\s+(\S+)\s*(.*)$/', $line, $m)) {
-                    $processes[] = [
-                        'name' => $m[1],
-                        'status' => $m[2],
-                        'detail' => trim($m[3]),
-                    ];
+                if (!empty($processes)) {
+                    $source = 'supervisor';
                 }
-            }
-            if (!empty($processes)) {
-                $source = 'supervisor';
             }
 
             // Strategy 2: fall back to ps if supervisorctl returned nothing.

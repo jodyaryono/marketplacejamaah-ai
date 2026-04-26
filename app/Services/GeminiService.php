@@ -272,6 +272,36 @@ class GeminiService
      * Call Groq (OpenAI-compatible chat completions) as a fallback for text generation.
      * Returns null if no API key is configured or the call fails.
      */
+    /**
+     * Public ping for the Groq fallback path. Returns ['ok'=>bool, 'response'=>string|null,
+     * 'error'=>string|null, 'model'=>string]. Used by AiHealthController to verify the
+     * fallback works even when primary Gemini is down.
+     */
+    public function pingGroqFallback(string $prompt = 'Reply with the single word: PONG'): array
+    {
+        if (empty($this->groqApiKey)) {
+            return ['ok' => false, 'response' => null, 'error' => 'GROQ_API_KEY not configured', 'model' => $this->groqModel];
+        }
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->groqApiKey,
+                'Content-Type'  => 'application/json',
+            ])->timeout(15)->post($this->groqEndpoint, [
+                'model'       => $this->groqModel,
+                'messages'    => [['role' => 'user', 'content' => $prompt]],
+                'temperature' => 0,
+                'max_tokens'  => 16,
+            ]);
+            if ($response->failed()) {
+                return ['ok' => false, 'response' => null, 'error' => 'HTTP ' . $response->status() . ': ' . mb_substr($response->body(), 0, 120), 'model' => $this->groqModel];
+            }
+            $text = trim($response->json('choices.0.message.content') ?? '');
+            return ['ok' => str_contains(strtolower($text), 'pong'), 'response' => $text, 'error' => null, 'model' => $this->groqModel];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'response' => null, 'error' => $e->getMessage(), 'model' => $this->groqModel];
+        }
+    }
+
     private function callGroq(string $prompt): ?string
     {
         if (empty($this->groqApiKey)) {

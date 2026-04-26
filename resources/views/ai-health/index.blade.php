@@ -66,12 +66,21 @@
                         <span class="text-muted">Ping terakhir</span>
                         <span id="gemini-last-at">{{ $lastGeminiPing ? $lastGeminiPing['at'] : '-' }}</span>
                     </div>
-                    <div id="gemini-ping-result" class="mb-2" style="font-size:.72rem;color:#6b7280;min-height:16px;">
+                    <div id="gemini-ping-result" class="mb-1" style="font-size:.72rem;color:#6b7280;min-height:16px;">
                         @if($lastGeminiPing)
-                            @if($lastGeminiPing['ok'])
-                                ✅ {{ $lastGeminiPing['latency'] ?? '-' }}ms — {{ $lastGeminiPing['response'] ?? '' }}
+                            @if(($lastGeminiPing['error'] ?? null) === null)
+                                ✅ Gemini · {{ $lastGeminiPing['latency'] ?? '-' }}ms — {{ $lastGeminiPing['response'] ?? '' }}
                             @else
-                                ❌ {{ $lastGeminiPing['error'] ?? 'Gagal' }}
+                                ❌ Gemini: {{ $lastGeminiPing['error'] }}
+                            @endif
+                        @endif
+                    </div>
+                    <div id="gemini-fallback-result" class="mb-2" style="font-size:.72rem;min-height:16px;">
+                        @if(!empty($lastGeminiPing['fallback']))
+                            @php($fb = $lastGeminiPing['fallback'])
+                            <span class="text-muted">Fallback ({{ $fb['model'] ?? 'groq' }}):</span>
+                            @if($fb['ok']) <span class="text-success">✅ OK</span>
+                            @else <span class="text-danger">❌ {{ $fb['error'] ?? 'gagal' }}</span>
                             @endif
                         @endif
                     </div>
@@ -523,9 +532,23 @@ async function pingGemini() {
         const dot = document.getElementById('gemini-dot');
         dot.className = 'status-dot ' + (data.ok ? 'ok' : 'fail');
         document.getElementById('gemini-last-at').textContent = data.at ?? '-';
-        document.getElementById('gemini-ping-result').textContent = data.ok
-            ? `✅ ${data.latency}ms — ${data.response}`
-            : `❌ ${data.error ?? 'Gagal'}`;
+        const primaryEl = document.getElementById('gemini-ping-result');
+        if (!data.error) {
+            primaryEl.textContent = `✅ Gemini · ${data.latency}ms — ${data.response}`;
+            primaryEl.style.color = '';
+        } else {
+            primaryEl.textContent = `❌ Gemini: ${data.error}`;
+            primaryEl.style.color = '#dc2626';
+        }
+        const fbEl = document.getElementById('gemini-fallback-result');
+        if (data.fallback) {
+            const fb = data.fallback;
+            fbEl.innerHTML = `<span class="text-muted">Fallback (${fb.model || 'groq'}):</span> ` +
+                (fb.ok ? '<span class="text-success">✅ OK</span>'
+                       : `<span class="text-danger">❌ ${fb.error || 'gagal'}</span>`);
+        } else {
+            fbEl.textContent = '';
+        }
         document.getElementById('btn-ping-gemini').innerHTML = '<i class="bi bi-send me-1"></i> Test Ping';
     } catch(e) {
         document.getElementById('gemini-ping-result').textContent = '❌ Request error: ' + e.message;
