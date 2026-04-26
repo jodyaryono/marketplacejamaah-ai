@@ -495,14 +495,30 @@ function setLoading(btnId, loading) {
     }
 }
 
+// Centralized POST helper. Auto-detects expired session (419 CSRF / 401 auth)
+// and reloads the page — Laravel's auth middleware will then redirect to /login.
+let _sessionExpiredNoticed = false;
+async function pingFetch(url) {
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
+    });
+    if (res.status === 419 || res.status === 401) {
+        if (!_sessionExpiredNoticed) {
+            _sessionExpiredNoticed = true;
+            alert('Sesi login Anda sudah berakhir. Halaman akan di-refresh untuk login ulang.');
+            window.location.reload();
+        }
+        throw new Error('Session expired');
+    }
+    return res;
+}
+
 async function pingGemini() {
     setLoading('btn-ping-gemini', true);
     document.getElementById('gemini-ping-result').textContent = '⏳ Menguji koneksi...';
     try {
-        const res = await fetch('{{ route("ai-health.ping-gemini") }}', {
-            method: 'POST',
-            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
-        });
+        const res = await pingFetch('{{ route("ai-health.ping-gemini") }}');
         const data = await res.json();
         const dot = document.getElementById('gemini-dot');
         dot.className = 'status-dot ' + (data.ok ? 'ok' : 'fail');
@@ -542,10 +558,7 @@ async function pingWa() {
     setLoading('btn-ping-wa', true);
     document.getElementById('wa-ping-result').textContent = '⏳ Menguji koneksi...';
     try {
-        const res = await fetch('{{ route("ai-health.ping-whacenter") }}', {
-            method: 'POST',
-            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
-        });
+        const res = await pingFetch('{{ route("ai-health.ping-whacenter") }}');
         const data = await res.json();
         const dot = document.getElementById('wa-dot');
         dot.className = 'status-dot ' + (data.ok ? 'ok' : 'fail');
@@ -579,10 +592,7 @@ async function pingQueue() {
     setLoading('btn-ping-queue', true);
     document.getElementById('queue-ping-result').textContent = '⏳ Mengecek queue...';
     try {
-        const res = await fetch('{{ route("ai-health.ping-queue") }}', {
-            method: 'POST',
-            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
-        });
+        const res = await pingFetch('{{ route("ai-health.ping-queue") }}');
         const data = await res.json();
         document.getElementById('queue-dot').className = 'status-dot ' + (data.ok ? 'ok' : 'fail');
         document.getElementById('queue-pending').textContent = data.pending ?? '-';
@@ -605,10 +615,7 @@ async function pingDb() {
     setLoading('btn-ping-db', true);
     document.getElementById('db-ping-result').textContent = '⏳ Mengecek database...';
     try {
-        const res = await fetch('{{ route("ai-health.ping-database") }}', {
-            method: 'POST',
-            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
-        });
+        const res = await pingFetch('{{ route("ai-health.ping-database") }}');
         const data = await res.json();
         document.getElementById('db-dot').className = 'status-dot ' + (data.ok ? 'ok' : 'fail');
         if (data.version) document.getElementById('db-version').textContent = data.version.substring(0, 45);
@@ -631,10 +638,7 @@ async function pingSystem() {
     setLoading('btn-ping-sys', true);
     document.getElementById('sys-ping-result').textContent = '⏳ Mengecek sistem...';
     try {
-        const res = await fetch('{{ route("ai-health.ping-system") }}', {
-            method: 'POST',
-            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
-        });
+        const res = await pingFetch('{{ route("ai-health.ping-system") }}');
         const data = await res.json();
         document.getElementById('sys-dot').className = 'status-dot ' + (data.ok ? 'ok' : 'fail');
         document.getElementById('sys-disk').textContent = data.disk_free_gb != null
