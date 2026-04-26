@@ -77,10 +77,11 @@
                     </div>
                     <div id="gemini-fallback-result" class="mb-2" style="font-size:.72rem;min-height:16px;">
                         @if(!empty($lastGeminiPing['fallback']))
-                            @php($fb = $lastGeminiPing['fallback'])
-                            <span class="text-muted">Fallback ({{ $fb['model'] ?? 'groq' }}):</span>
-                            @if($fb['ok']) <span class="text-success">✅ OK</span>
-                            @else <span class="text-danger">❌ {{ $fb['error'] ?? 'gagal' }}</span>
+                            <span class="text-muted">Fallback ({{ $lastGeminiPing['fallback']['model'] ?? 'groq' }}):</span>
+                            @if($lastGeminiPing['fallback']['ok'] ?? false)
+                                <span class="text-success">✅ OK</span>
+                            @else
+                                <span class="text-danger">❌ {{ $lastGeminiPing['fallback']['error'] ?? 'gagal' }}</span>
                             @endif
                         @endif
                     </div>
