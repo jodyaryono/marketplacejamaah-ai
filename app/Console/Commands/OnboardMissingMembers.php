@@ -23,7 +23,9 @@ class OnboardMissingMembers extends Command
 
     public function handle(WhacenterService $wa): int
     {
-        $groupId = $this->option('group') ?: config('services.wa_gateway.group_id');
+        $groupId = $this->option('group')
+            ?: config('services.wa_gateway.group_id')
+            ?: \App\Models\WhatsappGroup::where('is_active', true)->value('group_id');
         $isDryRun = (bool) $this->option('dry-run');
         $delay = max(6, (int) $this->option('delay'));   // enforce minimum 6s gap
         $maxSend = min(50, max(1, (int) $this->option('max-send')));  // hard cap: 1–50
