@@ -316,7 +316,7 @@ class AdBuilderAgent
         }
 
         // Confirm & post
-        if (preg_match('/^\s*(ya|yes|ok|oke|iya|post|posting|setuju|lanjut|kirim)\s*$/iu', $text)) {
+        if (preg_match('/^\s*(ya|yes|ok|oke|iya|post|posting|setuju|lanjut|kirim|(posting|post|kirim)\s+ke\s+grup)\s*$/iu', $text)) {
             return $this->confirmAndPost($message, $draft, $onBehalfPasmal);
         }
 
