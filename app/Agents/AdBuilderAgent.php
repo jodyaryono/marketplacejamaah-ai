@@ -289,6 +289,10 @@ class AdBuilderAgent
     {
         $phone = $message->sender_number;
         $text = trim($message->raw_body ?? '');
+        // Strip square brackets so users who copy literal "[teks]" placeholders still work
+        // e.g. "edit [harga 75000]" → "edit harga 75000"
+        $text = preg_replace('/[\[\]]/', '', $text);
+        $text = trim(preg_replace('/\s+/', ' ', $text));
         $draft = $state['draft'] ?? [];
         $onBehalfPasmal = !empty($state['on_behalf_pasmal']);
 
@@ -363,23 +367,59 @@ class AdBuilderAgent
                 return '';
             }
 
-            return "❓ Field tidak dikenali. Field yang bisa diedit:\n"
-                . "• *edit judul* [teks]\n"
-                . "• *edit harga* [nilai]\n"
-                . "• *edit deskripsi* [teks]\n"
-                . "• *edit kategori* [nama]\n"
-                . "• *edit kondisi* [baru/bekas]\n"
-                . "• *edit lokasi* [teks]\n\n"
-                . "Atau ketik *ya* untuk posting, *batal* untuk batal.";
+            // Field tidak dikenali — fall through to AI enrichment so user's intent
+            // ("edit info pengiriman ojol", "edit ada garansi 1 minggu") tetap dipakai.
         }
 
-        // Re-show preview with hint
-        $hint = "ℹ️ Ketik salah satu perintah berikut:\n"
-            . "• *ya* → posting iklan ke grup\n"
-            . "• *edit [field] [nilai]* → ubah detail\n"
-            . "• *batal* → batalkan\n\n"
-            . $this->formatDraftPreview($draft, $onBehalfPasmal);
-        $this->pushPreview($phone, $draft, $hint);
+        // Anything else: treat as enrichment info & let AI merge into the draft.
+        // Covers natural inputs like "tambah info ojol same day", "ada garansi 1 bulan",
+        // "edit free ongkir Jabodetabek", etc.
+        return $this->enrichDraftWithText($message, $state, $text);
+    }
+
+    /**
+     * Use Gemini to merge free-form user text into the existing draft, then re-show preview.
+     * Used when user input in 'reviewing' step doesn't match strict ya/edit/cancel commands.
+     */
+    private function enrichDraftWithText(Message $message, array $state, string $text): string
+    {
+        $phone = $message->sender_number;
+        $draft = $state['draft'] ?? [];
+        $onBehalfPasmal = !empty($state['on_behalf_pasmal']);
+
+        $this->whacenter->sendMessage($phone, '⏳ _Memperbarui iklan dengan info baru..._');
+
+        $mergePrompt = 'Kamu copywriter Marketplace Jamaah (komunitas jual-beli Muslim Indonesia). '
+            . 'Tambahkan / perbarui draft iklan di bawah ini dengan info baru dari penjual. '
+            . 'Pertahankan struktur AIDA, bahasa santai-profesional, tanpa clickbait, tanpa klaim berlebihan. '
+            . "\n\n"
+            . 'Info baru dari penjual: "' . $text . '"' . "\n"
+            . 'Draft saat ini: ' . json_encode($draft, JSON_UNESCAPED_UNICODE) . "\n\n"
+            . 'Aturan update:' . "\n"
+            . '- Jika info menyebut harga (Rp, ribu, juta, "150k") → update price (angka bulat) dan price_label.' . "\n"
+            . '- Jika menyebut kondisi → update condition (baru/bekas).' . "\n"
+            . '- Jika menyebut lokasi/kota → update location.' . "\n"
+            . '- Jika menyebut info pengiriman, garansi, kelengkapan, syarat order → integrasikan ke description (rephrase agar mengalir, jangan tempel mentah).' . "\n"
+            . '- Title boleh diperbaiki agar lebih punchy (max 60 karakter) jika info baru memunculkan keunggulan.' . "\n"
+            . '- Notes: kosongkan jika info sudah cukup; isi saran ringkas jika masih ada gap.' . "\n\n"
+            . 'Jawab HANYA dengan JSON valid struktur sama dengan draft.';
+
+        $result = $this->gemini->generateJson($mergePrompt);
+
+        if ($result && !empty($result['title'])) {
+            $result['media_url'] = $draft['media_url'] ?? null;
+            $draft = $result;
+        }
+
+        $newState = ['step' => 'reviewing', 'draft' => $draft];
+        if ($onBehalfPasmal) $newState['on_behalf_pasmal'] = true;
+        Cache::put(self::CACHE_PREFIX . $phone, $newState, now()->addMinutes(self::CACHE_TTL_MINUTES));
+
+        $this->pushPreview(
+            $phone,
+            $draft,
+            "✅ *Draft diperbarui dengan info barumu!*\n\n" . $this->formatDraftPreview($draft, $onBehalfPasmal)
+        );
         return '';
     }
 
