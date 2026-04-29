@@ -110,20 +110,34 @@ class AdBuilderAgent
             $categories = Category::where('is_active', true)->pluck('name')->implode(', ');
 
             $promptTemplate = Setting::get('prompt_ad_builder_polish',
-                'Kamu adalah AI asisten marketplace online Muslim Indonesia. '
-                . 'Analisa gambar produk ini dan buat draft iklan yang menarik, profesional, dan lengkap. '
+                'Kamu adalah AI copywriter marketing untuk *Marketplace Jamaah* — komunitas jual-beli Muslim Indonesia. '
+                . 'Tugasmu: ubah foto + catatan penjual menjadi iklan yang MENJUAL, ramah, dan dapat dipercaya. '
+                . "\n\n"
                 . 'Detail dari penjual: "{caption}". '
                 . 'Kategori tersedia: {categories}. '
-                . 'Jawab HANYA dengan JSON (tanpa teks lain):'
-                . '{"title":"Judul iklan singkat dan menarik (maks 60 karakter)",'
-                . '"description":"Deskripsi lengkap produk: fitur, ukuran, warna, kondisi (2-4 kalimat)",'
-                . '"price":0,'
-                . '"price_label":"",'
-                . '"price_type":"fix atau nego atau lelang — deteksi dari caption/gambar, default fix",'
-                . '"category":"Pilih dari kategori tersedia",'
-                . '"condition":"baru atau bekas",'
-                . '"location":"Lokasi dari caption atau kosong jika tidak ada",'
-                . '"notes":"Catatan jika ada info penting yang kurang dari penjual, atau kosong"}'
+                . "\n\n"
+                . 'PRINSIP COPYWRITING (WAJIB):' . "\n"
+                . '1. Title — Hook + clarity. Sebut produk + 1 keunggulan utama. Max 60 karakter. Hindari ALL CAPS. Boleh 1 emoji relevan di awal.' . "\n"
+                . '2. Description — Pakai struktur AIDA dalam 3-5 kalimat:' . "\n"
+                . '   • Kalimat 1: Hook yang menyentuh manfaat / problem solving (bukan sekadar nama produk).' . "\n"
+                . '   • Kalimat 2-3: Spesifikasi konkret (ukuran, bahan, warna, fitur) + 1-2 benefit nyata bagi user (bukan fitur kosong).' . "\n"
+                . '   • Kalimat 4: Bukti / kondisi / kelengkapan untuk membangun trust ("masih mulus", "fullset", "garansi pribadi", dll).' . "\n"
+                . '   • Kalimat 5 (opsional): Soft CTA halal — contoh "Cocok untuk hadiah", "Stok terbatas, japri sekarang ya".' . "\n"
+                . '3. Bahasa: Indonesia santai-profesional. Boleh sapaan "Kak" / "Sahabat Jamaah". Hindari clickbait, hindari klaim berlebihan, hindari kata "termurah" tanpa dasar.' . "\n"
+                . '4. Halal-aware: Jangan promosikan riba, judi, alkohol, produk haram. Jika gambar mengandung itu, set title kosong dan notes berisi peringatan.' . "\n"
+                . '5. Emoji: maksimal 2-3 di description, hanya yang relevan (📏 ukuran, 🎁 hadiah, ✨ baru, 🔄 second, dll). Jangan spam.' . "\n"
+                . '6. Harga: extract HANYA jika eksplisit di caption atau gambar. Jangan menebak. Jika tidak ada → price=0, price_label="".' . "\n"
+                . "\n"
+                . 'Jawab HANYA dengan JSON valid (tanpa markdown, tanpa teks lain):' . "\n"
+                . '{"title":"Judul marketing maks 60 karakter",' . "\n"
+                . ' "description":"Deskripsi AIDA 3-5 kalimat sesuai aturan di atas",' . "\n"
+                . ' "price":0,' . "\n"
+                . ' "price_label":"",' . "\n"
+                . ' "price_type":"fix|nego|lelang — deteksi dari caption, default fix",' . "\n"
+                . ' "category":"Pilih satu dari kategori tersedia",' . "\n"
+                . ' "condition":"baru atau bekas",' . "\n"
+                . ' "location":"Lokasi dari caption atau kosong",' . "\n"
+                . ' "notes":"Saran ke penjual jika ada info penting yang masih kurang (mis. ukuran/lokasi/kontak), atau kosong"}'
             );
 
             $prompt = str_replace(
@@ -224,13 +238,20 @@ class AdBuilderAgent
         // User provided extra info — ask Gemini to merge it into the draft
         $this->whacenter->sendMessage($phone, '⏳ _Memperbarui draft iklan..._');
 
-        $mergePrompt = 'Perbarui draft iklan berikut dengan informasi tambahan dari penjual. '
-            . 'Informasi tambahan: "' . $text . '". '
-            . 'Draft saat ini: ' . json_encode($draft, JSON_UNESCAPED_UNICODE) . '. '
-            . 'Jawab HANYA dengan JSON yang sama strukturnya, diperbarui dengan info baru. '
-            . 'Jika info tambahan menyebutkan harga, update price dan price_label. '
-            . 'Jika menyebutkan kondisi, update condition. Jika lokasi, update location. '
-            . 'Jika ada tambahan deskripsi, gabungkan ke description yang ada.';
+        $mergePrompt = 'Kamu copywriter Marketplace Jamaah (komunitas jual-beli Muslim Indonesia). '
+            . 'Perbarui draft iklan dengan info tambahan dari penjual, TETAP pertahankan struktur AIDA, '
+            . 'bahasa santai-profesional, tanpa clickbait, dan tanpa klaim berlebihan. '
+            . "\n\n"
+            . 'Info tambahan dari penjual: "' . $text . '"' . "\n"
+            . 'Draft saat ini: ' . json_encode($draft, JSON_UNESCAPED_UNICODE) . "\n\n"
+            . 'Aturan update:' . "\n"
+            . '- Jika info tambahan menyebut harga (Rp, ribu, juta, "150k", dll) → update price (angka bulat) dan price_label (label asli).' . "\n"
+            . '- Jika menyebut kondisi → update condition (baru/bekas).' . "\n"
+            . '- Jika menyebut lokasi/kota → update location.' . "\n"
+            . '- Jika ada deskripsi/spek baru → integrasikan ke description (jangan tempel mentah; rephrase agar mengalir natural & tetap AIDA).' . "\n"
+            . '- Title boleh diperbaiki agar lebih punchy bila info baru memunculkan keunggulan (max 60 karakter).' . "\n"
+            . '- Notes: kosongkan jika info sudah cukup; isi dengan saran ringkas jika masih ada gap penting.' . "\n\n"
+            . 'Jawab HANYA dengan JSON valid struktur sama dengan draft.';
 
         $result = $this->gemini->generateJson($mergePrompt);
 
