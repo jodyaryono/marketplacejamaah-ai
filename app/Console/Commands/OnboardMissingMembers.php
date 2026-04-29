@@ -19,7 +19,7 @@ class OnboardMissingMembers extends Command
 
     protected $description = 'Find group members not yet onboarded and send them intro DMs';
 
-    private const ACTIVE_STATUSES = ['pending', 'pending_seller_products', 'pending_buyer_products', 'pending_both_products', 'completed'];
+    private const ACTIVE_STATUSES = ['pending', 'pending_seller_products', 'pending_buyer_products', 'pending_both_products', 'completed', 'skipped_legacy'];
 
     public function handle(WhacenterService $wa): int
     {
