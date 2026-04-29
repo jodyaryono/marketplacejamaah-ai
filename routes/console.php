@@ -23,3 +23,11 @@ Schedule::command('messages:prune')->hourly();
 // Sejak kebijakan no-manual-approval, status pending tidak dipakai lagi —
 // ini cuma jaring kalau ada path lama / migrasi yang masih bikin pending.
 Schedule::command('members:approve-pending')->everyTenMinutes()->withoutOverlapping();
+
+// Safety net: gateway webhook `group_join` kadang missed (whatsapp-web.js unreliable).
+// Sapu ulang anggota grup yang belum diregister/onboarding setiap 15 menit.
+// --force skip confirm prompt; --max-send=10 + delay 6s = ~60s/run, aman di rate limiter.
+Schedule::command('onboard:missing --force --max-send=10 --delay=6')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping(20)
+    ->runInBackground();
