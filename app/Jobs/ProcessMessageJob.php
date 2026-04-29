@@ -776,6 +776,22 @@ class ProcessMessageJob implements ShouldQueue
             }
         }
 
+        // Caption text is more authoritative than vision-derived data for price/description/contact.
+        // Vision rarely OCRs caption text, so we extract from raw_body when it's substantive.
+        $caption = trim($message->raw_body ?? '');
+        $captionPrice = null;
+        $captionPriceLabel = null;
+        $captionContact = null;
+        if (mb_strlen($caption) >= 10) {
+            [$captionPrice, $captionPriceLabel] = $this->extractPriceFromText($caption);
+            $captionContact = $this->extractPhoneFromText($caption);
+        }
+
+        $finalPrice = $captionPrice ?? ($adData['price'] ?? null);
+        $finalPriceLabel = $captionPriceLabel ?? ($adData['price_label'] ?? null);
+        $finalContactNumber = $captionContact ?? $contactNumber;
+        $finalDescription = $caption !== '' ? $caption : ($adData['description'] ?? $adData['visible_text'] ?? null);
+
         $listing = \App\Models\Listing::updateOrCreate(
             ['message_id' => $message->id],
             [
@@ -783,10 +799,10 @@ class ProcessMessageJob implements ShouldQueue
                 'category_id' => $categoryId,
                 'contact_id' => $contactId,
                 'title' => $title,
-                'description' => $adData['description'] ?? $adData['visible_text'] ?? null,
-                'price' => $adData['price'] ?? null,
-                'price_label' => $adData['price_label'] ?? null,
-                'contact_number' => $contactNumber,
+                'description' => $finalDescription,
+                'price' => $finalPrice,
+                'price_label' => $finalPriceLabel,
+                'contact_number' => $finalContactNumber,
                 'location' => $adData['location'] ?? null,
                 'condition' => $adData['condition'] ?? 'unknown',
                 'media_urls' => $message->media_url ? [$message->media_url] : [],
@@ -1029,5 +1045,51 @@ class ProcessMessageJob implements ShouldQueue
         } catch (\Exception $e) {
             Log::warning('ProcessMessageJob: acknowledgeLabel failed', ['error' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * Extract price (in IDR) from caption text. Returns [int|null $price, string|null $label].
+     * Recognises: "Rp 1.350.000", "Rp. 150rb", "150 ribu", "1,5 juta", "Harga: 75000".
+     */
+    private function extractPriceFromText(string $text): array
+    {
+        $patterns = [
+            '/(?:rp\.?\s*|harga\s*[:\-]?\s*rp?\.?\s*)([\d][\d\.,]{2,})\s*(rb|ribu|jt|juta|k)?\b/i',
+            '/\b([\d][\d\.,]{2,})\s*(rb|ribu|jt|juta|k)\b/i',
+        ];
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $text, $m)) {
+                $raw = $m[1];
+                $unit = strtolower($m[2] ?? '');
+                $numStr = str_replace(['.', ','], ['', '.'], $raw);
+                $num = (float) $numStr;
+                if (in_array($unit, ['rb', 'ribu', 'k'])) {
+                    $num *= 1000;
+                } elseif (in_array($unit, ['jt', 'juta'])) {
+                    $num *= 1000000;
+                }
+                $price = (int) round($num);
+                if ($price < 1000) {
+                    continue;
+                }
+                $label = trim($m[0]);
+                return [$price, $label];
+            }
+        }
+        return [null, null];
+    }
+
+    /**
+     * Extract Indonesian phone number from text. Returns 62xxxxxxxxxx or null.
+     */
+    private function extractPhoneFromText(string $text): ?string
+    {
+        if (preg_match('/(?:\+?62|0)8[\d\-\s]{7,14}\d/', $text, $m)) {
+            $digits = preg_replace('/\D/', '', $m[0]);
+            if (str_starts_with($digits, '0')) $digits = '62' . substr($digits, 1);
+            elseif (!str_starts_with($digits, '62')) $digits = '62' . $digits;
+            return preg_match('/^62\d{8,13}$/', $digits) ? $digits : null;
+        }
+        return null;
     }
 }
