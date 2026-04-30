@@ -66,6 +66,9 @@ class MemberOnboardingAgent
                 . "🌐 *marketplacejamaah-ai.jodyaryono.id*\n\n"
                 . "Tidak perlu daftar, tidak perlu login, tidak perlu aplikasi lain. "
                 . "Cukup chat di grup seperti biasa 😊\n\n"
+                . "🕌 *Berkah untuk Masjid*\n"
+                . "Setiap transaksi yang berhasil di Marketplace Jamaah, *2,5% otomatis kami sumbangkan ke masjid terdekat* — "
+                . "supaya jual-beli kita juga jadi ladang amal jariyah 🤲\n\n"
                 . "Nah, supaya aku bisa daftarin kamu resmi sebagai anggota, "
                 . "boleh aku kenalan dulu dong? Nama Kakak siapa? 😊";
 
@@ -379,6 +382,9 @@ class MemberOnboardingAgent
                 . "• Ketik _cari [produk]_ di chat ini → aku carikan di marketplace\n"
                 . "• Ketik _edit #nomor_ → edit iklan langsung dari chat WhatsApp\n"
                 . "• Ketik _bantuan_ → lihat semua perintah yang tersedia\n\n"
+                . "🕌 *Berkah untuk Masjid*\n"
+                . "Setiap transaksi sukses di Marketplace Jamaah, *2,5% otomatis kami sumbangkan ke masjid terdekat* — "
+                . "jualanmu sekaligus jadi ladang amal jariyah 🤲\n\n"
                 . 'Semoga berkah dan lancar jualannya ya! 🙏';
             $this->whacenter->sendMessage($message->sender_number, $guide);
 

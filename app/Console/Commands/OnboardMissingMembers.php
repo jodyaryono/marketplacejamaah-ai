@@ -114,6 +114,9 @@ class OnboardMissingMembers extends Command
                 $intro = "{$greeting}\n\n"
                     . 'Perkenalkan, saya *Admin Marketplace Jamaah* — komunitas jual beli sesama Muslim yang amanah dan berkah. '
                     . "Alhamdulillah senang ada anggota baru, semoga jadi ladang berkah ya 😊\n\n"
+                    . "🕌 *Berkah untuk Masjid*\n"
+                    . "Setiap transaksi sukses, *2,5% otomatis kami sumbangkan ke masjid terdekat* — "
+                    . "jual-beli kita sekaligus jadi ladang amal jariyah 🤲\n\n"
                     . 'Eh, saya belum kenal nih — boleh tau nama Kakak siapa? 😊';
 
                 $wa->sendMessage($phone, $intro);
