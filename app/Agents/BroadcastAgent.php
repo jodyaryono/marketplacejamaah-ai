@@ -56,10 +56,12 @@ class BroadcastAgent
         $listingUrl   = url('/p/' . $listing->id);
         $categoryLine = $listing->category ? "📂 {$listing->category->name}\n" : '';
         $locLine      = $listing->location ? "📍 {$listing->location}\n" : '';
-        $shortDesc    = $listing->description ? \Illuminate\Support\Str::limit(explode("\n", $listing->description)[0], 120) : '';
-        $descLine     = $shortDesc ? "_{$shortDesc}_\n" : '';
+        // Preserve the FULL member description — never truncate, never drop lines.
+        // Rule from owner: boleh ditambah, tidak boleh dikurangi.
+        $fullDesc     = trim((string) ($listing->description ?? ''));
+        $descLine     = $fullDesc !== '' ? $fullDesc . "\n\n" : '';
 
-        $caption = "🛍️ *{$listing->title}*\n"
+        $caption = "🛍️ *{$listing->title}*\n\n"
             . $descLine
             . "💰 {$priceLabel}\n"
             . $categoryLine
