@@ -6,8 +6,8 @@
             'en' => 'Features & How It Works — MarketplaceJamaah AI',
         ],
         'meta_desc' => [
-            'id' => 'Panduan lengkap fitur MarketplaceJamaah AI: marketplace otomatis berbasis WhatsApp, AI search, manajemen iklan, dan workflow dari grup ke pembeli.',
-            'en' => 'Complete guide to MarketplaceJamaah AI features: automated WhatsApp-based marketplace, AI search, listing management, and workflow from group to buyer.',
+            'id' => 'Panduan lengkap fitur MarketplaceJamaah AI: marketplace otomatis berbasis WhatsApp, AI search, manajemen iklan, dan 2,5% dari setiap transaksi otomatis disumbangkan ke masjid terdekat.',
+            'en' => 'Complete guide to MarketplaceJamaah AI features: automated WhatsApp-based marketplace, AI search, listing management, and 2.5% of every transaction automatically donated to the nearest mosque.',
         ],
         'brand_sub'   => ['id' => 'Marketplace WhatsApp Bertenaga AI', 'en' => 'AI-powered WhatsApp Marketplace'],
         'nav_products'=> ['id' => 'Lihat Produk', 'en' => 'View Products'],
@@ -145,6 +145,11 @@
         ['id'=>'Ketik edit #ID di chat pribadi bot lalu kirim perubahan dalam bahasa bebas. AI menerjemahkan ke field yang tepat — dengan proteksi kepemilikan.',
          'en'=>'Type edit #ID in a private bot chat and send changes in free language. AI maps them to the right fields — with ownership protection.'],
         ['id'=>'AI Edit','en'=>'AI Edit']],
+      ['bi-bank2','green','free',
+        ['id'=>'2,5% Donasi Masjid Otomatis','en'=>'2.5% Auto Donation to Mosque'],
+        ['id'=>'Setiap transaksi sukses di Marketplace Jamaah, 2,5% otomatis kami sumbangkan ke masjid terdekat. Jual-beli sekaligus jadi ladang amal jariyah — laporan donasi transparan untuk komunitas.',
+         'en'=>'For every successful transaction on Marketplace Jamaah, 2.5% is automatically donated to the nearest mosque. Trading becomes ongoing charity — with transparent donation reports for the community.'],
+        ['id'=>'Amal Jariyah','en'=>'Sadaqah Jariyah']],
     ];
 
     $workflow = [
@@ -168,6 +173,7 @@
       [['id'=>'Profil penjual','en'=>'Seller profile'],                          ['id'=>'Tidak ada','en'=>'None'],                                            ['id'=>'Halaman publik seluruh iklan penjual','en'=>'Public page listing all seller items']],
       [['id'=>'Kelola iklan penjual','en'=>'Manage listings'],                   ['id'=>'Harus upload manual','en'=>'Manual uploads'],                        ['id'=>'Semua via chat bot WA, tanpa login','en'=>'All via WA bot, no login']],
       [['id'=>'Analitik & monitoring','en'=>'Analytics & monitoring'],           ['id'=>'Tidak ada','en'=>'None'],                                            ['id'=>'Dashboard admin + AI health monitor','en'=>'Admin dashboard + AI health monitor']],
+      [['id'=>'Dampak sosial 🕌','en'=>'Social impact 🕌'],                       ['id'=>'Tidak ada','en'=>'None'],                                            ['id'=>'2,5% transaksi otomatis ke masjid terdekat','en'=>'2.5% of every transaction auto-donated to the nearest mosque']],
     ];
 
     $faqs = [
@@ -189,6 +195,9 @@
       [['id'=>'Apakah ada biaya menggunakan platform?','en'=>'Is there any cost to use the platform?'],
        ['id'=>'Platform ini dibangun untuk komunitas jamaah — hubungi admin komunitas untuk info akses dan kebijakan penggunaan.',
         'en'=>'The platform is built for jamaah communities — contact the community admin for access details and usage policy.']],
+      [['id'=>'Bagaimana mekanisme 2,5% donasi ke masjid?','en'=>'How does the 2.5% mosque donation work?'],
+       ['id'=>'Untuk setiap transaksi yang berhasil di Marketplace Jamaah, <strong>2,5% otomatis kami sisihkan dan salurkan ke masjid terdekat</strong> dari lokasi penjual. Donasi dikumpulkan rutin dan disalurkan dengan laporan transparan ke komunitas — supaya jual-beli kita sekaligus jadi amal jariyah 🤲',
+        'en'=>'For every successful transaction on Marketplace Jamaah, <strong>2.5% is automatically set aside and channeled to the mosque nearest to the seller</strong>. Donations are pooled regularly and distributed with transparent reporting to the community — so trading also becomes ongoing sadaqah 🤲']],
     ];
 
     // helper to pull translated string
