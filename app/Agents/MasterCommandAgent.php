@@ -59,10 +59,15 @@ class MasterCommandAgent
         try {
             $command = trim($message->raw_body ?? '');
 
-            // Abaikan tipe non-text (location, image, sticker, audio, video, document, contact).
-            // Master DM yang share lokasi / kirim foto bukan command — jangan trigger AI parser.
+            // Abaikan tipe non-text TANPA caption (location, sticker, audio, document, contact).
+            // Image/video DENGAN caption diizinkan: master sering kirim poster/banner + perintah
+            // (mis. "broadcast ke grup") di caption-nya. raw_body sudah berisi caption-nya.
             $type = $message->message_type ?? 'conversation';
-            if (!in_array($type, ['conversation', 'extendedTextMessage', 'text'], true)) {
+            $textTypes = ['conversation', 'extendedTextMessage', 'text'];
+            $mediaTypes = ['image', 'imageMessage', 'video', 'videoMessage'];
+            $hasCaption = $command !== '';
+            $isMediaWithCaption = in_array($type, $mediaTypes, true) && $hasCaption;
+            if (!in_array($type, $textTypes, true) && !$isMediaWithCaption) {
                 $log->update(['status' => 'skipped', 'output_payload' => ['reason' => 'non_text_type', 'type' => $type]]);
                 return true;
             }
@@ -142,7 +147,7 @@ class MasterCommandAgent
             'unban_user' => $this->execUnbanUser($parsed),
             'delete_listing' => $this->execDeleteListing($parsed),
             'kick_member' => $this->execKickMember($parsed),
-            'broadcast' => $this->execBroadcast($parsed),
+            'broadcast' => $this->execBroadcast($parsed, $message),
             'status' => $this->execStatus(),
             'help' => $this->execHelp(),
             default => $this->execUnknown($command),
@@ -332,7 +337,7 @@ class MasterCommandAgent
         return ['kicked' => $phone, 'result' => $result];
     }
 
-    private function execBroadcast(array $p): array
+    private function execBroadcast(array $p, ?Message $message = null): array
     {
         $text = $p['message'] ?? '';
         if (!$text) {
@@ -346,9 +351,21 @@ class MasterCommandAgent
             return ['error' => 'no_group'];
         }
 
-        $this->whacenter->sendGroupMessage($group->group_name, $text);
+        // Selalu cantumkan link marketplace di akhir broadcast — supaya jamaah bisa
+        // langsung lihat semua iklan di website.
+        $siteUrl = rtrim(config('app.url'), '/');
+        $textWithLink = rtrim($text) . "\n\n🛍️ *Marketplace Jamaah*\n🔗 {$siteUrl}";
+
+        // Jika master attach foto/video di DM, ikutkan media-nya ke grup.
+        $mediaUrl = $message?->media_url;
+        if ($mediaUrl) {
+            $this->whacenter->sendGroupImageMessage($group->group_name, $textWithLink, $mediaUrl);
+        } else {
+            $this->whacenter->sendGroupMessage($group->group_name, $textWithLink);
+        }
+
         $this->reply("📣 Broadcast berhasil dikirim ke grup *{$group->group_name}*.");
-        return ['broadcast_sent_to_group' => $group->group_name];
+        return ['broadcast_sent_to_group' => $group->group_name, 'with_media' => (bool) $mediaUrl];
     }
 
     private function execHealthCheck(): array
