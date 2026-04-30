@@ -351,21 +351,48 @@ class MasterCommandAgent
             return ['error' => 'no_group'];
         }
 
-        // Selalu cantumkan link marketplace di akhir broadcast — supaya jamaah bisa
-        // langsung lihat semua iklan di website.
-        $siteUrl = rtrim(config('app.url'), '/');
-        $textWithLink = rtrim($text) . "\n\n🛍️ *Marketplace Jamaah*\n🔗 {$siteUrl}";
+        // Buat Listing agar broadcast punya halaman detail di marketplace.
+        // Title = baris pertama (max 90 char). Master jadi kontak penanggung jawab.
+        $firstLine = trim(preg_split('/\r?\n/', trim($text))[0] ?? '');
+        $title = mb_strimwidth($firstLine !== '' ? $firstLine : 'Pengumuman Marketplace Jamaah', 0, 90, '');
+        $masterPhone = $message?->sender_number ?? config('services.wa_gateway.master_phone', '');
+        $masterContact = $masterPhone
+            ? Contact::firstOrCreate(['phone_number' => $masterPhone], ['name' => 'Admin Marketplace Jamaah'])
+            : null;
 
-        // Jika master attach foto/video di DM, ikutkan media-nya ke grup.
         $mediaUrl = $message?->media_url;
+
+        $listing = Listing::create([
+            'message_id'        => $message?->id,
+            'whatsapp_group_id' => $group->id,
+            'contact_id'        => $masterContact?->id,
+            'title'             => $title,
+            'description'       => trim($text),
+            'price_type'        => 'fix',
+            'contact_number'    => $masterPhone ?: null,
+            'contact_name'      => $masterContact?->name,
+            'media_urls'        => $mediaUrl ? [$mediaUrl] : null,
+            'condition'         => 'unknown',
+            'status'            => 'active',
+            'source_date'       => now(),
+        ]);
+
+        // Link ke halaman detail listing — bukan URL global situs.
+        $listingUrl = rtrim(config('app.url'), '/') . '/p/' . $listing->id;
+        $textWithLink = rtrim($text) . "\n\n📌 *Marketplace Jamaah*\n🔗 {$listingUrl}";
+
         if ($mediaUrl) {
             $this->whacenter->sendGroupImageMessage($group->group_name, $textWithLink, $mediaUrl);
         } else {
             $this->whacenter->sendGroupMessage($group->group_name, $textWithLink);
         }
 
-        $this->reply("📣 Broadcast berhasil dikirim ke grup *{$group->group_name}*.");
-        return ['broadcast_sent_to_group' => $group->group_name, 'with_media' => (bool) $mediaUrl];
+        $this->reply("📣 Broadcast berhasil dikirim ke grup *{$group->group_name}*.\n🔗 {$listingUrl}");
+        return [
+            'broadcast_sent_to_group' => $group->group_name,
+            'with_media'              => (bool) $mediaUrl,
+            'listing_id'              => $listing->id,
+        ];
     }
 
     private function execHealthCheck(): array
