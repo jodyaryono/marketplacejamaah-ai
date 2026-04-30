@@ -279,6 +279,20 @@ class WhatsAppListenerAgent
                 return null;
             }
 
+            // Master bypass: pesan dari master/owner TIDAK PERNAH dihapus oleh bot.
+            // Master sering forward poster/info langsung ke grup — itu legit, bukan
+            // duplikat / one-liner / status-mention violation. Skip semua auto-delete.
+            if (MasterCommandAgent::isMasterPhone($senderNum)) {
+                $duration = (int) ((microtime(true) - $start) * 1000);
+                $log->update([
+                    'message_id' => $message->id,
+                    'status' => 'success',
+                    'output_payload' => ['message_id' => $message->id, 'master_bypass' => true],
+                    'duration_ms' => $duration,
+                ]);
+                return $message;
+            }
+
             // Status-mention guard: when a member mentions the group in their
             // WhatsApp status, it appears as a group message with null/empty body,
             // type "conversation", and no media.  Auto-delete these immediately.
