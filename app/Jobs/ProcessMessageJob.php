@@ -114,9 +114,14 @@ class ProcessMessageJob implements ShouldQueue
                     $message->update(['is_processed' => true, 'processed_at' => now()]);
                     return;
                 } else {
-                    $master->handle($message);
-                    $message->update(['is_processed' => true, 'processed_at' => now()]);
-                    return;
+                    // Master memposting LANGSUNG di WAG (group_id terisi).
+                    // Jangan paksa pipeline command parsing — biarkan jatuh ke ad-classifier
+                    // di bawah, supaya iklan dari master juga dapat Listing & link sama
+                    // seperti member biasa. BroadcastAgent akan men-skip repost ke grup
+                    // (karena master sudah posting sendiri) tapi tetap DM master link
+                    // halaman iklan.
+                    Log::info("ProcessMessageJob: master posted directly in WAG — flowing to ad pipeline");
+                    // Fall through to normal pipeline below.
                 }
             }
 

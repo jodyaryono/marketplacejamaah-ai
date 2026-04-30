@@ -52,6 +52,21 @@ class BroadcastAgent
             return;
         }
 
+        // Jika pesan asli berasal dari master/owner langsung di WAG, jangan repost
+        // (akan jadi duplikat). Cukup DM master link halaman iklannya sebagai konfirmasi.
+        if (MasterCommandAgent::isMasterPhone($message->sender_number ?? '')) {
+            $listingUrl = url('/p/' . $listing->id);
+            try {
+                $this->whacenter->sendMessage(
+                    $message->sender_number,
+                    "✅ *Iklan tayang di marketplace!*\n\n📦 *{$listing->title}*\n🔗 {$listingUrl}\n\n_Edit kapan saja: ketik *edit #{$listing->id}*_"
+                );
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning('BroadcastAgent: master DM confirmation failed', ['error' => $e->getMessage()]);
+            }
+            return;
+        }
+
         $priceLabel   = $listing->price_formatted ?? 'Harga Nego';
         $listingUrl   = url('/p/' . $listing->id);
         $categoryLine = $listing->category ? "📂 {$listing->category->name}\n" : '';
