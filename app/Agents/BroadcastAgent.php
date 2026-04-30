@@ -52,20 +52,14 @@ class BroadcastAgent
             return;
         }
 
-        // Jika pesan asli dari master/owner langsung di WAG: jangan full-repost (duplikat),
-        // tapi balas SINGKAT di grup yang sama dengan link halaman iklan supaya member lain
-        // bisa langsung klik. DM ke master juga dikirim sebagai konfirmasi cepat.
-        if (MasterCommandAgent::isMasterPhone($message->sender_number ?? '')) {
-            $listingUrl = url('/p/' . $listing->id);
+        // Jika pesan asli dari master/owner langsung di WAG: bot tetap repost dengan
+        // ISI PENUH (judul + deskripsi lengkap + harga/kategori/lokasi) dan tambahkan
+        // link halaman iklan — JANGAN dipotong/disingkat. Aturan owner: boleh ditambah,
+        // tidak boleh dikurangi. Tambahan: DM master juga sebagai konfirmasi cepat.
+        $isMaster = MasterCommandAgent::isMasterPhone($message->sender_number ?? '');
+        if ($isMaster) {
             try {
-                $this->whacenter->sendGroupMessage(
-                    $group->group_name,
-                    "✅ *Iklan terdaftar di Marketplace Jamaah*\n\n📦 *{$listing->title}*\n🔗 {$listingUrl}"
-                );
-            } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::warning('BroadcastAgent: master WAG ack failed', ['error' => $e->getMessage()]);
-            }
-            try {
+                $listingUrl = url('/p/' . $listing->id);
                 $this->whacenter->sendMessage(
                     $message->sender_number,
                     "✅ *Iklan tayang!*\n\n📦 *{$listing->title}*\n🔗 {$listingUrl}\n\n_Edit kapan saja: ketik *edit #{$listing->id}*_"
@@ -73,7 +67,7 @@ class BroadcastAgent
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::warning('BroadcastAgent: master DM confirmation failed', ['error' => $e->getMessage()]);
             }
-            return;
+            // Fall through ke logika repost penuh di bawah.
         }
 
         $priceLabel   = $listing->price_formatted ?? 'Harga Nego';
