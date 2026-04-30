@@ -52,14 +52,23 @@ class BroadcastAgent
             return;
         }
 
-        // Jika pesan asli berasal dari master/owner langsung di WAG, jangan repost
-        // (akan jadi duplikat). Cukup DM master link halaman iklannya sebagai konfirmasi.
+        // Jika pesan asli dari master/owner langsung di WAG: jangan full-repost (duplikat),
+        // tapi balas SINGKAT di grup yang sama dengan link halaman iklan supaya member lain
+        // bisa langsung klik. DM ke master juga dikirim sebagai konfirmasi cepat.
         if (MasterCommandAgent::isMasterPhone($message->sender_number ?? '')) {
             $listingUrl = url('/p/' . $listing->id);
             try {
+                $this->whacenter->sendGroupMessage(
+                    $group->group_name,
+                    "✅ *Iklan terdaftar di Marketplace Jamaah*\n\n📦 *{$listing->title}*\n🔗 {$listingUrl}"
+                );
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning('BroadcastAgent: master WAG ack failed', ['error' => $e->getMessage()]);
+            }
+            try {
                 $this->whacenter->sendMessage(
                     $message->sender_number,
-                    "✅ *Iklan tayang di marketplace!*\n\n📦 *{$listing->title}*\n🔗 {$listingUrl}\n\n_Edit kapan saja: ketik *edit #{$listing->id}*_"
+                    "✅ *Iklan tayang!*\n\n📦 *{$listing->title}*\n🔗 {$listingUrl}\n\n_Edit kapan saja: ketik *edit #{$listing->id}*_"
                 );
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::warning('BroadcastAgent: master DM confirmation failed', ['error' => $e->getMessage()]);
