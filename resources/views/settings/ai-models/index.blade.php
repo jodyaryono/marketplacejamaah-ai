@@ -60,9 +60,15 @@
             Kelola model AI: provider, model name, API key (terenkripsi), peran, dan urutan failover.
         </p>
     </div>
-    <a href="{{ route('settings.index') }}" class="btn btn-sm btn-outline-secondary" style="font-size:.78rem;">
-        <i class="bi bi-arrow-left me-1"></i>Kembali ke Pengaturan
-    </a>
+    <div class="d-flex gap-2 flex-wrap">
+        <button type="button" id="btn-reveal-all" class="btn btn-sm btn-outline-warning" style="font-size:.78rem;"
+                onclick="revealAll()" title="Tampilkan semua key sekaligus untuk match dengan billing dashboard">
+            <i class="bi bi-eye me-1"></i>Tampilkan Semua Key
+        </button>
+        <a href="{{ route('settings.index') }}" class="btn btn-sm btn-outline-secondary" style="font-size:.78rem;">
+            <i class="bi bi-arrow-left me-1"></i>Kembali
+        </a>
+    </div>
 </div>
 
 <div class="page-body">
@@ -140,7 +146,29 @@
                         <span class="badge" style="background:#eff6ff;color:#1d4ed8;font-weight:700;">{{ $m->priority }}</span>
                     </div>
                     <div data-label="API Key">
-                        <code style="font-size:.72rem;color:#9333ea;">{{ $m->masked_key }}</code>
+                        <div class="d-flex align-items-center gap-1 flex-wrap" id="keybox-{{ $m->id }}">
+                            <code id="keytext-{{ $m->id }}" style="font-size:.72rem;color:#9333ea;word-break:break-all;">{{ $m->masked_key }}</code>
+                            @if($m->api_key)
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1"
+                                    style="font-size:.7rem;line-height:1;"
+                                    onclick="revealKey({{ $m->id }})"
+                                    title="Tampilkan key lengkap">
+                                <i class="bi bi-eye" id="keyicon-{{ $m->id }}"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1"
+                                    style="font-size:.7rem;line-height:1;"
+                                    onclick="copyKey({{ $m->id }})"
+                                    title="Copy key ke clipboard">
+                                <i class="bi bi-clipboard" id="copyicon-{{ $m->id }}"></i>
+                            </button>
+                            @endif
+                        </div>
+                        @if($m->api_key)
+                            <div class="text-muted" style="font-size:.65rem;margin-top:2px;">
+                                last4: <strong style="color:#1d4ed8;font-family:monospace;">{{ substr($m->api_key ?? '', -4) }}</strong>
+                                — cocokkan dengan provider dashboard untuk identifikasi billing
+                            </div>
+                        @endif
                         @if($testResult && ($testResult['id'] ?? null) === $m->id)
                             <span class="test-result-inline {{ $testResult['ok'] ? 'ok' : 'fail' }}" title="{{ $testResult['error'] ?? $testResult['response'] ?? '' }}">
                                 @if($testResult['ok'])
@@ -210,6 +238,133 @@
         </div>
     </div>
 </div>
+
+@push('scripts')
+<script>
+const KEY_REVEAL_TIMEOUT_MS = 60000; // auto-hide after 60s for safety
+const _keyTimers = {};
+
+async function revealKey(id) {
+    const txt = document.getElementById('keytext-' + id);
+    const icon = document.getElementById('keyicon-' + id);
+    if (!txt || !icon) return;
+
+    // Toggle: if currently revealed, mask it back
+    if (txt.dataset.revealed === '1') {
+        txt.textContent = txt.dataset.masked || '';
+        txt.dataset.revealed = '0';
+        icon.className = 'bi bi-eye';
+        if (_keyTimers[id]) { clearTimeout(_keyTimers[id]); delete _keyTimers[id]; }
+        return;
+    }
+
+    // Save masked text so we can restore on toggle
+    txt.dataset.masked = txt.textContent;
+    icon.className = 'bi bi-hourglass-split';
+
+    try {
+        const res = await fetch(`/settings/ai-models/${id}/reveal`, {
+            headers: { 'Accept': 'application/json' }
+        });
+        if (res.status === 401 || res.status === 419) {
+            alert('Sesi login berakhir — refresh halaman.');
+            window.location.reload();
+            return;
+        }
+        const data = await res.json();
+        if (!data.has_key) {
+            txt.textContent = '(belum diisi)';
+            icon.className = 'bi bi-eye';
+            return;
+        }
+        txt.textContent = data.api_key;
+        txt.dataset.revealed = '1';
+        txt.dataset.fullkey = data.api_key;
+        icon.className = 'bi bi-eye-slash';
+
+        // Auto-hide after timeout
+        _keyTimers[id] = setTimeout(() => {
+            txt.textContent = txt.dataset.masked || '';
+            txt.dataset.revealed = '0';
+            icon.className = 'bi bi-eye';
+            delete _keyTimers[id];
+        }, KEY_REVEAL_TIMEOUT_MS);
+    } catch (e) {
+        icon.className = 'bi bi-exclamation-triangle text-danger';
+        alert('Gagal ambil key: ' + e.message);
+    }
+}
+
+async function copyKey(id) {
+    const txt = document.getElementById('keytext-' + id);
+    const icon = document.getElementById('copyicon-' + id);
+    if (!txt || !icon) return;
+
+    let key = txt.dataset.fullkey;
+    if (!key) {
+        // Not yet revealed — fetch it just for copy without changing UI
+        try {
+            const res = await fetch(`/settings/ai-models/${id}/reveal`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            const data = await res.json();
+            key = data.api_key;
+            txt.dataset.fullkey = key;
+        } catch (e) {
+            alert('Gagal ambil key: ' + e.message);
+            return;
+        }
+    }
+    if (!key) {
+        alert('Key kosong untuk model ini');
+        return;
+    }
+
+    try {
+        await navigator.clipboard.writeText(key);
+        icon.className = 'bi bi-clipboard-check text-success';
+        setTimeout(() => { icon.className = 'bi bi-clipboard'; }, 2000);
+    } catch (e) {
+        // Fallback for non-HTTPS / older browsers
+        const ta = document.createElement('textarea');
+        ta.value = key; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        icon.className = 'bi bi-clipboard-check text-success';
+        setTimeout(() => { icon.className = 'bi bi-clipboard'; }, 2000);
+    }
+}
+
+async function revealAll() {
+    const btn = document.getElementById('btn-reveal-all');
+    if (!confirm('Tampilkan SEMUA API key di halaman ini? Pastikan tidak ada orang lain yang melihat layar Anda.')) return;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Mengambil...';
+    // Find all rows with a reveal button (id pattern keytext-N)
+    const els = document.querySelectorAll('[id^="keytext-"]');
+    const ids = Array.from(els).map(el => Number(el.id.replace('keytext-', '')));
+    for (const id of ids) {
+        const txt = document.getElementById('keytext-' + id);
+        if (txt && txt.dataset.revealed !== '1') await revealKey(id);
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-eye-slash me-1"></i>Sembunyikan Semua';
+    btn.onclick = hideAll;
+}
+
+function hideAll() {
+    const els = document.querySelectorAll('[id^="keytext-"]');
+    els.forEach(el => {
+        const id = Number(el.id.replace('keytext-', ''));
+        if (el.dataset.revealed === '1') revealKey(id); // toggle off
+    });
+    const btn = document.getElementById('btn-reveal-all');
+    btn.innerHTML = '<i class="bi bi-eye me-1"></i>Tampilkan Semua Key';
+    btn.onclick = revealAll;
+}
+</script>
+@endpush
 
 {{-- Add Modal --}}
 <div class="modal fade form-modal" id="addModal" tabindex="-1">

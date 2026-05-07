@@ -43,6 +43,27 @@ class AiModelController extends Controller
         return back()->with('saved', "Model '{$aiModel->name}' berhasil diperbarui.");
     }
 
+    /**
+     * Return the decrypted api_key as JSON. Auth-gated by the parent route group.
+     * Used by the index page's per-row 👁 reveal button so the admin can copy
+     * the full key and match it against the provider's billing dashboard
+     * (e.g. Google AI Studio, Anthropic Console) to identify which key is
+     * driving which cost line item.
+     */
+    public function reveal(AiModel $aiModel)
+    {
+        $key = $aiModel->api_key;
+        return response()->json([
+            'id'     => $aiModel->id,
+            'name'   => $aiModel->name,
+            'provider' => $aiModel->provider,
+            'model'  => $aiModel->model,
+            'api_key' => $key,
+            'has_key' => !empty($key),
+            'last4'  => $key ? substr($key, -4) : null,
+        ]);
+    }
+
     public function destroy(AiModel $aiModel)
     {
         $name = $aiModel->name;

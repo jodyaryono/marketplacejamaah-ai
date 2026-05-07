@@ -136,4 +136,5 @@ Route::middleware(['auth', 'check.active'])->group(function () {
     Route::delete('/settings/ai-models/{aiModel}', [AiModelController::class, 'destroy'])->name('ai-models.destroy');
     Route::post('/settings/ai-models/{aiModel}/toggle', [AiModelController::class, 'toggleActive'])->name('ai-models.toggle');
     Route::post('/settings/ai-models/{aiModel}/test', [AiModelController::class, 'test'])->name('ai-models.test');
+    Route::get('/settings/ai-models/{aiModel}/reveal', [AiModelController::class, 'reveal'])->name('ai-models.reveal');
 });
