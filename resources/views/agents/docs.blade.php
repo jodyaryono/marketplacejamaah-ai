@@ -244,15 +244,15 @@
 {{-- ════════ Summary Cards ════════ --}}
 <div class="summary-grid">
     <div class="summary-card">
-        <div class="num" style="color:#059669;">11</div>
+        <div class="num" style="color:#059669;">16</div>
         <div class="lbl">Total Agent</div>
     </div>
     <div class="summary-card">
-        <div class="num" style="color:#7c3aed;">7</div>
+        <div class="num" style="color:#7c3aed;">12</div>
         <div class="lbl">Pakai Gemini AI</div>
     </div>
     <div class="summary-card">
-        <div class="num" style="color:#f59e0b;">22</div>
+        <div class="num" style="color:#f59e0b;">25</div>
         <div class="lbl">Editable Prompt/Config</div>
     </div>
     <div class="summary-card">
@@ -316,13 +316,13 @@ $agents = [
     ],
     [
         'name' => 'BotQueryAgent', 'gemini' => true, 'order' => 6, 'always' => false,
-        'short' => 'Jawab DM member: cari produk, scan KTP, obrolan via Gemini',
+        'short' => 'Orchestrator DM member: deteksi intent, delegasi ke worker (Search/Location/KtpScan/ListingEdit/AdBuilder)',
         'cond' => 'Hanya untuk DM dari member terdaftar',
-        'summary' => 'Menjawab pertanyaan member via DM menggunakan Gemini. Mendukung banyak intent: cari produk/penjual, list kategori, lihat iklan saya, bantuan, hubungi admin, scan KTP. Implementasi RAG (Retrieval-Augmented Generation): ambil kandidat listing dari DB, minta Gemini ranking relevansi. Handle juga pesan lokasi (reverse geocode) dan follow-up flow.',
-        'tasks' => ['Deteksi intent via Gemini', 'RAG: cari & ranking listing dari DB', 'Reverse geocode lokasi via Gemini', 'Scan KTP: extract data identitas dari foto', 'Conversational follow-up (klarifikasi)', 'List kategori & listing saya', 'Fallback: obrolan umum'],
+        'summary' => 'Pintu masuk semua DM member terdaftar. Deteksi intent via Gemini (cari produk, list kategori, iklan saya, edit iklan, scan KTP, buat iklan, lokasi, dll), kemudian delegasi ke worker agent yang sesuai (SearchAgent, LocationAgent, KtpScanAgent, ListingEditAgent, AdBuilderAgent). Untuk percakapan umum / fallback, jawab langsung lewat Gemini conversational.',
+        'tasks' => ['Deteksi intent via Gemini', 'Delegasi ke SearchAgent (cari produk/penjual)', 'Delegasi ke LocationAgent (pesan lokasi GPS)', 'Delegasi ke KtpScanAgent (foto KTP)', 'Delegasi ke ListingEditAgent (edit/terjual/sembunyikan)', 'Delegasi ke AdBuilderAgent (buat iklan baru)', 'Conversational follow-up untuk DM umum'],
         'inputs' => ['Message DM dari member terdaftar'],
-        'outputs' => ['true/false (apakah di-handle sebagai query)', 'Side effect: kirim reply DM ke member', 'Side effect: cache pending state (lokasi, klarifikasi, KTP)'],
-        'settings' => ['prompt_bot_intent', 'prompt_bot_rag_relevance', 'prompt_bot_reverse_geocode', 'prompt_bot_ktp_scan', 'prompt_bot_conversation'],
+        'outputs' => ['true/false (apakah di-handle sebagai query)', 'Side effect: kirim reply DM ke member', 'Side effect: cache pending state (lokasi, klarifikasi, KTP, edit, ad builder)'],
+        'settings' => ['prompt_bot_intent', 'prompt_bot_conversation'],
     ],
     [
         'name' => 'MessageModerationAgent', 'gemini' => true, 'order' => 7, 'always' => true,
@@ -373,6 +373,57 @@ $agents = [
         'inputs' => ['Message object', 'Listing object (opsional)'],
         'outputs' => ['void', 'Side effect: update AnalyticsDaily', 'Side effect: broadcast WebSocket events', 'Side effect: kirim notifikasi grup WA'],
         'settings' => ['template_broadcast_new_listing'],
+    ],
+    // ── Sub-Agents (Worker) — di-invoke oleh BotQueryAgent / MasterCommandAgent ──
+    [
+        'name' => 'SearchAgent', 'gemini' => true, 'order' => 12, 'always' => false,
+        'short' => 'Cari produk/penjual via RAG: ambil kandidat dari DB → ranking via Gemini',
+        'cond' => 'Di-invoke BotQueryAgent saat intent = cari produk/penjual/kategori/iklan saya',
+        'summary' => 'Worker pencarian katalog. Implementasi RAG (Retrieval-Augmented Generation): ambil kandidat listing aktif dari DB (filter kategori jika ada), lalu minta Gemini ranking by semantic relevance terhadap query user. Hasil di-format jadi WhatsApp message dengan link permanent /p/{id} untuk tiap listing. Juga handle list kategori, list penjual top, dan iklan milik member sendiri.',
+        'tasks' => ['RAG retrieve: ambil 100 kandidat listing aktif dari DB', 'Ranking relevansi via Gemini (cache 10 menit)', 'Format output cari produk (top-N + permanent link)', 'Format output cari penjual (group by contact)', 'List semua kategori aktif + jumlah listing', 'List iklan milik member (myListings)', 'Fallback ke kandidat raw jika Gemini gagal'],
+        'inputs' => ['User query string', 'Filter kategori (opsional)', 'Limit hasil'],
+        'outputs' => ['WhatsApp-formatted text dengan list produk / penjual / kategori', 'Side effect: cache hasil ranking Gemini'],
+        'settings' => ['prompt_bot_rag_relevance'],
+    ],
+    [
+        'name' => 'LocationAgent', 'gemini' => true, 'order' => 13, 'always' => false,
+        'short' => 'Reverse-geocode GPS → cari produk sekitar / update lokasi bisnis',
+        'cond' => 'Di-invoke BotQueryAgent saat member kirim lokasi GPS via WhatsApp',
+        'summary' => 'Worker yang menangani pesan lokasi (share location WA). Reverse-geocode lat/lng ke nama area Indonesia via Gemini (cache 30 hari per koordinat dibulatkan). Lalu pakai SearchAgent.ragRetrieveListings untuk cari produk sekitar area itu. Mode kedua: simpan koordinat + alamat ke profil Contact penjual sebagai lokasi bisnis.',
+        'tasks' => ['Reverse-geocode lat/lng → nama area via Gemini', 'Cache nama area (30 hari per rounded coords)', 'Cari produk relevan di area via SearchAgent RAG', 'Format hasil produk sekitar dengan permanent link', 'Update Contact.latitude/longitude/address (mode bisnis)'],
+        'inputs' => ['lat, lng (float)', 'sender phone number', 'Mode: search atau update business location'],
+        'outputs' => ['WhatsApp-formatted text: list produk sekitar atau konfirmasi update lokasi', 'Side effect: update Contact location fields'],
+        'settings' => ['prompt_bot_reverse_geocode'],
+    ],
+    [
+        'name' => 'KtpScanAgent', 'gemini' => true, 'order' => 14, 'always' => false,
+        'short' => 'Scan & ekstrak data KTP dari foto via Gemini Vision',
+        'cond' => 'Di-invoke BotQueryAgent saat member ketik "scan ktp" lalu kirim foto',
+        'summary' => 'Worker OCR KTP berbasis Gemini Vision. Flow dua langkah: (1) member ketik "scan ktp" → simpan intent di cache 10 menit + reply panduan kirim foto. (2) saat foto masuk dari nomor pending → download, encode base64, kirim ke Gemini Vision dengan prompt extractor terstruktur. Output: NIK, nama, TTL, jenis kelamin, alamat lengkap, agama, status perkawinan, pekerjaan, masa berlaku. Validasi is_ktp untuk reject foto bukan KTP. Data tidak disimpan ke DB.',
+        'tasks' => ['Set intent ktp_pending di cache (10 menit)', 'Download foto dari URL gateway', 'Encode base64 + detect mime type', 'Analisis via Gemini Vision API', 'Parse JSON response + validasi is_ktp', 'Format hasil ekstraksi ke text WA', 'Reject foto non-KTP dengan tips foto baik'],
+        'inputs' => ['Phone number (untuk request scan)', 'Media URL atau base64 image (untuk analisis)'],
+        'outputs' => ['WhatsApp-formatted text: data KTP terstruktur atau pesan error', 'Tidak menyimpan data KTP ke DB (privasi)'],
+        'settings' => ['prompt_bot_ktp_scan'],
+    ],
+    [
+        'name' => 'ListingEditAgent', 'gemini' => true, 'order' => 15, 'always' => false,
+        'short' => 'Edit iklan via DM: harga, status (terjual/sembunyikan), judul, lokasi, kategori',
+        'cond' => 'Di-invoke BotQueryAgent saat intent = edit iklan / member ketik nomor listing-nya',
+        'summary' => 'Worker edit iklan member. Multi-mode: (1) menu mini saat member ketik bare listing number — kasih opsi harga/status. (2) Quick edit pattern (regex) untuk perintah simple "harga 500000", "terjual", "sembunyikan". (3) Free-form edit via Gemini parser yang parse instruksi natural language ("ganti judul jadi X, harga lelang mulai 1 juta") jadi field changes. Owner-only (kecuali master). Handle juga "on behalf pasmal" / "atas nama <Name> <phone>" untuk reassign kontak (master-only). Auto re-post ke grup WA jika listing tetap active.',
+        'tasks' => ['Tampilkan menu edit + status (active/sold/inactive)', 'Quick edit: harga fix/nego/lelang via regex', 'Quick edit: terjual / sembunyikan / aktifkan', 'Free-form edit via Gemini → JSON field changes', 'Validasi owner (kecuali master phone)', 'Mark sold + announce ke grup WA', 'Re-post listing ke WAG saat ada perubahan', '"On behalf pasmal" — reassign contact (master)', '"Atas nama <Name> <phone>" — reassign arbitrer (master)'],
+        'inputs' => ['Message object (sender, text)', 'Listing ID', 'Edit text bebas'],
+        'outputs' => ['WhatsApp-formatted reply: konfirmasi perubahan + permanent link', 'Side effect: update Listing fields', 'Side effect: announce TERJUAL atau re-post ke WAG'],
+        'settings' => ['pasmal_contact_phone', 'pasmal_contact_name'],
+    ],
+    [
+        'name' => 'AdBuilderAgent', 'gemini' => true, 'order' => 16, 'always' => false,
+        'short' => 'Wizard buat iklan baru via DM: foto → AI draft → review → posting ke grup',
+        'cond' => 'Di-invoke BotQueryAgent saat member ketik "buat iklan" atau kirim foto di DM',
+        'summary' => 'Worker conversational ad builder. Flow 3-step: (1) waiting_input — minta foto produk. (2) enriching — Gemini Vision analisis foto + caption → generate draft AIDA (judul, deskripsi, harga, kategori, kondisi, lokasi). User bisa tambah info, AI re-merge ke draft. (3) reviewing — user setujui (post ke WAG via BroadcastAgent) atau edit field tertentu. State disimpan di cache 30 menit per nomor. Halal-aware copywriting (reject riba/judi/alkohol). Master bisa pakai mode "on behalf pasmal" untuk post atas nama Pasmal.',
+        'tasks' => ['Step 1: minta foto produk + simpan state', 'Step 2: Gemini Vision → generate draft AIDA copy', 'Step 2: enrich draft dengan info tambahan user', 'Step 3: tampilkan preview draft + opsi edit/post', 'Step 3: edit field via "edit [judul|harga|...]"', 'Konfirmasi & buat Listing record', 'Delegasi ke BroadcastAgent untuk posting ke WAG', 'Mode "on behalf pasmal" — pakai kontak Pasmal'],
+        'inputs' => ['Message DM (foto / teks / perintah)', 'Sender phone, name', 'Cache state per phone (step + draft)'],
+        'outputs' => ['WhatsApp reply: panduan, preview draft, atau konfirmasi posting', 'Side effect: buat Listing record + post ke WAG via BroadcastAgent'],
+        'settings' => ['prompt_ad_builder_polish'],
     ],
 ];
 @endphp

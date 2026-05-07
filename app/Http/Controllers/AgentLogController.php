@@ -66,6 +66,32 @@ class AgentLogController extends Controller
             'color' => '#e11d48',
             'desc' => 'Proses perintah master admin via DM: health check, kirim pesan, ban/unban, hapus iklan, broadcast, dan status sistem.',
         ],
+        // ── Sub-Agents (Worker) — di-invoke oleh BotQueryAgent / MasterCommandAgent ──
+        'SearchAgent' => [
+            'icon' => 'bi-search',
+            'color' => '#06b6d4',
+            'desc' => 'Worker pencarian katalog. RAG: ambil 100 kandidat listing aktif dari DB lalu ranking semantic relevansi via Gemini (cache 10 menit). List kategori, penjual top, iklan saya.',
+        ],
+        'LocationAgent' => [
+            'icon' => 'bi-geo-alt',
+            'color' => '#f59e0b',
+            'desc' => 'Worker pesan lokasi GPS. Reverse-geocode lat/lng ke nama area Indonesia via Gemini (cache 30 hari). Cari produk sekitar via SearchAgent atau update lokasi bisnis Contact.',
+        ],
+        'KtpScanAgent' => [
+            'icon' => 'bi-person-vcard',
+            'color' => '#d97706',
+            'desc' => 'Worker scan KTP via Gemini Vision. Ekstrak NIK, nama, TTL, alamat, agama, status, pekerjaan, masa berlaku. Reject foto non-KTP. Data tidak disimpan ke DB.',
+        ],
+        'ListingEditAgent' => [
+            'icon' => 'bi-pencil-square',
+            'color' => '#6366f1',
+            'desc' => 'Worker edit iklan via DM: harga (fix/nego/lelang), status (terjual/sembunyikan/aktifkan), free-form edit via Gemini parser, on-behalf reassignment (master), auto re-post ke WAG.',
+        ],
+        'AdBuilderAgent' => [
+            'icon' => 'bi-magic',
+            'color' => '#ec4899',
+            'desc' => 'Worker conversational ad builder. Wizard 3-step: foto → Gemini Vision draft AIDA → review & edit → posting ke WAG via BroadcastAgent. Halal-aware copywriting.',
+        ],
     ];
 
     // Mapping agent name → prompt setting keys
@@ -74,7 +100,10 @@ class AgentLogController extends Controller
         'MessageModerationAgent' => ['prompt_moderation'],
         'DataExtractorAgent' => ['prompt_data_extractor'],
         'ImageAnalyzerAgent' => ['prompt_image_enrichment', 'prompt_image_ad_detection'],
-        'BotQueryAgent' => ['prompt_bot_intent', 'prompt_bot_rag_relevance', 'prompt_bot_reverse_geocode', 'prompt_bot_ktp_scan', 'prompt_bot_conversation'],
+        'BotQueryAgent' => ['prompt_bot_intent', 'prompt_bot_conversation'],
+        'SearchAgent' => ['prompt_bot_rag_relevance'],
+        'LocationAgent' => ['prompt_bot_reverse_geocode'],
+        'KtpScanAgent' => ['prompt_bot_ktp_scan'],
         'MemberOnboardingAgent' => ['prompt_onboarding_chat', 'prompt_onboarding_products', 'prompt_onboarding_approval'],
         'MasterCommandAgent' => ['prompt_master_command', 'prompt_master_fallback'],
         'WhatsAppListenerAgent' => ['template_duplicate_with_listing', 'template_duplicate_no_listing'],
