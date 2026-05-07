@@ -329,8 +329,18 @@ Proprietary. © 2026 Jody Aryono. Kode di-share untuk keperluan penjurian QHomem
 
 ---
 
+## 🎥 Demo Video & Pitch Deck
+
+- **PowerPoint deck** (14 slide, brand-consistent): [`docs/pitch/marketplace-jamaah-pitch-2026.pptx`](docs/pitch/marketplace-jamaah-pitch-2026.pptx)
+- **HTML deck** (single file, Ctrl+P → PDF): [`docs/pitch/index.html`](docs/pitch/index.html)
+- **Demo video script** (2.5–3 menit screen recording): [`docs/pitch/demo-video-script.md`](docs/pitch/demo-video-script.md)
+- **Architecture deep-dive**: [`docs/architecture.md`](docs/architecture.md)
+
+Pitch deck cover: hero, problem, insight, solution (2 path), AI WAG admin, public catalog, kemudahan, architecture, live trace, metrics, impact jamaah, impact masyarakat, criteria mapping, CTA. Setiap slide punya speaker notes untuk juri yang baca-only.
+
 ## 📞 Kontak
 
 - **Developer**: Jody Aryono — jodyaryono@gmail.com
 - **Demo URL**: https://marketplacejamaah-ai.jodyaryono.id
+- **Repo**: https://github.com/jodyaryono/marketplacejamaah-ai
 - **Kode pendaftaran**: `WAGLI4HM`
