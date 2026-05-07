@@ -18,6 +18,36 @@ class AiHealthController extends Controller
     // Rough exchange rate IDR/USD
     private const IDR_RATE = 16000;
 
+    /**
+     * Per-model published pricing (USD per 1M tokens). Used to estimate per-model
+     * cost on the AI Health page. Keyed by "<provider>|<model>".
+     * Sources: ai.google.dev/pricing, console.groq.com/pricing (May 2026 snapshot).
+     * For unknown/new models we fall back to MODEL_PRICING_FALLBACK.
+     */
+    private const MODEL_PRICING = [
+        // Gemini Flash family — same per-token pricing for text and image input
+        'gemini|gemini-flash-latest'             => ['in' => 0.075, 'out' => 0.30],
+        'gemini|gemini-2.5-flash'                => ['in' => 0.075, 'out' => 0.30],
+        'gemini|gemini-2.5-flash-preview'        => ['in' => 0.075, 'out' => 0.30],
+        'gemini|gemini-2.0-flash'                => ['in' => 0.10,  'out' => 0.40],
+        'gemini|gemini-2.0-flash-001'            => ['in' => 0.10,  'out' => 0.40],
+        'gemini|gemini-2.0-flash-exp'            => ['in' => 0.0,   'out' => 0.0], // free experimental
+        'gemini|gemini-1.5-flash'                => ['in' => 0.075, 'out' => 0.30],
+        'gemini|gemini-1.5-flash-8b'             => ['in' => 0.0375,'out' => 0.15],
+        'gemini|gemini-1.5-pro'                  => ['in' => 1.25,  'out' => 5.00],
+        'gemini|gemini-2.5-pro'                  => ['in' => 1.25,  'out' => 10.00],
+        // Groq Llama text
+        'groq|llama-3.3-70b-versatile'           => ['in' => 0.59,  'out' => 0.79],
+        'groq|llama-3.1-70b-versatile'           => ['in' => 0.59,  'out' => 0.79],
+        'groq|llama-3.1-8b-instant'              => ['in' => 0.05,  'out' => 0.08],
+        // Groq Llama 4 vision
+        'groq|meta-llama/llama-4-scout-17b-16e-instruct'    => ['in' => 0.11, 'out' => 0.34],
+        'groq|meta-llama/llama-4-maverick-17b-128e-instruct'=> ['in' => 0.20, 'out' => 0.60],
+    ];
+
+    /** Used when an unknown model appears in cache (e.g. user changed GEMINI_MODEL). */
+    private const MODEL_PRICING_FALLBACK = ['in' => 0.075, 'out' => 0.30];
+
     public function index()
     {
         // ── 1. Gemini config ──────────────────────────────────────────────
@@ -60,6 +90,121 @@ class AiHealthController extends Controller
         );
         $totalCostIdr = (int) ($totalCostUsd * self::IDR_RATE);
 
+        // ── 2b. Per-model breakdown (last 7 days) ─────────────────────────
+        // Aggregate ai_model_usage_YYYY-MM-DD daily caches into a single
+        // table grouped by provider|model|type so the page can show which
+        // model is driving cost (Gemini text vs vision vs Groq fallbacks).
+        $modelAgg = [];
+        $geminiModelName = config('services.gemini.model', 'gemini-flash-latest');
+        $groqModelName   = config('services.groq.model', 'llama-3.3-70b-versatile');
+        $groqVisionName  = config('services.groq.vision_model', 'meta-llama/llama-4-scout-17b-16e-instruct');
+
+        for ($i = 6; $i >= 0; $i--) {
+            $date = now()->subDays($i)->toDateString();
+
+            // PRIMARY: precise per-model tracking (added in this commit)
+            $day = Cache::get('ai_model_usage_' . $date, []);
+            $hasPerModelData = is_array($day) && !empty($day);
+            if ($hasPerModelData) {
+                foreach ($day as $bucketKey => $row) {
+                    if (!isset($modelAgg[$bucketKey])) {
+                        $modelAgg[$bucketKey] = [
+                            'provider'      => $row['provider'] ?? '?',
+                            'model'         => $row['model'] ?? '?',
+                            'type'          => $row['type'] ?? 'text',
+                            'calls'         => 0,
+                            'prompt_tokens' => 0,
+                            'output_tokens' => 0,
+                        ];
+                    }
+                    $modelAgg[$bucketKey]['calls']         += (int) ($row['calls'] ?? 0);
+                    $modelAgg[$bucketKey]['prompt_tokens'] += (int) ($row['prompt_tokens'] ?? 0);
+                    $modelAgg[$bucketKey]['output_tokens'] += (int) ($row['output_tokens'] ?? 0);
+                }
+                continue;
+            }
+
+            // FALLBACK: derive from legacy aggregated caches so the table is
+            // populated immediately on first deploy. The legacy gemini_usage_*
+            // bucket lumps text+image tokens together; we approximate by
+            // splitting based on the image_calls / total_calls ratio. This is
+            // an estimate, not exact — flagged with has_pricing=false in UI.
+            $geminiDay = Cache::get('gemini_usage_' . $date, null);
+            if (is_array($geminiDay) && ($geminiDay['calls'] ?? 0) > 0) {
+                $totalCalls = max(1, (int) $geminiDay['calls']);
+                $imageCalls = (int) ($geminiDay['image_calls'] ?? 0);
+                $textCalls  = max(0, $totalCalls - $imageCalls);
+                $imageRatio = $imageCalls / $totalCalls;
+                $textRatio  = 1 - $imageRatio;
+                $promptTok  = (int) ($geminiDay['prompt_tokens'] ?? 0);
+                $outputTok  = (int) ($geminiDay['output_tokens'] ?? 0);
+
+                if ($textCalls > 0) {
+                    $tk = "gemini|{$geminiModelName}|text";
+                    $modelAgg[$tk] = $modelAgg[$tk] ?? ['provider' => 'gemini', 'model' => $geminiModelName, 'type' => 'text', 'calls' => 0, 'prompt_tokens' => 0, 'output_tokens' => 0];
+                    $modelAgg[$tk]['calls']         += $textCalls;
+                    $modelAgg[$tk]['prompt_tokens'] += (int) round($promptTok * $textRatio);
+                    $modelAgg[$tk]['output_tokens'] += (int) round($outputTok * $textRatio);
+                }
+                if ($imageCalls > 0) {
+                    $ik = "gemini|{$geminiModelName}|image";
+                    $modelAgg[$ik] = $modelAgg[$ik] ?? ['provider' => 'gemini', 'model' => $geminiModelName, 'type' => 'image', 'calls' => 0, 'prompt_tokens' => 0, 'output_tokens' => 0];
+                    $modelAgg[$ik]['calls']         += $imageCalls;
+                    $modelAgg[$ik]['prompt_tokens'] += (int) round($promptTok * $imageRatio);
+                    $modelAgg[$ik]['output_tokens'] += (int) round($outputTok * $imageRatio);
+                }
+            }
+
+            $groqDay = Cache::get('groq_usage_' . $date, null);
+            if (is_array($groqDay) && ($groqDay['calls'] ?? 0) > 0) {
+                $totalCalls = max(1, (int) $groqDay['calls']);
+                $imageCalls = (int) ($groqDay['image_calls'] ?? 0);
+                $textCalls  = max(0, $totalCalls - $imageCalls);
+                $imageRatio = $imageCalls / $totalCalls;
+                $textRatio  = 1 - $imageRatio;
+                $promptTok  = (int) ($groqDay['prompt_tokens'] ?? 0);
+                $outputTok  = (int) ($groqDay['output_tokens'] ?? 0);
+
+                if ($textCalls > 0) {
+                    $tk = "groq|{$groqModelName}|text";
+                    $modelAgg[$tk] = $modelAgg[$tk] ?? ['provider' => 'groq', 'model' => $groqModelName, 'type' => 'text', 'calls' => 0, 'prompt_tokens' => 0, 'output_tokens' => 0];
+                    $modelAgg[$tk]['calls']         += $textCalls;
+                    $modelAgg[$tk]['prompt_tokens'] += (int) round($promptTok * $textRatio);
+                    $modelAgg[$tk]['output_tokens'] += (int) round($outputTok * $textRatio);
+                }
+                if ($imageCalls > 0) {
+                    $ik = "groq|{$groqVisionName}|image";
+                    $modelAgg[$ik] = $modelAgg[$ik] ?? ['provider' => 'groq', 'model' => $groqVisionName, 'type' => 'image', 'calls' => 0, 'prompt_tokens' => 0, 'output_tokens' => 0];
+                    $modelAgg[$ik]['calls']         += $imageCalls;
+                    $modelAgg[$ik]['prompt_tokens'] += (int) round($promptTok * $imageRatio);
+                    $modelAgg[$ik]['output_tokens'] += (int) round($outputTok * $imageRatio);
+                }
+            }
+        }
+        // Compute per-model cost using published pricing
+        $modelBreakdown = [];
+        $modelTotalCostUsd = 0.0;
+        foreach ($modelAgg as $row) {
+            $priceKey   = $row['provider'] . '|' . $row['model'];
+            $price      = self::MODEL_PRICING[$priceKey] ?? self::MODEL_PRICING_FALLBACK;
+            $costUsd    = round(
+                ($row['prompt_tokens'] / 1_000_000 * $price['in'])
+                    + ($row['output_tokens'] / 1_000_000 * $price['out']),
+                6
+            );
+            $row['price_in_per_m']  = $price['in'];
+            $row['price_out_per_m'] = $price['out'];
+            $row['cost_usd']        = $costUsd;
+            $row['cost_idr']        = (int) ($costUsd * self::IDR_RATE);
+            $row['total_tokens']    = $row['prompt_tokens'] + $row['output_tokens'];
+            $row['has_pricing']     = isset(self::MODEL_PRICING[$priceKey]);
+            $modelBreakdown[]       = $row;
+            $modelTotalCostUsd     += $costUsd;
+        }
+        // Sort by cost desc so the most expensive model is on top
+        usort($modelBreakdown, fn($a, $b) => $b['cost_usd'] <=> $a['cost_usd']);
+        $modelTotalCostIdr = (int) ($modelTotalCostUsd * self::IDR_RATE);
+
         // ── 3. Per-agent stats (last 7 days) ──────────────────────────────
         $agentStats = AgentLog::select('agent_name',
                 DB::raw('COUNT(*) as total'),
@@ -98,6 +243,7 @@ class AiHealthController extends Controller
             'geminiModel', 'geminiKeyMasked',
             'tokenDays', 'totalCalls', 'totalImageCalls',
             'totalPrompt', 'totalOutput', 'totalCostUsd', 'totalCostIdr',
+            'modelBreakdown', 'modelTotalCostUsd', 'modelTotalCostIdr',
             'agentStats', 'waUrl', 'stuckJobs',
             'lastGeminiPing', 'lastWhacenterPing',
             'lastDbPing', 'lastQueuePing', 'lastSystemPing'

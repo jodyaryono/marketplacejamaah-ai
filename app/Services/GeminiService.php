@@ -103,6 +103,11 @@ class GeminiService
                     $usage['candidatesTokenCount'] ?? 0,
                     'text'
                 );
+                $this->recordModelUsage(
+                    'gemini', $this->model, 'text',
+                    $usage['promptTokenCount'] ?? 0,
+                    $usage['candidatesTokenCount'] ?? 0
+                );
 
                 $result = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
 
@@ -255,6 +260,11 @@ class GeminiService
                 $usage['candidatesTokenCount'] ?? 0,
                 'image'
             );
+            $this->recordModelUsage(
+                'gemini', $this->model, 'image',
+                $usage['promptTokenCount'] ?? 0,
+                $usage['candidatesTokenCount'] ?? 0
+            );
 
             $this->resetCircuit();
             return $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
@@ -333,6 +343,11 @@ class GeminiService
                 $data['usage']['completion_tokens'] ?? 0,
                 'text'
             );
+            $this->recordModelUsage(
+                'groq', $this->groqModel, 'text',
+                $data['usage']['prompt_tokens'] ?? 0,
+                $data['usage']['completion_tokens'] ?? 0
+            );
 
             return $data['choices'][0]['message']['content'] ?? null;
 
@@ -384,6 +399,11 @@ class GeminiService
                 $data['usage']['prompt_tokens'] ?? 0,
                 $data['usage']['completion_tokens'] ?? 0,
                 'image'
+            );
+            $this->recordModelUsage(
+                'groq', $this->groqVisionModel, 'image',
+                $data['usage']['prompt_tokens'] ?? 0,
+                $data['usage']['completion_tokens'] ?? 0
             );
 
             return $data['choices'][0]['message']['content'] ?? null;
@@ -467,6 +487,33 @@ class GeminiService
         if ($type === 'image') $current['image_calls']++;
         $current['prompt_tokens'] += $prompt;
         $current['output_tokens'] += $output;
+        Cache::put($key, $current, now()->addDays(8));
+    }
+
+    /**
+     * Per-model daily breakdown so the AI Health page can show which model
+     * (Gemini text, Gemini vision, Groq text fallback, Groq vision fallback)
+     * is driving cost. Key: ai_model_usage_YYYY-MM-DD → array keyed by
+     * "<provider>|<model>|<type>" → {provider, model, type, calls, prompt_tokens, output_tokens}
+     */
+    private function recordModelUsage(string $provider, string $model, string $type, int $prompt, int $output): void
+    {
+        $key       = 'ai_model_usage_' . now()->toDateString();
+        $current   = Cache::get($key, []);
+        $bucketKey = "{$provider}|{$model}|{$type}";
+        if (!isset($current[$bucketKey])) {
+            $current[$bucketKey] = [
+                'provider'      => $provider,
+                'model'         => $model,
+                'type'          => $type,
+                'calls'         => 0,
+                'prompt_tokens' => 0,
+                'output_tokens' => 0,
+            ];
+        }
+        $current[$bucketKey]['calls']++;
+        $current[$bucketKey]['prompt_tokens'] += $prompt;
+        $current[$bucketKey]['output_tokens'] += $output;
         Cache::put($key, $current, now()->addDays(8));
     }
 }

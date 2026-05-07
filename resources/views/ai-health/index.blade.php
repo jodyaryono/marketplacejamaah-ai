@@ -329,6 +329,119 @@
         </div>
     </div>
 
+    {{-- ── Row 2a: Per-Model Cost Breakdown ──────────────────────────────── --}}
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div>
+                        <i class="bi bi-cpu me-1 text-primary"></i>
+                        <strong>Biaya per Model AI — 7 Hari Terakhir</strong>
+                        <span class="text-muted ms-2" style="font-size:.75rem;">
+                            Identifikasi model mana yang menelan biaya terbesar
+                        </span>
+                    </div>
+                    <span class="cost-tag" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;">
+                        Total estimasi: Rp {{ number_format($modelTotalCostIdr) }} / ${{ number_format($modelTotalCostUsd, 4) }}
+                    </span>
+                </div>
+                <div class="card-body p-0">
+                    @if(empty($modelBreakdown))
+                        <div class="text-center text-muted py-4" style="font-size:.85rem;">
+                            <i class="bi bi-inbox me-2"></i>
+                            Belum ada data per-model. Tracking dimulai setelah deploy ini — data akan muncul setelah agent pertama dipanggil.
+                        </div>
+                    @else
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0" style="font-size:.82rem;">
+                            <thead style="background:#f0fdf8;">
+                                <tr>
+                                    <th class="ps-3">Provider</th>
+                                    <th>Model</th>
+                                    <th>Tipe</th>
+                                    <th class="text-end">Calls</th>
+                                    <th class="text-end">Prompt Tokens</th>
+                                    <th class="text-end">Output Tokens</th>
+                                    <th class="text-end">Total Tokens</th>
+                                    <th class="text-end">Harga (USD/1M)</th>
+                                    <th class="text-end pe-3">Estimasi Biaya</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($modelBreakdown as $m)
+                                @php
+                                    $isGemini = $m['provider'] === 'gemini';
+                                    $providerColor = $isGemini ? '#8b5cf6' : '#f97316'; // gemini=purple, groq=orange
+                                    $typeColor = $m['type'] === 'image' ? '#0ea5e9' : '#16a34a';
+                                @endphp
+                                <tr>
+                                    <td class="ps-3">
+                                        <span class="badge" style="background:{{ $providerColor }}20;color:{{ $providerColor }};font-weight:600;text-transform:uppercase;">
+                                            {{ $m['provider'] }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <code style="font-size:.78rem;color:#374151;word-break:break-all;">{{ $m['model'] }}</code>
+                                        @if(!$m['has_pricing'])
+                                            <span class="text-warning ms-1" title="Harga belum terdaftar — pakai fallback estimate">⚠️</span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <span class="badge" style="background:{{ $typeColor }}20;color:{{ $typeColor }};">
+                                            @if($m['type'] === 'image')
+                                                <i class="bi bi-image me-1"></i>vision
+                                            @else
+                                                <i class="bi bi-chat-text me-1"></i>text
+                                            @endif
+                                        </span>
+                                    </td>
+                                    <td class="text-end">{{ number_format($m['calls']) }}</td>
+                                    <td class="text-end">{{ number_format($m['prompt_tokens']) }}</td>
+                                    <td class="text-end">{{ number_format($m['output_tokens']) }}</td>
+                                    <td class="text-end fw-semibold">{{ number_format($m['total_tokens']) }}</td>
+                                    <td class="text-end text-muted" style="font-size:.72rem;white-space:nowrap;">
+                                        in ${{ number_format($m['price_in_per_m'], 4) }}<br>
+                                        out ${{ number_format($m['price_out_per_m'], 4) }}
+                                    </td>
+                                    <td class="text-end pe-3">
+                                        @if($m['cost_idr'] > 0)
+                                            <span class="cost-tag">Rp {{ number_format($m['cost_idr']) }}</span>
+                                            <div class="text-muted" style="font-size:.65rem;">${{ number_format($m['cost_usd'], 4) }}</div>
+                                        @else
+                                            <span class="text-muted">Rp 0</span>
+                                        @endif
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                            <tfoot style="border-top:2px solid #d1fae5;background:#f9fafb;">
+                                <tr style="font-weight:700;">
+                                    <td class="ps-3" colspan="3">Total semua model</td>
+                                    <td class="text-end">{{ number_format(collect($modelBreakdown)->sum('calls')) }}</td>
+                                    <td class="text-end">{{ number_format(collect($modelBreakdown)->sum('prompt_tokens')) }}</td>
+                                    <td class="text-end">{{ number_format(collect($modelBreakdown)->sum('output_tokens')) }}</td>
+                                    <td class="text-end">{{ number_format(collect($modelBreakdown)->sum('total_tokens')) }}</td>
+                                    <td></td>
+                                    <td class="text-end pe-3">
+                                        <span class="cost-tag">Rp {{ number_format($modelTotalCostIdr) }}</span>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    <div class="px-3 py-2" style="font-size:.7rem;color:#9ca3af;background:#fafafa;border-top:1px solid #f3f4f6;">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Estimasi biaya berdasarkan published pricing (Gemini: ai.google.dev/pricing, Groq: console.groq.com/pricing).
+                        Kurs IDR: Rp {{ number_format(16000) }} / USD.
+                        Tracking dimulai sejak deploy fitur ini — model yang muncul di sini hanya yang sudah dipanggil setelah aktivasi.
+                        ⚠️ = harga belum terdaftar di tabel, pakai fallback estimate (cek <code>AiHealthController::MODEL_PRICING</code>).
+                    </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- ── Row 2: Token Usage ────────────────────────────────────────────── --}}
     <div class="row g-3 mb-4">
         <div class="col-12">
