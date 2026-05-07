@@ -25,8 +25,13 @@ class LandingController extends Controller
         // ── Produk dengan foto/video ────────────────────────────────────────
         $query = Listing::with(['category', 'contact'])
             ->where('status', 'active')
-            ->whereNotNull('media_urls')
-            ->whereRaw("media_urls::text != '[]'")
+            ->where(function ($q) {
+                $q->where(function ($q2) {
+                    $q2->whereNotNull('media_urls')
+                       ->whereRaw("media_urls::text != '[]'")
+                       ->whereRaw("COALESCE(media_urls::jsonb->>0, '') <> ''");
+                })->orWhereNotNull('gdrive_url');
+            })
             ->orderByDesc('created_at');
         $this->deduplicateByContactTitle($query);
         $this->applyFilters($query, $request);
@@ -36,8 +41,11 @@ class LandingController extends Controller
         $textQuery = Listing::with(['category', 'contact'])
             ->where('status', 'active')
             ->where(function ($q) {
-                $q->whereNull('media_urls')->orWhereRaw("media_urls::text = '[]'");
+                $q->whereNull('media_urls')
+                  ->orWhereRaw("media_urls::text = '[]'")
+                  ->orWhereRaw("COALESCE(media_urls::jsonb->>0, '') = ''");
             })
+            ->whereNull('gdrive_url')
             ->orderByDesc('created_at');
         $this->deduplicateByContactTitle($textQuery);
         $this->applyFilters($textQuery, $request);
@@ -134,10 +142,18 @@ class LandingController extends Controller
 
         if ($isText) {
             $query->where(function ($q) {
-                $q->whereNull('media_urls')->orWhereRaw("media_urls::text = '[]'");
-            });
+                $q->whereNull('media_urls')
+                  ->orWhereRaw("media_urls::text = '[]'")
+                  ->orWhereRaw("COALESCE(media_urls::jsonb->>0, '') = ''");
+            })->whereNull('gdrive_url');
         } else {
-            $query->whereNotNull('media_urls')->whereRaw("media_urls::text != '[]'");
+            $query->where(function ($q) {
+                $q->where(function ($q2) {
+                    $q2->whereNotNull('media_urls')
+                       ->whereRaw("media_urls::text != '[]'")
+                       ->whereRaw("COALESCE(media_urls::jsonb->>0, '') <> ''");
+                })->orWhereNotNull('gdrive_url');
+            });
         }
 
         $this->applyFilters($query, $request);

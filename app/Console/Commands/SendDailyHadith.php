@@ -27,15 +27,24 @@ class SendDailyHadith extends Command
         }
 
         $groupName = Setting::get('marketplace_name', 'Marketplace Jamaah');
-        $lastIndex = Cache::get('hadith:last_index');
 
-        $hadith = HadithService::random($lastIndex);
+        // Avoid repeats: keep a sliding window of recently-sent indices.
+        // Window size ≈ 1/3 of total pool so distribution feels fresh but not exhaustive.
+        $historySize = max(1, (int) floor(HadithService::count() / 3));
+        $recent = (array) Cache::get('hadith:recent_indices', []);
+
+        $hadith = HadithService::random($recent);
         $message = HadithService::formatForWhatsApp($hadith);
 
         try {
             $result = $wa->sendGroupMessage($groupName, $message);
 
-            Cache::put('hadith:last_index', $hadith['index'], now()->addDays(7));
+            $recent[] = $hadith['index'];
+            if (count($recent) > $historySize) {
+                $recent = array_slice($recent, -$historySize);
+            }
+            Cache::put('hadith:recent_indices', $recent, now()->addDays(30));
+            Cache::put('hadith:last_index', $hadith['index'], now()->addDays(7)); // legacy
 
             Log::info('Daily hadith sent', [
                 'theme' => $hadith['theme'],

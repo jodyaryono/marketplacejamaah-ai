@@ -88,17 +88,109 @@ class HadithService
             'text' => "Rasulullah ﷺ bersabda:\n\n_\"Penundaan (pembayaran hutang) oleh orang yang mampu adalah suatu kezaliman.\"_\n\n📖 *HR. Bukhari no. 2400 & Muslim no. 1564*",
             'theme' => 'Kewajiban membayar hutang',
         ],
+        [
+            'text' => "Rasulullah ﷺ melaknat:\n\n_\"…pemakan riba, pemberi riba, penulis (pencatat transaksi riba), dan dua saksinya. Mereka semua sama.\"_\n\n📖 *HR. Muslim no. 1598*\n\n_Fiqih muamalah: riba haram bagi semua pihak yang terlibat, bukan hanya pemakannya._",
+            'theme' => 'Fiqih muamalah: larangan riba',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Emas ditukar dengan emas, perak dengan perak, gandum dengan gandum, sya'ir dengan sya'ir, kurma dengan kurma, garam dengan garam — harus sama takarannya, sejenis, dan diserahterimakan langsung. Jika jenisnya berbeda, juallah sesuka kalian asal tunai.\"_\n\n📖 *HR. Muslim no. 1587*\n\n_Fiqih muamalah: kaidah riba fadhl & riba nasi'ah pada enam komoditas ribawi._",
+            'theme' => 'Fiqih muamalah: kaidah barang ribawi',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Barangsiapa melakukan salaf (salam/pemesanan), hendaklah ia mensalafkan dengan takaran yang jelas, timbangan yang jelas, dan sampai tempo yang jelas pula.\"_\n\n📖 *HR. Bukhari no. 2240 & Muslim no. 1604*\n\n_Fiqih muamalah: rukun akad salam — barang, kuantitas, dan tempo wajib jelas._",
+            'theme' => 'Fiqih muamalah: akad salam (pesanan)',
+        ],
+        [
+            'text' => "Rasulullah ﷺ melarang:\n\n_\"…jual beli hashah (dengan melempar kerikil) dan jual beli gharar.\"_\n\n📖 *HR. Muslim no. 1513*\n\n_Fiqih muamalah: akad harus jelas objek, harga, dan serah-terimanya — gharar (spekulatif/tidak jelas) membatalkan akad._",
+            'theme' => 'Fiqih muamalah: akad harus jelas',
+        ],
+        [
+            'text' => "Rasulullah ﷺ melarang:\n\n_\"…jual beli najasy.\"_\n\n📖 *HR. Bukhari no. 2142 & Muslim no. 1516*\n\n_Fiqih muamalah: najasy yaitu menaikkan tawaran bukan untuk membeli, hanya untuk mengecoh pembeli lain — termasuk dalam penipuan._",
+            'theme' => 'Fiqih muamalah: larangan najasy',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Janganlah kalian mencegat (talaqqi) barang dagangan sebelum sampai ke pasar.\"_\n\n📖 *HR. Bukhari no. 2165 & Muslim no. 1517*\n\n_Fiqih muamalah: larangan talaqqi rukban — mencegat penjual di jalan agar dibeli murah sebelum ia tahu harga pasar._",
+            'theme' => 'Fiqih muamalah: larangan talaqqi rukban',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Tidaklah seseorang menimbun (ihtikar) kecuali ia orang yang berdosa.\"_\n\n📖 *HR. Muslim no. 1605*\n\n_Fiqih muamalah: ihtikar (menimbun kebutuhan pokok menunggu harga naik) adalah dosa, karena menzalimi masyarakat._",
+            'theme' => 'Fiqih muamalah: larangan ihtikar',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Tidak boleh orang kota menjualkan untuk orang desa. Biarkanlah manusia, Allah memberi rezeki sebagian mereka dari sebagian yang lain.\"_\n\n📖 *HR. Muslim no. 1522*\n\n_Fiqih muamalah: larangan calo/makelar kota yang memanfaatkan ketidaktahuan harga penjual dari desa._",
+            'theme' => 'Fiqih muamalah: larangan calo menipu',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Barangsiapa membeli makanan, janganlah ia menjualnya kembali sampai ia menerimanya dengan sempurna.\"_\n\n📖 *HR. Bukhari no. 2136 & Muslim no. 1526*\n\n_Fiqih muamalah: qabdh (serah-terima) adalah syarat sah menjual kembali barang yang dibeli._",
+            'theme' => 'Fiqih muamalah: syarat qabdh',
+        ],
+        [
+            'text' => "Dari Abu Hurairah ra., Rasulullah ﷺ melewati setumpuk makanan, lalu memasukkan tangannya ke dalamnya dan mendapati bagian bawahnya basah. Beliau bersabda:\n\n_\"Apa ini wahai penjual makanan?\" Ia menjawab: \"Terkena hujan, ya Rasulullah.\" Beliau bersabda: \"Mengapa tidak engkau letakkan di atas agar orang-orang melihatnya? Barangsiapa menipu, ia bukan golonganku.\"_\n\n📖 *HR. Muslim no. 102*\n\n_Fiqih muamalah: wajib transparan atas cacat/kondisi barang._",
+            'theme' => 'Fiqih muamalah: transparansi cacat barang',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Tangan Allah di atas dua orang yang berserikat (syirkah) selama salah seorang dari mereka tidak berkhianat kepada yang lain. Jika salah seorang berkhianat, Dia akan mencabut (keberkahan) dari keduanya.\"_\n\n📖 *HR. Abu Dawud no. 3383, Hakim* — Shahih\n\n_Fiqih muamalah: keberkahan syirkah/kemitraan bergantung pada amanah._",
+            'theme' => 'Fiqih muamalah: syirkah (kemitraan)',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Berikanlah upah pekerja sebelum kering keringatnya.\"_\n\n📖 *HR. Ibnu Majah no. 2443* — Shahih\n\n_Fiqih muamalah: akad ijarah (sewa/jasa) — pembayaran upah wajib disegerakan._",
+            'theme' => 'Fiqih muamalah: akad ijarah (upah kerja)',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Seorang pemberi pinjaman dan peminjam yang menangguhkan (berbuat baik kepada yang kesulitan), keduanya berada dalam pahala yang sama hingga salah satunya terpenuhi (hutangnya).\"_\n\n📖 *HR. Ahmad, Ibnu Majah* — Shahih\n\n_Fiqih muamalah: qardh (pinjaman) adalah akad tolong-menolong, bukan komersial._",
+            'theme' => 'Fiqih muamalah: qardh (pinjaman)',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Setiap pinjaman yang mendatangkan manfaat (bagi pemberi pinjaman) adalah riba.\"_\n\n📖 *Atsar shahih, Al-Baihaqi dalam Sunan Kubra*\n\n_Kaidah fiqih muamalah: qardh tidak boleh mensyaratkan tambahan/manfaat, karena itulah hakikat riba._",
+            'theme' => 'Fiqih muamalah: pinjaman berbunga = riba',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Timbanglah dan lebihkanlah (sedikit untuk pembeli).\"_\n\n📖 *HR. Abu Dawud no. 3336, Tirmidzi no. 1305* — Shahih\n\n_Fiqih muamalah: adab takaran/timbangan — lebihkan, jangan kurangi._",
+            'theme' => 'Fiqih muamalah: adab timbangan',
+        ],
+        [
+            'text' => "Allah ﷻ berfirman dalam hadits qudsi:\n\n_\"Aku adalah pihak ketiga dari dua orang yang berserikat selama salah satunya tidak mengkhianati yang lain. Jika ia berkhianat, Aku keluar dari keduanya.\"_\n\n📖 *HR. Abu Dawud no. 3383* — Shahih\n\n_Fiqih muamalah: khianat dalam syirkah mengeluarkan berkah Allah dari kongsi tersebut._",
+            'theme' => 'Fiqih muamalah: amanah dalam kongsi',
+        ],
+        [
+            'text' => "Dari Jabir ra., Rasulullah ﷺ bersabda kepada seseorang yang hendak menjual buah yang belum tampak kelayakan masaknya:\n\n_\"Tidakkah engkau lihat, jika Allah menahan (mencegah) buah itu (gagal panen), dengan (dalih) apa engkau mengambil harta saudaramu?\"_\n\n📖 *HR. Muslim no. 1555*\n\n_Fiqih muamalah: larangan menjual sesuatu yang belum jelas wujud/kelayakannya (gharar)._",
+            'theme' => 'Fiqih muamalah: larangan jual sebelum matang',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Barangsiapa membeli seekor kambing musharrah (yang diikat puting susunya agar terlihat banyak susunya), lalu ia memerahnya, maka ia boleh memilih: menahan kambing itu, atau mengembalikannya bersama satu sha' kurma.\"_\n\n📖 *HR. Bukhari no. 2148 & Muslim no. 1524*\n\n_Fiqih muamalah: khiyar 'aib — pembeli berhak membatalkan akad bila ada penipuan/kecacatan tersembunyi._",
+            'theme' => 'Fiqih muamalah: khiyar aib',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Orang muslim terikat dengan syarat-syarat yang mereka buat, kecuali syarat yang mengharamkan yang halal atau menghalalkan yang haram.\"_\n\n📖 *HR. Tirmidzi no. 1352, Abu Dawud no. 3594* — Hasan Shahih\n\n_Kaidah fiqih muamalah: akad wajib dipenuhi selama tidak melanggar syariat._",
+            'theme' => 'Fiqih muamalah: kaidah akad',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Tidak halal (menggabungkan) pinjaman dengan jual beli, tidak halal dua syarat dalam satu jual beli, tidak halal keuntungan atas sesuatu yang belum dijamin, dan tidak halal menjual sesuatu yang tidak ada padamu.\"_\n\n📖 *HR. Abu Dawud no. 3504, Tirmidzi no. 1234* — Hasan Shahih\n\n_Fiqih muamalah: empat larangan pokok — bai' ma'dum, dua akad dalam satu, jual tanpa qabdh, dan pencampuran akad qardh & bai'._",
+            'theme' => 'Fiqih muamalah: empat larangan pokok',
+        ],
+        [
+            'text' => "Rasulullah ﷺ bersabda:\n\n_\"Jangan kalian menjual sesuatu dari hasil (hewan atau tanaman) sampai jelas kelayakannya.\"_\n\n📖 *HR. Bukhari no. 2195 & Muslim no. 1534*\n\n_Fiqih muamalah: objek akad harus jelas sifat dan kualitasnya pada saat akad._",
+            'theme' => 'Fiqih muamalah: kejelasan objek akad',
+        ],
     ];
 
     /**
-     * Get a random hadith. Optionally exclude a specific index to avoid repeats.
+     * Get a random hadith, excluding any indices in $excludeIndices.
+     * Accepts int (legacy: single last index) or array of ints (recent history).
      */
-    public static function random(?int $excludeIndex = null): array
+    public static function random(int|array|null $excludeIndices = null): array
     {
-        $indices = array_keys(self::$hadiths);
+        $exclude = match (true) {
+            is_int($excludeIndices)   => [$excludeIndices],
+            is_array($excludeIndices) => array_map('intval', $excludeIndices),
+            default                   => [],
+        };
 
-        if ($excludeIndex !== null) {
-            $indices = array_filter($indices, fn($i) => $i !== $excludeIndex);
+        $indices = array_values(array_diff(array_keys(self::$hadiths), $exclude));
+
+        // Safety: if exclusion wiped out everything, fall back to full pool.
+        if (empty($indices)) {
+            $indices = array_keys(self::$hadiths);
         }
 
         $index = $indices[array_rand($indices)];
