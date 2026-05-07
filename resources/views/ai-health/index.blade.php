@@ -333,17 +333,41 @@
     <div class="row g-3 mb-4">
         <div class="col-12">
             <div class="card">
-                <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-                    <div>
-                        <i class="bi bi-cpu me-1 text-primary"></i>
-                        <strong>Biaya per Model AI — 7 Hari Terakhir</strong>
-                        <span class="text-muted ms-2" style="font-size:.75rem;">
-                            Identifikasi model mana yang menelan biaya terbesar
+                <div class="card-header">
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                        <div>
+                            <i class="bi bi-cpu me-1 text-primary"></i>
+                            <strong>Biaya per Model AI — 7 Hari Terakhir</strong>
+                            <span class="text-muted ms-2" style="font-size:.75rem;">
+                                Identifikasi model mana yang menelan biaya terbesar
+                            </span>
+                        </div>
+                        <span class="cost-tag" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;">
+                            Total estimasi: Rp {{ number_format($modelTotalCostIdr) }} / ${{ number_format($modelTotalCostUsd, 4) }}
                         </span>
                     </div>
-                    <span class="cost-tag" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;">
-                        Total estimasi: Rp {{ number_format($modelTotalCostIdr) }} / ${{ number_format($modelTotalCostUsd, 4) }}
-                    </span>
+                    <div class="d-flex flex-wrap gap-3 align-items-center" style="font-size:.75rem;color:#374151;">
+                        <span>
+                            <i class="bi bi-key text-muted me-1"></i>
+                            <span class="text-muted">GEMINI_API_KEY:</span>
+                            <code style="font-size:.75rem;color:#1d4ed8;background:#eff6ff;padding:2px 6px;border-radius:4px;">
+                                {{ $geminiKeyMasked }}
+                            </code>
+                        </span>
+                        <span>
+                            <i class="bi bi-stars text-muted me-1"></i>
+                            <span class="text-muted">GEMINI_MODEL:</span>
+                            <code style="font-size:.75rem;color:#7c3aed;background:#f5f3ff;padding:2px 6px;border-radius:4px;">
+                                {{ $geminiModel }}
+                            </code>
+                        </span>
+                        <span class="text-muted" style="font-size:.7rem;">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Cocokkan 4 char terakhir key di atas dengan daftar key di
+                            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color:#1d4ed8;">Google AI Studio</a>
+                            untuk identifikasi UUID billing.
+                        </span>
+                    </div>
                 </div>
                 <div class="card-body p-0">
                     @if(empty($modelBreakdown))

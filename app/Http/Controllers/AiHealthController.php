@@ -181,6 +181,24 @@ class AiHealthController extends Controller
                 }
             }
         }
+        // Always seed the 4 known models even when no usage yet, so the page
+        // shows which models the system uses (vs. blank "Belum ada data").
+        $expectedModels = [
+            "gemini|{$geminiModelName}|text"  => ['provider' => 'gemini', 'model' => $geminiModelName, 'type' => 'text'],
+            "gemini|{$geminiModelName}|image" => ['provider' => 'gemini', 'model' => $geminiModelName, 'type' => 'image'],
+            "groq|{$groqModelName}|text"      => ['provider' => 'groq',   'model' => $groqModelName,   'type' => 'text'],
+            "groq|{$groqVisionName}|image"    => ['provider' => 'groq',   'model' => $groqVisionName,  'type' => 'image'],
+        ];
+        foreach ($expectedModels as $bucketKey => $stub) {
+            if (!isset($modelAgg[$bucketKey])) {
+                $modelAgg[$bucketKey] = $stub + [
+                    'calls'         => 0,
+                    'prompt_tokens' => 0,
+                    'output_tokens' => 0,
+                ];
+            }
+        }
+
         // Compute per-model cost using published pricing
         $modelBreakdown = [];
         $modelTotalCostUsd = 0.0;
