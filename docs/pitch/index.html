@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Marketplace Jamaah AI · QHomemart 2026</title>
+<style>
+  :root {
+    --navy: #1e3a8a;
+    --navy-deep: #0f1e4a;
+    --emerald: #10b981;
+    --emerald-deep: #047857;
+    --amber: #f59e0b;
+    --cream: #fef9e7;
+    --ink: #0b1020;
+    --ink-soft: #2d3a55;
+    --muted: #6b7591;
+    --line: rgba(15, 30, 74, 0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #0a0f1f; color: var(--ink); font-family: -apple-system, "Inter", system-ui, "Segoe UI", Helvetica, Arial, sans-serif; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  body { padding: 32px 16px; min-height: 100vh; }
+
+  .deck { max-width: 1280px; margin: 0 auto; }
+
+  .slide {
+    background: linear-gradient(135deg, #fdfcf6 0%, #fef9e7 100%);
+    border-radius: 24px;
+    padding: 56px 64px;
+    margin-bottom: 28px;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 30px 80px -20px rgba(15, 30, 74, 0.45), 0 8px 24px -8px rgba(15, 30, 74, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+  }
+
+  .slide.dark {
+    background: linear-gradient(135deg, var(--navy-deep) 0%, var(--navy) 100%);
+    color: #f7faff;
+  }
+
+  .slide-num {
+    position: absolute;
+    top: 28px;
+    right: 32px;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .slide.dark .slide-num { color: rgba(255, 255, 255, 0.5); }
+
+  .brand {
+    position: absolute;
+    top: 28px;
+    left: 32px;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .brand .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--emerald); box-shadow: 0 0 10px var(--emerald); }
+  .slide.dark .brand { color: rgba(255, 255, 255, 0.7); }
+
+  .eyebrow { font-size: 13px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--emerald-deep); margin-bottom: 18px; }
+  .slide.dark .eyebrow { color: #6ee7b7; }
+
+  h1 { font-size: 64px; line-height: 1.05; letter-spacing: -0.02em; font-weight: 800; color: var(--ink); margin-bottom: 18px; }
+  .slide.dark h1 { color: #fff; }
+  h1 em { font-style: normal; color: var(--emerald-deep); }
+  .slide.dark h1 em { color: #34d399; }
+
+  h2 { font-size: 42px; line-height: 1.1; letter-spacing: -0.015em; font-weight: 800; color: var(--ink); margin-bottom: 14px; }
+  .slide.dark h2 { color: #fff; }
+
+  .lead { font-size: 22px; line-height: 1.45; color: var(--ink-soft); max-width: 820px; }
+  .slide.dark .lead { color: rgba(255, 255, 255, 0.85); }
+
+  .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; flex: 1; align-items: center; margin-top: 24px; }
+  .columns-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; flex: 1; align-items: stretch; margin-top: 28px; }
+  .columns-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; flex: 1; align-items: stretch; margin-top: 24px; }
+
+  .hero-art { width: 100%; height: 100%; min-height: 380px; border-radius: 20px; object-fit: cover; box-shadow: 0 20px 50px -15px rgba(15, 30, 74, 0.35); }
+  .hero-art-placeholder { width: 100%; aspect-ratio: 16/10; border-radius: 20px; background: repeating-linear-gradient(45deg, #e8eef8, #e8eef8 12px, #d8e1f0 12px, #d8e1f0 24px); display: flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 600; letter-spacing: 0.06em; }
+
+  .stat { background: #fff; border-radius: 18px; padding: 26px 22px; border: 1px solid var(--line); box-shadow: 0 4px 16px -8px rgba(15, 30, 74, 0.15); display: flex; flex-direction: column; gap: 8px; }
+  .slide.dark .stat { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.12); backdrop-filter: blur(8px); }
+  .stat-number { font-size: 38px; font-weight: 800; color: var(--navy); letter-spacing: -0.02em; line-height: 1; }
+  .slide.dark .stat-number { color: #fff; }
+  .stat-label { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .slide.dark .stat-label { color: rgba(255, 255, 255, 0.7); }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .slide.dark .stat-sub { color: rgba(255, 255, 255, 0.55); }
+  .stat.accent .stat-number { color: var(--emerald-deep); }
+  .stat.accent-amber .stat-number { color: var(--amber); }
+
+  .pillar { background: #fff; border-radius: 16px; padding: 22px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+  .slide.dark .pillar { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.12); }
+  .pillar-icon { width: 38px; height: 38px; border-radius: 10px; background: var(--cream); display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .pillar h3 { font-size: 16px; font-weight: 700; color: var(--ink); }
+  .slide.dark .pillar h3 { color: #fff; }
+  .pillar p { font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+  .slide.dark .pillar p { color: rgba(255, 255, 255, 0.75); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 8px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .slide.dark th, .slide.dark td { border-color: rgba(255, 255, 255, 0.1); }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 700; }
+  .slide.dark th { color: rgba(255, 255, 255, 0.6); }
+  tbody tr:hover { background: rgba(16, 185, 129, 0.04); }
+
+  .pipeline-step { display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: #fff; border-radius: 12px; border: 1px solid var(--line); margin-bottom: 8px; font-size: 14px; }
+  .slide.dark .pipeline-step { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.1); }
+  .pipeline-num { width: 26px; height: 26px; border-radius: 50%; background: var(--emerald); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; flex-shrink: 0; }
+  .pipeline-name { font-weight: 700; color: var(--ink); flex: 1; }
+  .slide.dark .pipeline-name { color: #fff; }
+  .pipeline-out { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 11px; color: var(--muted); }
+  .slide.dark .pipeline-out { color: rgba(255, 255, 255, 0.6); }
+  .pipeline-time { font-family: ui-monospace, monospace; font-size: 11px; color: var(--emerald-deep); font-weight: 700; }
+  .slide.dark .pipeline-time { color: #34d399; }
+
+  .footer { display: flex; justify-content: space-between; align-items: center; padding-top: 24px; margin-top: auto; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+  .slide.dark .footer { color: rgba(255, 255, 255, 0.5); border-color: rgba(255, 255, 255, 0.1); }
+
+  .tag { display: inline-block; padding: 4px 10px; border-radius: 999px; background: rgba(16, 185, 129, 0.12); color: var(--emerald-deep); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+  .slide.dark .tag { background: rgba(110, 231, 183, 0.16); color: #6ee7b7; }
+  .tag.amber { background: rgba(245, 158, 11, 0.14); color: #b45309; }
+
+  .qr-block { display: flex; align-items: center; gap: 24px; }
+  .qr { width: 120px; height: 120px; background: #fff; border-radius: 12px; padding: 8px; }
+  .qr-code { width: 100%; height: 100%; display: grid; grid-template-columns: repeat(8, 1fr); gap: 1px; }
+  .qr-code span { background: var(--ink); border-radius: 1px; }
+
+  .cta-row { display: flex; gap: 16px; margin-top: 24px; flex-wrap: wrap; }
+  .cta { background: var(--emerald); color: #fff; padding: 14px 22px; border-radius: 12px; font-weight: 700; font-size: 15px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+  .cta.secondary { background: transparent; border: 1.5px solid currentColor; color: var(--ink); }
+  .slide.dark .cta.secondary { color: #fff; }
+
+  .reg-code { font-family: ui-monospace, monospace; background: rgba(245, 158, 11, 0.12); color: #b45309; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 13px; letter-spacing: 0.04em; }
+  .slide.dark .reg-code { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+
+  /* layered topology visual for slide 4 */
+  .layers { display: flex; flex-direction: column; gap: 8px; flex: 1; justify-content: center; }
+  .layer { display: flex; align-items: center; gap: 12px; }
+  .layer-tag { width: 110px; flex-shrink: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .layer-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill { background: #fff; padding: 8px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--ink); border: 1px solid var(--line); }
+  .slide.dark .pill { background: rgba(255,255,255,0.08); color: #fff; border-color: rgba(255,255,255,0.15); }
+  .pill.brain { border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.08); color: #92400e; }
+  .pill.percept { border-color: rgba(30, 64, 175, 0.25); background: rgba(30, 64, 175, 0.08); color: var(--navy); }
+  .pill.action { border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.08); color: var(--emerald-deep); }
+  .pill.output { border-color: rgba(168, 85, 247, 0.3); background: rgba(168, 85, 247, 0.08); color: #6b21a8; }
+
+  /* Print: 1 slide per page */
+  @media print {
+    body { background: #fff; padding: 0; }
+    .deck { max-width: none; }
+    .slide { box-shadow: none; margin: 0; border-radius: 0; page-break-after: always; aspect-ratio: 16/9; height: 100vh; min-height: 100vh; }
+    .nav { display: none; }
+  }
+
+  .nav { position: fixed; bottom: 24px; right: 24px; background: rgba(15, 30, 74, 0.9); color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 12px; backdrop-filter: blur(10px); z-index: 100; }
+</style>
+</head>
+<body>
+
+<div class="deck">
+
+  <!-- Slide 1 — HERO -->
+  <section class="slide">
+    <div class="brand"><span class="dot"></span> MARKETPLACE JAMAAH AI</div>
+    <div class="slide-num">01 / 08</div>
+    <div class="columns">
+      <div>
+        <div class="eyebrow">QHomemart AI Agent Competition · 2026</div>
+        <h1>16 AI Agents.<br/><em>Satu Marketplace.</em><br/>Cukup pakai WhatsApp.</h1>
+        <p class="lead" style="margin-top:14px">Sistem multi-agent yang mengubah obrolan WhatsApp Group pengajian menjadi marketplace digital — tanpa user perlu install aplikasi apapun.</p>
+        <div style="margin-top:28px;display:flex;gap:12px;align-items:center">
+          <span class="tag">Build Real AI Agent. Solve Real Problems.</span>
+          <span class="reg-code">REG · WAGLI4HM</span>
+        </div>
+      </div>
+      <div>
+        <img src="assets/hero.png" alt="Marketplace Jamaah AI hero illustration" class="hero-art" onerror="this.outerHTML='<div class=hero-art-placeholder>HERO ILLUSTRATION</div>'" />
+      </div>
+    </div>
+    <div class="footer">
+      <span>Jody Aryono · jodyaryono@gmail.com</span>
+      <span>marketplacejamaah-ai.jodyaryono.id</span>
+    </div>
+  </section>
+
+  <!-- Slide 2 — PROBLEM -->
+  <section class="slide">
+    <div class="brand"><span class="dot"></span> MARKETPLACE JAMAAH AI</div>
+    <div class="slide-num">02 / 08</div>
+    <div class="eyebrow">Problem Statement</div>
+    <h2>Ekonomi umat terjadi di WAG.<br/>Tapi marketplace digital tidak ramah komunitas pengajian.</h2>
+    <div class="columns">
+      <div>
+        <img src="assets/problem.png" alt="Problem illustration" class="hero-art" onerror="this.outerHTML='<div class=hero-art-placeholder>PROBLEM ILLUSTRATION</div>'" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="pillar">
+          <div class="pillar-icon">📵</div>
+          <h3>Jamaah tidak mau install marketplace baru</h3>
+          <p>Ibu-ibu pengajian, ustadz, lansia — UX modern marketplace terlalu tinggi sebagai entry barrier.</p>
+        </div>
+        <div class="pillar">
+          <div class="pillar-icon">🌊</div>
+          <h3>Iklan tenggelam di ratusan pesan harian</h3>
+          <p>Tidak ada history searchable, tidak ada link permanen, calon pembeli baru kehilangan iklan lama.</p>
+        </div>
+        <div class="pillar">
+          <div class="pillar-icon">🛡️</div>
+          <h3>Admin kewalahan moderasi manual</h3>
+          <p>Scam, judol, riba, pesan non-jualan — semua moderasi manual oleh manusia. Tidak skalabel.</p>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <span>Konteks: 1 WAG aktif, ratusan jamaah, transaksi UMKM Muslim</span>
+      <span>02</span>
+    </div>
+  </section>
+
+  <!-- Slide 3 — SOLUTION -->
+  <section class="slide dark">
+    <div class="brand"><span class="dot"></span> MARKETPLACE JAMAAH AI</div>
+    <div class="slide-num">03 / 08</div>
+    <div class="eyebrow">Solusi</div>
+    <h2>16 AI agent<br/>yang mendengarkan WAG 24/7.</h2>
+    <p class="lead">Setiap pesan otomatis di-klasifikasi, dimoderasi, di-extract jadi data terstruktur, dianalisis foto produknya, dan dijadikan listing dengan link permanen — tanpa user mengubah perilaku.</p>
+    <div class="columns-4" style="margin-top:36px">
+      <div class="stat">
+        <div class="stat-number">16</div>
+        <div class="stat-label">AI Agents</div>
+        <div class="stat-sub">5 layered architecture</div>
+      </div>
+      <div class="stat accent">
+        <div class="stat-number">3.213</div>
+        <div class="stat-label">Agent calls tersimpan</div>
+        <div class="stat-sub">Full reasoning trace</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">~3-7s</div>
+        <div class="stat-label">End-to-end latency</div>
+        <div class="stat-sub">Pesan → listing live</div>
+      </div>
+      <div class="stat accent-amber">
+        <div class="stat-number">100%</div>
+        <div class="stat-label">Success rate</div>
+        <div class="stat-sub">6 dari 11 agent kritis</div>
+      </div>
+    </div>
+    <div class="footer">
+      <span>Production-grade · Running real-time · Live di marketplacejamaah-ai.jodyaryono.id</span>
+      <span>03</span>
+    </div>
+  </section>
+
+  <!-- Slide 4 — ARCHITECTURE -->
+  <section class="slide">
+    <div class="brand"><span class="dot"></span> MARKETPLACE JAMAAH AI</div>
+    <div class="slide-num">04 / 08</div>
+    <div class="eyebrow">Arsitektur Multi-Agent · Kriteria #2 Kolaborasi Terstruktur</div>
+    <h2>5 Layer · 16 Agent · 1 Orchestrator</h2>
+    <div class="columns" style="margin-top:18px">
+      <div class="layers">
+        <div class="layer">
+          <span class="layer-tag">🎧 Listener</span>
+          <div class="layer-pills"><span class="pill">WhatsAppListenerAgent</span></div>
+        </div>
+        <div class="layer">
+          <span class="layer-tag">🧭 Brain</span>
+          <div class="layer-pills">
+            <span class="pill brain">MasterCommandAgent</span>
+            <span class="pill brain">BotQueryAgent</span>
+          </div>
+        </div>
+        <div class="layer">
+          <span class="layer-tag">🔍 Perception</span>
+          <div class="layer-pills">
+            <span class="pill percept">MessageParserAgent</span>
+            <span class="pill percept">AdClassifierAgent</span>
+            <span class="pill percept">MessageModerationAgent</span>
+            <span class="pill percept">ImageAnalyzerAgent</span>
+            <span class="pill percept">KtpScanAgent</span>
+            <span class="pill percept">LocationAgent</span>
+          </div>
+        </div>
+        <div class="layer">
+          <span class="layer-tag">🛠 Action</span>
+          <div class="layer-pills">
+            <span class="pill action">DataExtractorAgent</span>
+            <span class="pill action">AdBuilderAgent</span>
+            <span class="pill action">ListingEditAgent</span>
+            <span class="pill action">SearchAgent</span>
+          </div>
+        </div>
+        <div class="layer">
+          <span class="layer-tag">📤 Output</span>
+          <div class="layer-pills">
+            <span class="pill output">BroadcastAgent</span>
+            <span class="pill output">GroupAdminReplyAgent</span>
+            <span class="pill output">MemberOnboardingAgent</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <img src="assets/agents.png" alt="Multi-agent architecture" class="hero-art" onerror="this.outerHTML='<div class=hero-art-placeholder>AGENTS ARCHITECTURE</div>'" />
+      </div>
+    </div>
+    <div class="footer">
+      <span>Blackboard pattern · Single orchestrator (ProcessMessageJob) · LLM-agnostic (Gemini/Groq swap-able)</span>
+      <span>04</span>
+    </div>
+  </section>
+
+  <!-- Slide 5 — PIPELINE TRACE -->
+  <section class="slide">
+    <div class="brand"><span class="dot"></span> MARKETPLACE JAMAAH AI</div>
+    <div class="slide-num">05 / 08</div>
+    <div class="eyebrow">Live Reasoning Trace · Kriteria #1 Reasoning Agent</div>
+    <h2>Setiap interaksi tercatat & dapat dilacak.</h2>
+    <p class="lead" style="margin-bottom:20px">Output <code>php artisan demo:pipeline ad</code> di production — pesan WhatsApp "Jual Kurma Ajwa Premium 1kg Rp 280.000" memicu 7 agent berkolaborasi:</p>
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:32px;flex:1">
+      <div>
+        <div class="pipeline-step"><span class="pipeline-num">1</span><span class="pipeline-name">MemberOnboardingAgent</span><span class="pipeline-out">action=onboarding_dm_sent</span></div>
+        <div class="pipeline-step"><span class="pipeline-num">2</span><span class="pipeline-name">MessageParserAgent</span><span class="pipeline-out">word_count=12, has_price=true</span><span class="pipeline-time">9ms</span></div>
+        <div class="pipeline-step"><span class="pipeline-num">3</span><span class="pipeline-name">AdClassifierAgent</span><span class="pipeline-out">is_ad=true, conf=1.0</span><span class="pipeline-time">2.9s</span></div>
+        <div class="pipeline-step"><span class="pipeline-num">4</span><span class="pipeline-name">MessageModerationAgent</span><span class="pipeline-out">is_violation=false (skipped fast)</span></div>
+        <div class="pipeline-step"><span class="pipeline-num">5</span><span class="pipeline-name">DataExtractorAgent</span><span class="pipeline-out">title, price, contact, category=Makanan & Minuman</span><span class="pipeline-time">5.3s</span></div>
+        <div class="pipeline-step"><span class="pipeline-num">6</span><span class="pipeline-name">BroadcastAgent</span><span class="pipeline-out">WS event dispatched</span><span class="pipeline-time">4.8s</span></div>
+        <div class="pipeline-step"><span class="pipeline-num">7</span><span class="pipeline-name">GroupAdminReplyAgent</span><span class="pipeline-out">reply: ✅ Iklan tercatat</span><span class="pipeline-time">4.3s</span></div>
+      </div>
+      <div>
+        <img src="assets/pipeline.png" alt="Pipeline visualization" class="hero-art" onerror="this.outerHTML='<div class=hero-art-placeholder>PIPELINE VIZ</div>'" />
+      </div>
+    </div>
+    <div class="footer">
+      <span>Stored in <code>agent_logs</code> table: input_payload, output_payload, status, duration_ms · 19.5s total · Listing #297 created</span>
+      <span>05</span>
+    </div>
+  </section>
+
+  <!-- Slide 6 — IMPACT -->
+  <section class="slide dark">
+    <div class="brand"><span class="dot"></span> MARKETPLACE JAMAAH AI</div>
+    <div class="slide-num">06 / 08</div>
+    <div class="eyebrow">Dampak Dunia Nyata · Kriteria #3</div>
+    <h2>Production data, bukan proyeksi.</h2>
+    <div class="columns-3" style="margin-top:24px">
+      <div class="stat accent-amber">
+        <div class="stat-number">Rp 27 M</div>
+        <div class="stat-label">Active inventory value</div>
+        <div class="stat-sub">Total nilai produk aktif di marketplace</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">268</div>
+        <div class="stat-label">Listings auto-created</div>
+        <div class="stat-sub">132 dalam 30 hari terakhir</div>
+      </div>
+      <div class="stat accent">
+        <div class="stat-number">275</div>
+        <div class="stat-label">Jamaah ter-onboard</div>
+        <div class="stat-sub">26 jamaah baru dalam 30 hari</div>
+      </div>
+    </div>
+    <div class="columns-3" style="margin-top:14px">
+      <div class="stat">
+        <div class="stat-number">2.778</div>
+        <div class="stat-label">WAG messages diproses</div>
+        <div class="stat-sub">1.274 dalam 30 hari</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">3.156</div>
+        <div class="stat-label">Agent calls / 30 hari</div>
+        <div class="stat-sub">~105 reasoning cycles per hari</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">97%</div>
+        <div class="stat-label">ImageAnalyzer success</div>
+        <div class="stat-sub">252 dari 260 calls berhasil</div>
+      </div>
+    </div>
+    <div class="footer">
+      <span>Sumber: production agent_logs & listings tables · 30 hari terakhir per 7 Mei 2026</span>
+      <span>06</span>
+    </div>
+  </section>
+
+  <!-- Slide 7 — CRITERIA MAPPING -->
+  <section class="slide">
+    <div class="brand"><span class="dot"></span> MARKETPLACE JAMAAH AI</div>
+    <div class="slide-num">07 / 08</div>
+    <div class="eyebrow">Kriteria Penilaian QHomemart 2026</div>
+    <h2>Bagaimana setiap kriteria dipenuhi.</h2>
+    <table>
+      <thead>
+        <tr><th style="width:30%">Kriteria</th><th>Implementasi</th><th style="width:14%">Bukti</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1. Kualitas Reasoning Agent</strong></td>
+          <td>Tiap agent simpan input/output payload + reasoning chain Gemini di <code>agent_logs</code>. Threshold confidence per-decision.</td>
+          <td><span class="tag">3.213 traces</span></td>
+        </tr>
+        <tr>
+          <td><strong>2. Kolaborasi Antar Agent</strong></td>
+          <td>16 agent · 5 layer (Listener/Brain/Perception/Action/Output) · Single-orchestrator pattern dengan conditional handoff.</td>
+          <td><span class="tag">7 handoffs/listing</span></td>
+        </tr>
+        <tr>
+          <td><strong>3. Dampak Dunia Nyata</strong></td>
+          <td>Sistem live di production dengan jamaah real. <strong>Rp 27M</strong> active inventory dari obrolan WAG pengajian.</td>
+          <td><span class="tag amber">Rp 27 M GMV</span></td>
+        </tr>
+        <tr>
+          <td><strong>4. Kejelasan Arsitektur</strong></td>
+          <td>Mermaid topology + sequence diagrams · Layered architecture · Separation of concerns · <code>docs/architecture.md</code>.</td>
+          <td><span class="tag">5 diagrams</span></td>
+        </tr>
+        <tr>
+          <td><strong>5. Reproducibility</strong></td>
+          <td><code>docker-compose up -d</code> + <code>migrate --seed</code> + <code>php artisan demo:pipeline</code>. LLM-agnostic. <code>.env.example</code> lengkap.</td>
+          <td><span class="tag">1-command demo</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="footer">
+      <span>Repo: github.com/jodyaryono/marketplacejamaah-ai · Submission deadline: 30 Mei 2026</span>
+      <span>07</span>
+    </div>
+  </section>
+
+  <!-- Slide 8 — CTA -->
+  <section class="slide dark">
+    <div class="brand"><span class="dot"></span> MARKETPLACE JAMAAH AI</div>
+    <div class="slide-num">08 / 08</div>
+    <div class="columns">
+      <div>
+        <div class="eyebrow">Mari Bertemu Sistemnya</div>
+        <h1>Coba live.<br/>Tanya saya apa saja.</h1>
+        <p class="lead" style="margin-top:14px">Marketplace Jamaah AI sudah running real, melayani jamaah pengajian Indonesia. Kompetisi ini adalah momentum untuk men-skalakan ke ribuan WAG komunitas lain.</p>
+        <div class="cta-row">
+          <a class="cta" href="https://marketplacejamaah-ai.jodyaryono.id">Live Demo →</a>
+          <a class="cta secondary" href="https://github.com/jodyaryono/marketplacejamaah-ai">GitHub Repo</a>
+        </div>
+        <div style="margin-top:32px;display:flex;gap:24px;flex-wrap:wrap;font-size:13px;color:rgba(255,255,255,0.7)">
+          <div><strong style="color:#fff">Developer</strong><br/>Jody Aryono</div>
+          <div><strong style="color:#fff">Email</strong><br/>jodyaryono@gmail.com</div>
+          <div><strong style="color:#fff">Reg Code</strong><br/><span class="reg-code">WAGLI4HM</span></div>
+        </div>
+      </div>
+      <div>
+        <img src="assets/demo.png" alt="Demo phone mockup" class="hero-art" onerror="this.outerHTML='<div class=hero-art-placeholder>DEMO MOCKUP</div>'" />
+      </div>
+    </div>
+    <div class="footer">
+      <span>QHomemart AI Agent Competition · Submission deadline 30 Mei 2026</span>
+      <span>Terima kasih · بَارَكَ ٱللَّٰهُ</span>
+    </div>
+  </section>
+
+</div>
+
+<div class="nav">Tekan Ctrl+P → Save as PDF untuk export pitch deck</div>
+
+</body>
+</html>
