@@ -353,6 +353,9 @@
                             <code style="font-size:.75rem;color:#1d4ed8;background:#eff6ff;padding:2px 6px;border-radius:4px;">
                                 {{ $geminiKeyMasked }}
                             </code>
+                            <span class="badge ms-1" style="background:{{ str_contains($geminiKeySource ?? '', 'tabel') ? '#dcfce7' : '#fef3c7' }};color:{{ str_contains($geminiKeySource ?? '', 'tabel') ? '#15803d' : '#92400e' }};font-size:.65rem;font-weight:600;">
+                                {{ $geminiKeySource ?? 'tidak diketahui' }}
+                            </span>
                         </span>
                         <span>
                             <i class="bi bi-stars text-muted me-1"></i>

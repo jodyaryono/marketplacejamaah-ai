@@ -227,12 +227,48 @@
                             <div class="mb-3">
                                 <label class="form-label" style="font-size:.82rem;font-weight:600;color:#374151;">
                                     {{ $item->label }}
+                                    @if($item->is_secret)
+                                        <span class="badge ms-1" style="background:#fef3c7;color:#92400e;font-size:.65rem;font-weight:600;">
+                                            <i class="bi bi-shield-lock me-1"></i>terenkripsi
+                                        </span>
+                                    @endif
                                 </label>
                                 @if($item->type === 'textarea')
                                     <textarea name="setting[{{ $item->key }}]" class="form-control" rows="{{ $group === 'ai_prompts' ? 8 : 3 }}" style="font-size:.82rem;{{ $group === 'ai_prompts' ? 'font-family:monospace;' : '' }}">{{ $item->value }}</textarea>
                                 @elseif($item->type === 'boolean')
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" name="setting[{{ $item->key }}]" value="1" {{ $item->value ? 'checked' : '' }}>
+                                    </div>
+                                @elseif($item->is_secret || $item->type === 'secret')
+                                    @php
+                                        // Use the model helper to mask current decrypted value (or env fallback)
+                                        $current = \App\Models\Setting::get($item->key);
+                                        if (empty($current) && $item->key === 'gemini_api_key') {
+                                            $current = config('services.gemini.api_key');
+                                        } elseif (empty($current) && $item->key === 'groq_api_key') {
+                                            $current = config('services.groq.api_key');
+                                        }
+                                        $masked = \App\Models\Setting::masked($current ?: null);
+                                        $hasCurrent = !empty($current);
+                                        $sourceLabel = !empty($item->value) ? 'tabel settings (terenkripsi)' : ($hasCurrent ? 'fallback dari .env' : 'belum diisi');
+                                    @endphp
+                                    <div class="input-group">
+                                        <input type="password"
+                                               id="secret-{{ $item->key }}"
+                                               name="setting[{{ $item->key }}]"
+                                               class="form-control"
+                                               value=""
+                                               autocomplete="new-password"
+                                               placeholder="Kosongkan untuk pertahankan nilai sekarang"
+                                               style="font-size:.82rem;font-family:monospace;">
+                                        <button type="button" class="btn btn-outline-secondary" style="font-size:.75rem;"
+                                                onclick="(function(id){var el=document.getElementById(id);el.type=el.type==='password'?'text':'password';})('secret-{{ $item->key }}')">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </div>
+                                    <div style="font-size:.72rem;color:#6b7280;margin-top:.35rem;">
+                                        Nilai aktif: <code style="color:#1d4ed8;">{{ $masked }}</code>
+                                        <span class="text-muted ms-1">— sumber: {{ $sourceLabel }}</span>
                                     </div>
                                 @else
                                     <input type="{{ in_array($item->type, ['url','number']) ? $item->type : 'text' }}" name="setting[{{ $item->key }}]" class="form-control" value="{{ $item->value }}" placeholder="{{ $item->type === 'url' ? 'https://' : '' }}" style="font-size:.82rem;" {{ $item->type === 'number' ? 'min=1' : '' }}>

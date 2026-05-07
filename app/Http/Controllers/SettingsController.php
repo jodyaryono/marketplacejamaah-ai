@@ -39,10 +39,15 @@ class SettingsController extends Controller
     {
         $values = $request->input('setting', []);
         foreach ($values as $key => $value) {
-            // Only allow updating existing settings keys
-            if (Setting::where('key', $key)->exists()) {
-                Setting::set($key, $value);
+            $row = Setting::where('key', $key)->first();
+            if (!$row) continue;
+            // Secrets: empty submission means "keep existing" — don't overwrite
+            // the encrypted value with empty string. Allows the masked input to
+            // stay blank in the form without nuking the saved key.
+            if ($row->is_secret && (is_null($value) || trim((string) $value) === '')) {
+                continue;
             }
+            Setting::set($key, $value);
         }
         return back()->with('saved', 'Pengaturan berhasil disimpan.');
     }

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Setting;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -27,14 +28,26 @@ class GeminiService
 
     public function __construct()
     {
-        $this->apiKey   = config('services.gemini.api_key');
-        $this->model    = config('services.gemini.model', 'gemini-flash-latest');
-        $this->endpoint = config('services.gemini.endpoint');
+        // DB settings take precedence; .env stays as fallback so existing
+        // deploys keep working until the user fills the Settings UI.
+        try {
+            $this->apiKey   = Setting::get('gemini_api_key')    ?: (string) config('services.gemini.api_key');
+            $this->model    = Setting::get('gemini_model')      ?: (string) config('services.gemini.model', 'gemini-flash-latest');
+            $this->groqApiKey      = Setting::get('groq_api_key')        ?: (string) config('services.groq.api_key');
+            $this->groqModel       = Setting::get('groq_model')          ?: (string) config('services.groq.model', 'llama-3.3-70b-versatile');
+            $this->groqVisionModel = Setting::get('groq_vision_model')   ?: (string) config('services.groq.vision_model', 'meta-llama/llama-4-scout-17b-16e-instruct');
+        } catch (\Throwable $e) {
+            // settings table may not exist yet during fresh install / migration; fall back to env
+            Log::warning('GeminiService: Setting lookup failed, using env config', ['error' => $e->getMessage()]);
+            $this->apiKey   = (string) config('services.gemini.api_key');
+            $this->model    = (string) config('services.gemini.model', 'gemini-flash-latest');
+            $this->groqApiKey      = (string) config('services.groq.api_key');
+            $this->groqModel       = (string) config('services.groq.model', 'llama-3.3-70b-versatile');
+            $this->groqVisionModel = (string) config('services.groq.vision_model', 'meta-llama/llama-4-scout-17b-16e-instruct');
+        }
 
-        $this->groqApiKey      = config('services.groq.api_key');
-        $this->groqModel       = config('services.groq.model', 'llama-3.3-70b-versatile');
-        $this->groqVisionModel = config('services.groq.vision_model', 'meta-llama/llama-4-scout-17b-16e-instruct');
-        $this->groqEndpoint    = config('services.groq.endpoint', 'https://api.groq.com/openai/v1/chat/completions');
+        $this->endpoint     = (string) config('services.gemini.endpoint');
+        $this->groqEndpoint = (string) config('services.groq.endpoint', 'https://api.groq.com/openai/v1/chat/completions');
     }
 
     /**

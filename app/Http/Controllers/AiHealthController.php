@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AgentLog;
+use App\Models\Setting;
 use App\Services\GeminiService;
 use App\Services\WhacenterService;
 use Illuminate\Support\Facades\Cache;
@@ -51,11 +52,17 @@ class AiHealthController extends Controller
     public function index()
     {
         // ── 1. Gemini config ──────────────────────────────────────────────
-        $geminiModel = config('services.gemini.model', '-');
-        $geminiKeyRaw = config('services.gemini.api_key', '');
-        $geminiKeyMasked = $geminiKeyRaw
-            ? substr($geminiKeyRaw, 0, 6) . str_repeat('*', max(0, strlen($geminiKeyRaw) - 10)) . substr($geminiKeyRaw, -4)
-            : '(tidak dikonfigurasikan)';
+        // DB settings take precedence; .env is fallback. Source label tells the
+        // user where the active key/model is loaded from so they can match it
+        // to billing UUIDs in Google AI Studio.
+        $dbGeminiKey   = Setting::get('gemini_api_key');
+        $dbGeminiModel = Setting::get('gemini_model');
+        $geminiModel   = $dbGeminiModel ?: config('services.gemini.model', '-');
+        $geminiKeyRaw  = $dbGeminiKey   ?: (string) config('services.gemini.api_key', '');
+        $geminiKeySource = !empty($dbGeminiKey)
+            ? 'tabel settings (terenkripsi)'
+            : (!empty(config('services.gemini.api_key')) ? 'fallback dari .env' : 'tidak dikonfigurasikan');
+        $geminiKeyMasked = Setting::masked($geminiKeyRaw, '(tidak dikonfigurasikan)');
 
         // ── 2. Token usage last 7 days (from daily cache) ─────────────────
         $tokenDays = [];
@@ -258,7 +265,7 @@ class AiHealthController extends Controller
         $lastSystemPing = Cache::get('health_system_last');
 
         return view('ai-health.index', compact(
-            'geminiModel', 'geminiKeyMasked',
+            'geminiModel', 'geminiKeyMasked', 'geminiKeySource',
             'tokenDays', 'totalCalls', 'totalImageCalls',
             'totalPrompt', 'totalOutput', 'totalCostUsd', 'totalCostIdr',
             'modelBreakdown', 'modelTotalCostUsd', 'modelTotalCostIdr',
@@ -275,6 +282,12 @@ class AiHealthController extends Controller
     {
         // Ping all configured AI models — primary text (Gemini) + fallback text (Groq).
         // Vision models are listed but not pinged (they need image input + cost more).
+        // Effective config — DB first, .env fallback (mirrors GeminiService::__construct)
+        $effGeminiModel       = Setting::get('gemini_model')        ?: config('services.gemini.model', '-');
+        $effGeminiApiKey      = Setting::get('gemini_api_key')      ?: config('services.gemini.api_key');
+        $effGroqVisionModel   = Setting::get('groq_vision_model')   ?: config('services.groq.vision_model', '-');
+        $effGroqApiKey        = Setting::get('groq_api_key')        ?: config('services.groq.api_key');
+
         $models = [
             $this->pingGeminiText() + ['provider' => 'Gemini', 'role' => 'primary text', 'type' => 'text'],
             $this->pingGroqText($gemini) + ['provider' => 'Groq', 'role' => 'fallback text', 'type' => 'text'],
@@ -282,17 +295,17 @@ class AiHealthController extends Controller
                 'provider' => 'Gemini',
                 'role' => 'vision (image analysis)',
                 'type' => 'vision',
-                'model' => config('services.gemini.model', '-'),
+                'model' => $effGeminiModel,
                 'ok' => null, // not pinged — informational only
-                'configured' => !empty(config('services.gemini.api_key')),
+                'configured' => !empty($effGeminiApiKey),
             ],
             [
                 'provider' => 'Groq',
                 'role' => 'vision fallback',
                 'type' => 'vision',
-                'model' => config('services.groq.vision_model', '-'),
+                'model' => $effGroqVisionModel,
                 'ok' => null,
-                'configured' => !empty(config('services.groq.api_key')),
+                'configured' => !empty($effGroqApiKey),
             ],
         ];
 
@@ -314,9 +327,9 @@ class AiHealthController extends Controller
     private function pingGeminiText(): array
     {
         $start = microtime(true);
-        $model = config('services.gemini.model', 'gemini-flash-latest');
+        $model = Setting::get('gemini_model') ?: config('services.gemini.model', 'gemini-flash-latest');
         try {
-            $apiKey = config('services.gemini.api_key');
+            $apiKey = Setting::get('gemini_api_key') ?: config('services.gemini.api_key');
             $endpoint = rtrim(config('services.gemini.endpoint', 'https://generativelanguage.googleapis.com/v1beta/models'), '/');
             $url = "{$endpoint}/{$model}:generateContent";
             $resp = Http::timeout(15)->post($url . '?key=' . urlencode($apiKey), [
