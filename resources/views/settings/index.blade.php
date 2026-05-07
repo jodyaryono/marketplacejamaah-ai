@@ -137,26 +137,30 @@
                     </div>
                     @endif
 
-                    @if($hasGemini)
-                    <div>
+                    {{-- AI Models registry callout — replaces old single-key readout --}}
+                    <div class="{{ $hasWhacenter ? 'mt-4' : '' }}">
                         <div class="d-flex align-items-center gap-2 mb-2">
-                            <i class="bi bi-stars" style="color:#818cf8;font-size:1rem;"></i>
-                            <span style="font-weight:600;color:#111827;font-size:.875rem;">Google Gemini AI</span>
-                        </div>
-                        <div class="p-3 rounded" style="background:#f8fafc;">
-                            <div class="{{ !empty($settings['gemini_model']) ? 'mb-2' : '' }}">
-                                <div style="font-size:.7rem;color:#6b7280;text-transform:uppercase;">API Key</div>
-                                <code style="font-size:.78rem;color:#374151;">{{ Str::mask($settings['gemini_key'], '*', 6, -4) }}</code>
-                            </div>
-                            @if(!empty($settings['gemini_model']))
-                            <div>
-                                <div style="font-size:.7rem;color:#6b7280;text-transform:uppercase;">Model</div>
-                                <code style="font-size:.78rem;color:#374151;">{{ $settings['gemini_model'] }}</code>
-                            </div>
+                            <i class="bi bi-cpu" style="color:#7c3aed;font-size:1rem;"></i>
+                            <span style="font-weight:600;color:#111827;font-size:.875rem;">AI Models</span>
+                            @if(($aiModelsCount ?? 0) > 0)
+                                <span class="badge ms-1" style="background:#ede9fe;color:#6d28d9;font-size:.65rem;font-weight:700;">
+                                    {{ $aiModelsCount }} model terdaftar
+                                </span>
                             @endif
                         </div>
+                        <div class="p-3 rounded d-flex justify-content-between align-items-center flex-wrap gap-2" style="background:#f5f3ff;border:1px solid #ddd6fe;">
+                            <div style="font-size:.78rem;color:#374151;">
+                                @if(($aiModelsCount ?? 0) === 0)
+                                    Belum ada model AI yang terdaftar. Tambahkan key Gemini, Groq, OpenAI, Claude, atau OpenRouter dari halaman registry.
+                                @else
+                                    Kelola key (terenkripsi), pilih provider (Gemini/Groq/OpenAI/Claude/OpenRouter), atur urutan failover, dan test koneksi tiap model.
+                                @endif
+                            </div>
+                            <a href="{{ route('ai-models.index') }}" class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none;font-size:.78rem;white-space:nowrap;">
+                                <i class="bi bi-cpu me-1"></i>Buka AI Models
+                            </a>
+                        </div>
                     </div>
-                    @endif
                 </div>
             </div>
 

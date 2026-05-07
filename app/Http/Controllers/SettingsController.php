@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AiModel;
 use App\Models\Setting;
 use App\Services\WhacenterService;
 use Illuminate\Http\Request;
@@ -32,7 +33,9 @@ class SettingsController extends Controller
             ->get()
             ->groupBy('group');
 
-        return view('settings.index', compact('settings', 'dbSettings'));
+        $aiModelsCount = AiModel::where('is_active', true)->count();
+
+        return view('settings.index', compact('settings', 'dbSettings', 'aiModelsCount'));
     }
 
     public function update(Request $request)

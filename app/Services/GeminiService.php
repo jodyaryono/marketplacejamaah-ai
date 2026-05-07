@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AiModel;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -28,26 +29,49 @@ class GeminiService
 
     public function __construct()
     {
-        // DB settings take precedence; .env stays as fallback so existing
-        // deploys keep working until the user fills the Settings UI.
+        // Resolution order:
+        //   1. ai_models registry (highest-priority active row per role)
+        //   2. legacy settings table rows (gemini_api_key, gemini_model, etc.)
+        //   3. .env / config (final fallback so fresh installs work)
         try {
-            $this->apiKey   = Setting::get('gemini_api_key')    ?: (string) config('services.gemini.api_key');
-            $this->model    = Setting::get('gemini_model')      ?: (string) config('services.gemini.model', 'gemini-flash-latest');
-            $this->groqApiKey      = Setting::get('groq_api_key')        ?: (string) config('services.groq.api_key');
-            $this->groqModel       = Setting::get('groq_model')          ?: (string) config('services.groq.model', 'llama-3.3-70b-versatile');
-            $this->groqVisionModel = Setting::get('groq_vision_model')   ?: (string) config('services.groq.vision_model', 'meta-llama/llama-4-scout-17b-16e-instruct');
+            $primaryText  = AiModel::resolve('primary_text');
+            $primaryVis   = AiModel::resolve('primary_vision');
+            $fallbackText = AiModel::resolve('fallback_text');
+            $fallbackVis  = AiModel::resolve('fallback_vision');
         } catch (\Throwable $e) {
-            // settings table may not exist yet during fresh install / migration; fall back to env
-            Log::warning('GeminiService: Setting lookup failed, using env config', ['error' => $e->getMessage()]);
-            $this->apiKey   = (string) config('services.gemini.api_key');
-            $this->model    = (string) config('services.gemini.model', 'gemini-flash-latest');
-            $this->groqApiKey      = (string) config('services.groq.api_key');
-            $this->groqModel       = (string) config('services.groq.model', 'llama-3.3-70b-versatile');
-            $this->groqVisionModel = (string) config('services.groq.vision_model', 'meta-llama/llama-4-scout-17b-16e-instruct');
+            // ai_models table missing during fresh install / migration
+            $primaryText = $primaryVis = $fallbackText = $fallbackVis = null;
         }
 
-        $this->endpoint     = (string) config('services.gemini.endpoint');
-        $this->groqEndpoint = (string) config('services.groq.endpoint', 'https://api.groq.com/openai/v1/chat/completions');
+        // Gemini-shape fields (used by all `gemini` provider rows)
+        $this->apiKey = $primaryText && $primaryText->provider === 'gemini'
+            ? ($primaryText->api_key ?? '')
+            : (Setting::get('gemini_api_key') ?: (string) config('services.gemini.api_key'));
+
+        $this->model = $primaryText && $primaryText->provider === 'gemini'
+            ? $primaryText->model
+            : (Setting::get('gemini_model') ?: (string) config('services.gemini.model', 'gemini-flash-latest'));
+
+        $this->endpoint = $primaryText && $primaryText->provider === 'gemini' && !empty($primaryText->endpoint)
+            ? rtrim($primaryText->endpoint, '/')
+            : (string) config('services.gemini.endpoint');
+
+        // Groq-shape fields (used by fallback_text + fallback_vision when provider=groq/openai/openrouter)
+        $this->groqApiKey = $fallbackText && in_array($fallbackText->provider, ['groq', 'openai', 'openrouter'], true)
+            ? ($fallbackText->api_key ?? '')
+            : (Setting::get('groq_api_key') ?: (string) config('services.groq.api_key'));
+
+        $this->groqModel = $fallbackText && in_array($fallbackText->provider, ['groq', 'openai', 'openrouter'], true)
+            ? $fallbackText->model
+            : (Setting::get('groq_model') ?: (string) config('services.groq.model', 'llama-3.3-70b-versatile'));
+
+        $this->groqVisionModel = $fallbackVis && in_array($fallbackVis->provider, ['groq', 'openai', 'openrouter'], true)
+            ? $fallbackVis->model
+            : (Setting::get('groq_vision_model') ?: (string) config('services.groq.vision_model', 'meta-llama/llama-4-scout-17b-16e-instruct'));
+
+        $this->groqEndpoint = $fallbackText && !empty($fallbackText->endpoint)
+            ? $fallbackText->endpoint
+            : (string) config('services.groq.endpoint', 'https://api.groq.com/openai/v1/chat/completions');
     }
 
     /**

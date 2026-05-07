@@ -227,8 +227,11 @@
             <i class="bi bi-shield-person"></i> Users
         </a>
         @endcan
-        <a href="{{ route('settings.index') }}" class="nav-link {{ request()->routeIs('settings*') ? 'active' : '' }}">
+        <a href="{{ route('settings.index') }}" class="nav-link {{ request()->routeIs('settings.*') ? 'active' : '' }}">
             <i class="bi bi-gear"></i> Pengaturan
+        </a>
+        <a href="{{ route('ai-models.index') }}" class="nav-link {{ request()->routeIs('ai-models.*') ? 'active' : '' }}" style="padding-left:2.25rem;">
+            <i class="bi bi-cpu"></i> AI Models
         </a>
     </div>
 

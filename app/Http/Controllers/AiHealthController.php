@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AgentLog;
+use App\Models\AiModel;
 use App\Models\Setting;
 use App\Services\GeminiService;
 use App\Services\WhacenterService;
@@ -51,17 +52,24 @@ class AiHealthController extends Controller
 
     public function index()
     {
-        // ── 1. Gemini config ──────────────────────────────────────────────
-        // DB settings take precedence; .env is fallback. Source label tells the
-        // user where the active key/model is loaded from so they can match it
-        // to billing UUIDs in Google AI Studio.
-        $dbGeminiKey   = Setting::get('gemini_api_key');
-        $dbGeminiModel = Setting::get('gemini_model');
-        $geminiModel   = $dbGeminiModel ?: config('services.gemini.model', '-');
-        $geminiKeyRaw  = $dbGeminiKey   ?: (string) config('services.gemini.api_key', '');
-        $geminiKeySource = !empty($dbGeminiKey)
-            ? 'tabel settings (terenkripsi)'
-            : (!empty(config('services.gemini.api_key')) ? 'fallback dari .env' : 'tidak dikonfigurasikan');
+        // ── 1. Active model config ────────────────────────────────────────
+        // Resolution: ai_models registry → legacy settings → .env. Source
+        // label lets the user identify which key is being billed by matching
+        // the masked last-4 to UUIDs in Google AI Studio.
+        $primaryTextModel = AiModel::resolve('primary_text');
+        if ($primaryTextModel && !empty($primaryTextModel->api_key)) {
+            $geminiModel     = $primaryTextModel->model;
+            $geminiKeyRaw    = (string) $primaryTextModel->api_key;
+            $geminiKeySource = "ai_models (#{$primaryTextModel->id} '{$primaryTextModel->name}')";
+        } else {
+            $dbGeminiKey   = Setting::get('gemini_api_key');
+            $dbGeminiModel = Setting::get('gemini_model');
+            $geminiModel   = $dbGeminiModel ?: config('services.gemini.model', '-');
+            $geminiKeyRaw  = $dbGeminiKey   ?: (string) config('services.gemini.api_key', '');
+            $geminiKeySource = !empty($dbGeminiKey)
+                ? 'legacy settings table'
+                : (!empty(config('services.gemini.api_key')) ? 'fallback dari .env' : 'tidak dikonfigurasikan');
+        }
         $geminiKeyMasked = Setting::masked($geminiKeyRaw, '(tidak dikonfigurasikan)');
 
         // ── 2. Token usage last 7 days (from daily cache) ─────────────────
@@ -282,11 +290,22 @@ class AiHealthController extends Controller
     {
         // Ping all configured AI models — primary text (Gemini) + fallback text (Groq).
         // Vision models are listed but not pinged (they need image input + cost more).
-        // Effective config — DB first, .env fallback (mirrors GeminiService::__construct)
-        $effGeminiModel       = Setting::get('gemini_model')        ?: config('services.gemini.model', '-');
-        $effGeminiApiKey      = Setting::get('gemini_api_key')      ?: config('services.gemini.api_key');
-        $effGroqVisionModel   = Setting::get('groq_vision_model')   ?: config('services.groq.vision_model', '-');
-        $effGroqApiKey        = Setting::get('groq_api_key')        ?: config('services.groq.api_key');
+        // Effective config — ai_models registry → settings → .env
+        $primaryVis  = AiModel::resolve('primary_vision');
+        $fallbackVis = AiModel::resolve('fallback_vision');
+
+        $effGeminiModel = $primaryVis && $primaryVis->provider === 'gemini'
+            ? $primaryVis->model
+            : (Setting::get('gemini_model') ?: config('services.gemini.model', '-'));
+        $effGeminiApiKey = $primaryVis && $primaryVis->provider === 'gemini' && !empty($primaryVis->api_key)
+            ? $primaryVis->api_key
+            : (Setting::get('gemini_api_key') ?: config('services.gemini.api_key'));
+        $effGroqVisionModel = $fallbackVis && in_array($fallbackVis->provider, ['groq','openai','openrouter'], true)
+            ? $fallbackVis->model
+            : (Setting::get('groq_vision_model') ?: config('services.groq.vision_model', '-'));
+        $effGroqApiKey = $fallbackVis && in_array($fallbackVis->provider, ['groq','openai','openrouter'], true) && !empty($fallbackVis->api_key)
+            ? $fallbackVis->api_key
+            : (Setting::get('groq_api_key') ?: config('services.groq.api_key'));
 
         $models = [
             $this->pingGeminiText() + ['provider' => 'Gemini', 'role' => 'primary text', 'type' => 'text'],
@@ -327,10 +346,21 @@ class AiHealthController extends Controller
     private function pingGeminiText(): array
     {
         $start = microtime(true);
-        $model = Setting::get('gemini_model') ?: config('services.gemini.model', 'gemini-flash-latest');
+        $primary = AiModel::resolve('primary_text');
+        $useRegistry = $primary && $primary->provider === 'gemini' && !empty($primary->api_key);
+        $model = $useRegistry
+            ? $primary->model
+            : (Setting::get('gemini_model') ?: config('services.gemini.model', 'gemini-flash-latest'));
         try {
-            $apiKey = Setting::get('gemini_api_key') ?: config('services.gemini.api_key');
-            $endpoint = rtrim(config('services.gemini.endpoint', 'https://generativelanguage.googleapis.com/v1beta/models'), '/');
+            $apiKey = $useRegistry
+                ? $primary->api_key
+                : (Setting::get('gemini_api_key') ?: config('services.gemini.api_key'));
+            $endpoint = rtrim(
+                ($useRegistry && !empty($primary->endpoint))
+                    ? $primary->endpoint
+                    : config('services.gemini.endpoint', 'https://generativelanguage.googleapis.com/v1beta/models'),
+                '/'
+            );
             $url = "{$endpoint}/{$model}:generateContent";
             $resp = Http::timeout(15)->post($url . '?key=' . urlencode($apiKey), [
                 'contents' => [['parts' => [['text' => 'Reply with the single word: PONG']]]],

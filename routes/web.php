@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\WaAuthController;
 use App\Http\Controllers\AgentLogController;
 use App\Http\Controllers\AiHealthController;
+use App\Http\Controllers\AiModelController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\DashboardController;
@@ -127,4 +128,12 @@ Route::middleware(['auth', 'check.active'])->group(function () {
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::post('/settings/test-whacenter', [SettingsController::class, 'testWhacenter'])->name('settings.test-whacenter');
     Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
+
+    // AI Models registry
+    Route::get('/settings/ai-models', [AiModelController::class, 'index'])->name('ai-models.index');
+    Route::post('/settings/ai-models', [AiModelController::class, 'store'])->name('ai-models.store');
+    Route::put('/settings/ai-models/{aiModel}', [AiModelController::class, 'update'])->name('ai-models.update');
+    Route::delete('/settings/ai-models/{aiModel}', [AiModelController::class, 'destroy'])->name('ai-models.destroy');
+    Route::post('/settings/ai-models/{aiModel}/toggle', [AiModelController::class, 'toggleActive'])->name('ai-models.toggle');
+    Route::post('/settings/ai-models/{aiModel}/test', [AiModelController::class, 'test'])->name('ai-models.test');
 });
