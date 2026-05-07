@@ -22,3 +22,31 @@ yarn-error.log
 /.vscode
 /.zed
 /backups
+
+# --- Local scratch & competition assets (do not commit) ---
+# Ad-hoc debugging scripts
+tmp_*.php
+tmp_*.sh
+
+# Screenshots & media artifacts (local only)
+*.png
+*.jpeg
+*.jpg
+*.mp4
+*.pdf
+!docs/**/*.png
+!docs/**/*.jpg
+!docs/**/*.jpeg
+!docs/**/*.pdf
+
+# Browser automation artifacts
+.playwright-mcp/
+.claude/
+.git-scrub-replacements.txt
+
+# Local AI agent staging
+ai_agent/
+
+# OS junk
+.DS_Store
+Thumbs.db

@@ -1,0 +1,143 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    image: marketplacejamaah-ai:latest
+    container_name: mpj-app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+      - ./storage:/var/www/html/storage
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      APP_KEY: ${APP_KEY:?APP_KEY is required (run: php artisan key:generate)}
+      APP_DEBUG: ${APP_DEBUG:-false}
+      APP_URL: ${APP_URL:-http://localhost}
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:?DB_DATABASE is required}
+      DB_USERNAME: ${DB_USERNAME:?DB_USERNAME is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      QUEUE_CONNECTION: ${QUEUE_CONNECTION:-database}
+      CACHE_STORE: ${CACHE_STORE:-database}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash-exp}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      WA_GATEWAY_URL: ${WA_GATEWAY_URL:-}
+      WA_GATEWAY_TOKEN: ${WA_GATEWAY_TOKEN:-}
+      WA_MASTER_PHONE: ${WA_MASTER_PHONE:-}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - mpj-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: mpj-nginx
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:80"
+    volumes:
+      - .:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    networks:
+      - mpj-net
+
+  mysql:
+    image: mysql:8.0
+    container_name: mpj-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${DB_DATABASE:?DB_DATABASE is required}
+      MYSQL_USER: ${DB_USERNAME:?DB_USERNAME is required}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    ports:
+      - "${DB_PORT_FORWARD:-3307}:3306"
+    volumes:
+      - mpj-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mpj-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: mpj-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - mpj-redis-data:/data
+    networks:
+      - mpj-net
+
+  queue:
+    image: marketplacejamaah-ai:latest
+    container_name: mpj-queue
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    command: ["php", "artisan", "queue:work", "--tries=3", "--timeout=120"]
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      APP_KEY: ${APP_KEY:?APP_KEY is required}
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+    depends_on:
+      app:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+    networks:
+      - mpj-net
+
+  reverb:
+    image: marketplacejamaah-ai:latest
+    container_name: mpj-reverb
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    ports:
+      - "${REVERB_PORT:-8080}:8080"
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      APP_KEY: ${APP_KEY:?APP_KEY is required}
+      REVERB_APP_ID: ${REVERB_APP_ID:-}
+      REVERB_APP_KEY: ${REVERB_APP_KEY:-}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:-}
+    depends_on:
+      - app
+    networks:
+      - mpj-net
+
+volumes:
+  mpj-mysql-data:
+  mpj-redis-data:
+
+networks:
+  mpj-net:
+    driver: bridge
