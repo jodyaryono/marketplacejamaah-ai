@@ -30,7 +30,8 @@ return new class extends Migration {
         // otherwise from .env, otherwise leave api_key null.
         $now = now();
 
-        $pull = function (string $settingKey, string $envKey) {
+        // Use config() not env() — env() returns empty after config:cache.
+        $pull = function (string $settingKey, ?string $configFallback) {
             try {
                 $v = DB::table('settings')->where('key', $settingKey)->value('value');
                 if (!empty($v)) {
@@ -38,14 +39,14 @@ return new class extends Migration {
                     try { return Crypt::decryptString($v); } catch (\Throwable $e) { return $v; }
                 }
             } catch (\Throwable $e) {}
-            return env($envKey);
+            return $configFallback;
         };
 
-        $geminiKey       = $pull('gemini_api_key', 'GEMINI_API_KEY');
-        $geminiModel     = $pull('gemini_model',   'GEMINI_MODEL') ?: 'gemini-flash-latest';
-        $groqKey         = $pull('groq_api_key',   'GROQ_API_KEY');
-        $groqText        = $pull('groq_model',     'GROQ_MODEL') ?: 'llama-3.3-70b-versatile';
-        $groqVision      = $pull('groq_vision_model', 'GROQ_VISION_MODEL') ?: 'meta-llama/llama-4-scout-17b-16e-instruct';
+        $geminiKey       = $pull('gemini_api_key',     config('services.gemini.api_key'));
+        $geminiModel     = $pull('gemini_model',       config('services.gemini.model')) ?: 'gemini-flash-latest';
+        $groqKey         = $pull('groq_api_key',       config('services.groq.api_key'));
+        $groqText        = $pull('groq_model',         config('services.groq.model')) ?: 'llama-3.3-70b-versatile';
+        $groqVision      = $pull('groq_vision_model',  config('services.groq.vision_model')) ?: 'meta-llama/llama-4-scout-17b-16e-instruct';
 
         $enc = fn($v) => empty($v) ? null : Crypt::encryptString((string) $v);
 
