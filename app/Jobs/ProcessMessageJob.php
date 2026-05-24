@@ -227,6 +227,20 @@ class ProcessMessageJob implements ShouldQueue
             $isAd = $classification['is_ad'] ?? false;
             $isViolation = $moderation['is_violation'] ?? false;
 
+            // Policy 2026-05-24: iklan grup dari member (non-master) di-redirect ke
+            // AdBuilder via DM — grup tetap bersih, iklan di-polish dulu sebelum tayang.
+            if ($isAd && !$isViolation && $message->whatsapp_group_id && !$masterForwarded
+                && !MasterCommandAgent::isMasterPhone($message->sender_number)
+                && config('marketplace.redirect_group_ads_to_dm', true)) {
+                $this->redirectAdToDmBuilder($message);
+                $message->update([
+                    'is_processed'    => true,
+                    'processed_at'    => now(),
+                    'message_category'=> 'redirected_to_dm',
+                ]);
+                return;
+            }
+
             if ($isAd && !$isViolation) {
                 // Step 6pre: Check if the same sender already has a recent listing
                 // (e.g. created from image-only) — merge text into it instead of
@@ -368,6 +382,102 @@ class ProcessMessageJob implements ShouldQueue
             str_starts_with($lower, '@berita') => 'news',
             default => null,
         };
+    }
+
+    /**
+     * Hapus iklan grup dari member (non-master) lalu DM sender + start AdBuilder
+     * di chat pribadi. Kalau ada foto, langsung dianalisa AI biar user langsung
+     * dapat preview draft iklan tanpa kirim ulang. Kalau cuma teks → minta foto
+     * di DM.
+     *
+     * Dipakai untuk menegakkan policy: iklan tayang via AdBuilder yang polished,
+     * bukan posting mentah di grup. Grup tetap dapat iklan (di-publish ulang
+     * oleh AdBuilder->confirmAndPost via BroadcastAgent setelah user konfirmasi).
+     */
+    private function redirectAdToDmBuilder(Message $message): void
+    {
+        $wa = app(WhacenterService::class);
+        $adBuilder = app(\App\Agents\AdBuilderAgent::class);
+
+        // 1. Backup + hapus pesan dari grup
+        if ($message->media_url) {
+            Log::warning("ProcessMessageJob: BACKUP before redirect-delete — message {$message->id} media_url={$message->media_url} sender={$message->sender_number}");
+        }
+
+        $payload = $message->raw_payload ?? [];
+        $messageKey = $payload['_key'] ?? null;
+        try {
+            if ($messageKey) {
+                $wa->deleteMessage($messageKey);
+            } elseif ($message->message_id) {
+                $groupJid = $payload['group_id'] ?? $payload['from_group'] ?? null;
+                if ($groupJid) {
+                    $wa->deleteGroupMessage($groupJid, $message->message_id, $message->sender_number);
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning('ProcessMessageJob: redirectAdToDmBuilder delete failed', ['error' => $e->getMessage()]);
+        }
+
+        // 2. DM intro (skip kalau baru saja dikirim ke nomor ini — anti-spam 10 menit)
+        $contact = \App\Models\Contact::where('phone_number', $message->sender_number)->first();
+        $name = $contact?->getSapaan() ?? ($message->sender_name ?: 'Kak');
+        $group = $message->group;
+        $groupName = $group?->group_name ?? 'grup';
+
+        $recentRedirectDm = \App\Models\Message::where('direction', 'out')
+            ->where('recipient_number', $message->sender_number)
+            ->where('raw_body', 'like', '%Yuk pasang iklanmu lebih rapi%')
+            ->where('created_at', '>=', now()->subMinutes(10))
+            ->exists();
+
+        if (!$recentRedirectDm) {
+            $intro = "🛍️ *Yuk pasang iklanmu lebih rapi di sini!*\n\n"
+                . "Halo *{$name}*! 👋\n\n"
+                . "Postingan iklanmu di grup *{$groupName}* aku pindahkan ke chat ini ya. "
+                . "Mulai sekarang, *pasang iklan cukup di chat pribadi denganku saja* — biar grup tetap bersih "
+                . "dan iklanmu juga di-polish AI dulu sebelum tayang. ✨\n\n"
+                . "Tenang, *iklan otomatis dipublish ke grup + website* begitu kamu konfirmasi nanti. 🙏";
+            try {
+                $wa->sendMessage($message->sender_number, $intro);
+            } catch (\Exception $e) {
+                Log::warning('ProcessMessageJob: redirectAdToDmBuilder intro DM failed', ['error' => $e->getMessage()]);
+            }
+        }
+
+        // 3. Start AdBuilder silently + langsung analisa foto kalau ada
+        $adBuilder->startSilent($message->sender_number);
+
+        $hasMedia = $message->media_url || !empty($payload['media_data']);
+        if ($hasMedia && in_array($message->message_type, ['image', 'imageMessage', 'video', 'videoMessage'])) {
+            try {
+                $reply = $adBuilder->handleImage($message);
+                if ($reply !== '') {
+                    $wa->sendMessage($message->sender_number, $reply);
+                }
+            } catch (\Exception $e) {
+                Log::warning('ProcessMessageJob: redirectAdToDmBuilder handleImage failed', ['error' => $e->getMessage()]);
+                $wa->sendMessage($message->sender_number,
+                    "📸 Coba kirim ulang foto produknya di sini ya. Aku siap rapikan jadi iklan yang menarik!"
+                );
+            }
+        } else {
+            try {
+                $wa->sendMessage($message->sender_number,
+                    "📸 *Silakan kirim foto produknya di sini.*\n\n"
+                    . "Sertakan detail di caption: nama, harga, kondisi, lokasi (opsional).\n\n"
+                    . "Ketik *batal* untuk membatalkan."
+                );
+            } catch (\Exception $e) {
+                Log::warning('ProcessMessageJob: redirectAdToDmBuilder prompt DM failed', ['error' => $e->getMessage()]);
+            }
+        }
+
+        Log::info("ProcessMessageJob: redirected group ad to DM AdBuilder", [
+            'message_id' => $message->id,
+            'sender' => $message->sender_number,
+            'has_media' => $hasMedia,
+        ]);
     }
 
     /**
