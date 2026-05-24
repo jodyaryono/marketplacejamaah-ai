@@ -226,6 +226,59 @@ class BotQueryAgent
                 return true;
             }
 
+            // Free-form edit intent without listing ID — e.g. "Ralat ayam bawang menjadi ayam bakar",
+            // "judulnya jadi X", "ubah harga jadi 25rb", "ganti deskripsi tambah free ongkir".
+            // We must know WHICH listing to apply this to → ask for the number and queue the original
+            // text so the next message ("#399" / "399") replays the edit against that listing.
+            $editVerbs = '/^\s*(ralat|koreksi|revisi|ubah|ganti|edit|perbarui|update|update\s+iklan|jadikan|jadiin)\b/iu';
+            if (preg_match($editVerbs, $text) && !preg_match('/\b#?\d{1,6}\b/u', $text)) {
+                $contact = Contact::where('phone_number', $message->sender_number)->first();
+                if ($contact) {
+                    $recent = Listing::where(function ($q) use ($contact, $message) {
+                        $q->where('contact_id', $contact->id)
+                          ->orWhere('contact_number', $message->sender_number);
+                    })
+                        ->where('status', 'active')
+                        ->latest('source_date')
+                        ->limit(5)
+                        ->get(['id', 'title']);
+
+                    Cache::put('edit_freeform_pending:' . $message->sender_number, [
+                        'original_text' => $text,
+                    ], now()->addMinutes(10));
+
+                    $lines = ["📝 Iklan *nomor berapa* yang mau di-edit dengan: _\"{$text}\"_ ?\n"];
+                    if ($recent->isNotEmpty()) {
+                        $lines[] = "Iklanmu yang aktif:";
+                        foreach ($recent as $l) {
+                            $lines[] = "• *#{$l->id}* — {$l->title}";
+                        }
+                        $lines[] = "\nKetik salah satu nomornya (mis. *{$recent->first()->id}*) atau *batal*.";
+                    } else {
+                        $lines[] = "Ketik *nomor iklannya* (mis. *399*) atau *batal*.";
+                    }
+                    $this->whacenter->sendMessage($message->sender_number, implode("\n", $lines));
+                    $log->update(['status' => 'success', 'output_payload' => ['intent' => 'edit_freeform_clarify']]);
+                    return true;
+                }
+            }
+
+            // Reply to the "iklan nomor berapa?" question above — bare number after a freeform-pending.
+            $freeformKey = 'edit_freeform_pending:' . $message->sender_number;
+            if (Cache::has($freeformKey) && preg_match('/^\s*#?(\d{1,6})\s*$/', $text, $fm)) {
+                $pending = Cache::pull($freeformKey);
+                $reply = $this->listingEdit->handleEditListing($message, (int) $fm[1], (string) $pending['original_text']);
+                $this->whacenter->sendMessage($message->sender_number, $reply);
+                $log->update(['status' => 'success', 'output_payload' => ['intent' => 'edit_freeform_apply', 'listing_id' => (int) $fm[1]]]);
+                return true;
+            }
+            if (Cache::has($freeformKey) && preg_match('/^\s*(batal|cancel|ga\s*jadi|tidak)\s*$/iu', $text)) {
+                Cache::forget($freeformKey);
+                $this->whacenter->sendMessage($message->sender_number, '👌 Oke, tidak jadi edit.');
+                $log->update(['status' => 'success', 'output_payload' => ['intent' => 'edit_freeform_cancel']]);
+                return true;
+            }
+
             // ── 7. Clarify context injection ──────────────────────────────────
             $clarifyKey = 'clarify_pending:' . $message->sender_number;
             $clarifyContext = null;

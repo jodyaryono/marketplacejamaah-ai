@@ -213,7 +213,10 @@ class ListingEditAgent
         }
 
         if (empty($changes)) {
-            return "❓ Tidak dimengerti. Coba:\n• *harga 500000*\n• *harga nego*\n• *terjual*\n• *sembunyikan*\n• *batal*";
+            // No strict-command match — delegate to the Gemini-powered free-form parser
+            // so members can phrase edits naturally: "Ralat ayam bawang menjadi ayam bakar",
+            // "judulnya jadi X", "deskripsi tambah free ongkir", "lokasi pindah ke Bekasi", dll.
+            return $this->parseAndApplyEdits($listing, $text, $phone);
         }
 
         $listing->update($changes);
