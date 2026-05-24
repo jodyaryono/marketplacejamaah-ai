@@ -392,7 +392,7 @@ class WhatsAppListenerAgent
                         $name = $senderName ?? $senderNum;
                         if ($listing) {
                             $listing->update(['source_date' => now()]);
-                            $listingUrl = "{$baseUrl}/p/{$listing->id}";
+                            $listingUrl = $listing->share_url;
                             $tpl = Setting::get('template_duplicate_with_listing', "Halo *{name}*! 🙏\n\nEh, kamu tadi kirim ulang iklan yang sama 😊 Duplikatnya aku hapus dari grup biar rapi, tapi tenang — iklanmu di marketplace sudah aku *refresh* biar balik ke urutan atas.\n\n📦 *{title}*\n🔗 {listingUrl}");
                             $dm = str_replace(['{name}', '{title}', '{listingUrl}'], [$name, $listing->title, $listingUrl], $tpl);
                         } else {

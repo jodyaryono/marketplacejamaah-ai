@@ -80,7 +80,7 @@ class ListingEditAgent
         }
 
         $listing->update(['status' => 'active']);
-        $link = "{$this->baseUrl}/p/{$listing->id}";
+        $link = $listing->share_url;
 
         return "✅ *Iklan #{$listing->id} — {$listing->title}* berhasil *diaktifkan kembali!*\n\n"
             . "🟢 Iklan sudah tayang di etalase marketplace.\n"
@@ -222,7 +222,7 @@ class ListingEditAgent
         $listing->update($changes);
         $listing->refresh();
 
-        $link = "{$this->baseUrl}/p/{$listing->id}";
+        $link = $listing->share_url;
 
         if (($changes['status'] ?? '') === 'sold') {
             $this->announceToGroup("✅ *TERJUAL!*\n\n📦 *{$listing->title}* (#️⃣{$listing->id})\n"
@@ -529,7 +529,7 @@ class ListingEditAgent
         }
 
         $listing->refresh();
-        $link   = "{$this->baseUrl}/p/{$listing->id}";
+        $link   = $listing->share_url;
         $result = "✅ *Iklan #{$listing->id} berhasil diperbarui!*\n\n"
             . implode("\n", $changeDesc) . "\n\n"
             . "🔗 {$link}";
@@ -590,7 +590,7 @@ class ListingEditAgent
             'contact_id'     => $contact?->id,
         ]);
         $listing->refresh();
-        $link = "{$this->baseUrl}/p/{$listing->id}";
+        $link = $listing->share_url;
         return "✅ *Iklan #{$listing->id} berhasil diperbarui!*\n\n"
             . "• Kontak → *{$name}* ({$phone})\n\n"
             . "🔗 {$link}";
@@ -607,7 +607,7 @@ class ListingEditAgent
             'contact_id'     => $pasmalContact?->id,
         ]);
         $listing->refresh();
-        $link = "{$this->baseUrl}/p/{$listing->id}";
+        $link = $listing->share_url;
         return "✅ *Iklan #{$listing->id} berhasil diperbarui!*\n\n"
             . "• Kontak → *{$pasmalName}* ({$pasmalPhone})\n\n"
             . "🔗 {$link}";
@@ -629,7 +629,7 @@ class ListingEditAgent
         $group = \App\Models\WhatsappGroup::where('is_active', true)->first();
         if (!$group) return;
 
-        $link      = "{$this->baseUrl}/p/{$listing->id}";
+        $link      = $listing->share_url;
         $priceStr  = $listing->price_formatted;
         $catLine   = $listing->category ? "📂 {$listing->category->name}\n" : '';
         $locLine   = $listing->location ? "📍 {$listing->location}\n" : '';

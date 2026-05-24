@@ -698,7 +698,7 @@ class AdBuilderAgent
             ]);
         }
 
-        $listingUrl = rtrim(config('app.url'), '/') . '/p/' . $listing->id;
+        $listingUrl = $listing->share_url;
 
         if ($posted) {
             return "✅ *Iklan berhasil diposting ke grup!*\n\n"

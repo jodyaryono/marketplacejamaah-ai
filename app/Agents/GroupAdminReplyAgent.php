@@ -59,7 +59,7 @@ class GroupAdminReplyAgent
 
         $categoryName = $listing->category?->name ?? 'Umum';
         $priceLabel = $listing->price_formatted;
-        $listingUrl = url('/p/' . $listing->id);
+        $listingUrl = $listing->share_url;
         $paddedId = str_pad($listing->id, 5, '0', STR_PAD_LEFT);
         $locationLine = $listing->location ? "📍 Lokasi: {$listing->location}\n" : '';
 

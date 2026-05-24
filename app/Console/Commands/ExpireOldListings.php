@@ -62,7 +62,7 @@ class ExpireOldListings extends Command
 
             if ($count === 1) {
                 $listing = $sellerListings->first();
-                $link    = "{$baseUrl}/p/{$listing->id}";
+                $link    = $listing->share_url;
                 $msg     = "📭 *Iklan Kamu Telah Kadaluarsa*\n\n"
                     . "Halo *{$name}*, iklan berikut sudah otomatis diarsipkan karena sudah _{$days} hari_ tidak diperbarui:\n\n"
                     . "📦 *{$listing->title}* (#{$listing->id})\n"
@@ -72,7 +72,7 @@ class ExpireOldListings extends Command
                     . "_Atau pasang iklan baru kapan saja di grup Marketplace Jamaah. Semoga rezekinya lancar! 🙏_";
             } else {
                 $listingLines = $sellerListings->map(
-                    fn($l) => "• *{$l->title}* (#{$l->id}) — {$baseUrl}/p/{$l->id}"
+                    fn($l) => "• *{$l->title}* (#{$l->id}) — {$l->share_url}"
                 )->implode("\n");
 
                 $idList = $sellerListings->pluck('id')->map(fn($id) => "#$id")->implode(', ');

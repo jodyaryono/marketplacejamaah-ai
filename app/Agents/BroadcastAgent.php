@@ -59,7 +59,7 @@ class BroadcastAgent
         $isMaster = MasterCommandAgent::isMasterPhone($message->sender_number ?? '');
         if ($isMaster) {
             try {
-                $listingUrl = url('/p/' . $listing->id);
+                $listingUrl = $listing->share_url;
                 $this->whacenter->sendMessage(
                     $message->sender_number,
                     "✅ *Iklan tayang!*\n\n📦 *{$listing->title}*\n🔗 {$listingUrl}\n\n_Edit kapan saja: ketik *edit #{$listing->id}*_"
@@ -71,7 +71,7 @@ class BroadcastAgent
         }
 
         $priceLabel   = $listing->price_formatted ?? 'Harga Nego';
-        $listingUrl   = url('/p/' . $listing->id);
+        $listingUrl   = $listing->share_url;
         $categoryLine = $listing->category ? "📂 {$listing->category->name}\n" : '';
         $locLine      = $listing->location ? "📍 {$listing->location}\n" : '';
         // Preserve the FULL member description — never truncate, never drop lines.

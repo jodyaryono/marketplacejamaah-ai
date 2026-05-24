@@ -10,6 +10,19 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Listing extends Model
 {
     use HasFactory, SoftDeletes;
+
+    /**
+     * Public share URL with a cache-busting version param.
+     * WhatsApp caches link previews per exact URL; appending ?v={updated_at}
+     * forces a fresh preview (thumbnail + title) every time the listing is edited.
+     */
+    public function getShareUrlAttribute(): string
+    {
+        $base = url('/p/' . $this->id);
+        $v    = optional($this->updated_at)->timestamp ?? $this->id;
+        return $base . '?v=' . $v;
+    }
+
     protected $fillable = [
         'message_id',
         'whatsapp_group_id',

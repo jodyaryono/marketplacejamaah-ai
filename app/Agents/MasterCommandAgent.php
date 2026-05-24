@@ -378,7 +378,7 @@ class MasterCommandAgent
         ]);
 
         // Link ke halaman detail listing — bukan URL global situs.
-        $listingUrl = rtrim(config('app.url'), '/') . '/p/' . $listing->id;
+        $listingUrl = $listing->share_url;
         $textWithLink = rtrim($text) . "\n\n📌 *Marketplace Jamaah*\n🔗 {$listingUrl}";
 
         if ($mediaUrl) {

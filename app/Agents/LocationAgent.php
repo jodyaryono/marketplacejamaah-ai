@@ -35,7 +35,7 @@ class LocationAgent
 
         $lines = ["📍 *Produk Sekitar {$areaLabel}*\n"];
         foreach ($listings->take(5) as $i => $listing) {
-            $link    = "{$this->baseUrl}/p/{$listing->id}";
+            $link    = $listing->share_url;
             $price   = $listing->price_label
                 ?? ($listing->price > 0 ? 'Rp ' . number_format($listing->price, 0, ',', '.') : 'Harga nego');
             $loc     = $listing->location ? " 📍 {$listing->location}" : '';

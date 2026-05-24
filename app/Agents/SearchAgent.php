@@ -33,7 +33,7 @@ class SearchAgent
             $seller = $listing->contact?->name ?? $listing->contact_name ?? 'Penjual';
             $price  = $listing->price_formatted;
             $loc    = $listing->location ? " 📍_{$listing->location}_" : '';
-            $link   = "{$this->baseUrl}/p/{$listing->id}";
+            $link   = $listing->share_url;
             $lines[] = ($i + 1) . ". *{$listing->title}*\n"
                 . "   💰 {$price}{$loc}\n"
                 . "   👤 {$seller}\n"
@@ -126,7 +126,7 @@ class SearchAgent
                 'sold'   => '✅',
                 default  => '🟡',
             };
-            $link    = "{$this->baseUrl}/p/{$listing->id}";
+            $link    = $listing->share_url;
             $lines[] = ($i + 1) . ". {$status} *#{$listing->id}* — *{$listing->title}*\n"
                 . "   💰 {$listing->price_formatted}\n"
                 . "   🔗 {$link}";
