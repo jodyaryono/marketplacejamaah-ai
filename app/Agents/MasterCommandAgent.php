@@ -120,6 +120,13 @@ class MasterCommandAgent
         if (preg_match('/\b(help|bantuan|menu|perintah)\b/u', $lower) && strlen($lower) <= 20) {
             return $this->execHelp();
         }
+        // Create ad — "buat iklan" / "buatkan iklan" / "bikin iklan" / "pasang iklan" / "iklan baru"
+        // Master juga harus bisa memicu AdBuilder flow lewat DM.
+        if (preg_match('/^\s*(buat|buatkan|bikin|bikinin|pasang|pasangkan|posting|post|tambah|tambahkan|tambahin)\s+(iklan|jualan|dagangan|produk|listing|barang|ad)\b/iu', $command)
+            || preg_match('/^\s*(iklan\s+baru|listing\s+baru|create\s+ad|new\s+ad)\s*$/iu', $command)) {
+            return $this->execCreateAd();
+        }
+
         // Show own listings — terima banyak variasi: ku/saya/aku/punyaku/etc.
         // "iklanku", "iklan ku", "iklan saya", "iklan aku", "listing saya", "jualan saya",
         // "dagangan saya", "produk saya", "punya saya", "my listings"
@@ -498,6 +505,20 @@ class MasterCommandAgent
     {
         Artisan::call('monitor:run', ['--force' => true]);
         return ['system_health_report' => 'sent'];
+    }
+
+    private function execCreateAd(): array
+    {
+        $masterPhone = config('services.wa_gateway.master_phone', '');
+        if ($masterPhone === '') {
+            $this->reply('⚠️ Master phone tidak terkonfigurasi.');
+            return ['error' => 'no_master_phone'];
+        }
+        $contact = Contact::where('phone_number', $masterPhone)->first();
+        $name = $contact?->getSapaan() ?? 'Kakak';
+        $reply = app(\App\Agents\AdBuilderAgent::class)->start($masterPhone, $name);
+        $this->reply($reply);
+        return ['create_ad' => 'started'];
     }
 
     private function execMyListings(): array
