@@ -70,7 +70,7 @@ class BotQueryAgent
 
                 // Stale-session prompt was sent — short-circuit to lanjut/batal handling.
                 if (!empty($adBuilderState['stale_prompt_sent_at'])) {
-                    if (preg_match('/^\s*(lanjut|lanjutkan|teruskan|ya|iya|continue|y)\s*$/iu', $text)) {
+                    if (preg_match('/^\s*(lanjut|lanjutkan|teruskan|ya|iy|iya|yes|oke?|sip|continue|y)\s*$/iu', $text)) {
                         $this->adBuilder->clearStalePrompt($message->sender_number);
                         $this->whacenter->sendMessage($message->sender_number,
                             "✅ Oke, kita lanjut! 🙂\n\nSilakan kirim foto / instruksi berikutnya, atau ketik *batal* kalau berubah pikiran."
