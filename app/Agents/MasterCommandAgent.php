@@ -120,6 +120,10 @@ class MasterCommandAgent
         if (preg_match('/\b(help|bantuan|menu|perintah)\b/u', $lower) && strlen($lower) <= 20) {
             return $this->execHelp();
         }
+        // "iklanku" / "iklan ku" / "jualanku" / "daganganku" / "produkku" — show own listings
+        if (preg_match('/^\s*(iklan\s*ku|jualan\s*ku|dagangan\s*ku|produk\s*ku|listing\s*ku|my\s*listings?)\s*$/iu', $command)) {
+            return $this->execMyListings();
+        }
         // "hapus peringatan 628..." / "reset warning 628..." / "clear warning all"
         if (preg_match('/\b(hapus|reset|clear)\s+(peringatan|warning|warn)\b/u', $lower)) {
             $phone = $this->normalizePhone($command);
@@ -490,6 +494,18 @@ class MasterCommandAgent
     {
         Artisan::call('monitor:run', ['--force' => true]);
         return ['system_health_report' => 'sent'];
+    }
+
+    private function execMyListings(): array
+    {
+        $masterPhone = config('services.wa_gateway.master_phone', '');
+        if ($masterPhone === '') {
+            $this->reply('⚠️ Master phone tidak terkonfigurasi.');
+            return ['error' => 'no_master_phone'];
+        }
+        $reply = app(\App\Agents\SearchAgent::class)->myListings($masterPhone, 20);
+        $this->reply($reply);
+        return ['my_listings' => 'shown'];
     }
 
     private function execHelp(): array

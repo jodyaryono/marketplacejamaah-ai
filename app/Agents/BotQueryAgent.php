@@ -288,6 +288,15 @@ class BotQueryAgent
                 return true;
             }
 
+            // Fast-path: "iklanku" / "iklan ku" / "jualanku" / "daganganku" — show own listings.
+            // Bypass Gemini — sering misklasifikasi kalimat 2 kata jadi search.
+            if (preg_match('/^\s*(iklan\s*ku|jualan\s*ku|dagangan\s*ku|produk\s*ku|listing\s*ku|my\s*listings?)\s*$/iu', $text)) {
+                $reply = $this->search->myListings($message->sender_number, 20);
+                $this->whacenter->sendMessage($message->sender_number, $reply);
+                $log->update(['status' => 'success', 'output_payload' => ['intent' => 'my_listings_fastpath']]);
+                return true;
+            }
+
             // ── 6b. Bare name reply (1-3 short words, alphabetic) from a contact
             // whose stored name is still empty/phone — they're likely answering an
             // earlier "boleh tau namanya?" question. Capture the name and respond
