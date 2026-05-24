@@ -146,8 +146,7 @@ class ProcessMessageJob implements ShouldQueue
                     $contact = \App\Models\Contact::where('phone_number', $message->sender_number)->first();
                     if ($contact) {
                         // Don't auto-reply to sticker/empty/media-only DMs — they're often
-                        // a tap-back reaction to our intro DM, not a real query. Sending the
-                        // confused fallback there feels spammy ("kenapa bot nanya gini?").
+                        // a tap-back reaction to our intro DM, not a real query.
                         $body = trim($message->raw_body ?? '');
                         if ($body === '') {
                             Log::info("ProcessMessageJob: skipping empty/media DM from {$message->sender_number} (no auto-reply)");
@@ -155,12 +154,16 @@ class ProcessMessageJob implements ShouldQueue
                             // Known contact (group member, registered or not) → AI replies contextually
                             $handled = $botQuery->handle($message);
                             if (!$handled) {
-                                // BotQueryAgent failed — send smart fallback (only for text messages)
+                                // BotQueryAgent failed — send the FULL help menu directly so the
+                                // user doesn't have to manually type "bantuan" (esp. right after
+                                // onboarding when they haven't learned the commands yet).
                                 $name = $contact->name ?? 'Kak';
-                                app(\App\Services\WhacenterService::class)->sendMessage(
+                                $wa = app(\App\Services\WhacenterService::class);
+                                $wa->sendMessage(
                                     $message->sender_number,
-                                    "*{$name}*, bisa diperjelas pertanyaannya? 😊 Ketik *bantuan* untuk lihat apa saja yang bisa aku bantu."
+                                    "Halo *{$name}*, aku belum nangkep maksudnya 😊 Ini daftar yang bisa aku bantu ya:"
                                 );
+                                $wa->sendMessage($message->sender_number, $botQuery->helpMessage());
                             }
                         }
                     } else {

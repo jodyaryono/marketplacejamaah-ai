@@ -391,7 +391,7 @@ class BotQueryAgent
         return "Oke *{$name}*, udah aku sampaikan ke admin ya! 😊\n\nAdmin akan hubungi kamu langsung. Ditunggu sebentar ya 🙏";
     }
 
-    private function helpMessage(): string
+    public function helpMessage(): string
     {
         return "🤖 *Kemampuan Bot Marketplace Jamaah*\n\n"
             . "🛍️ *Buat Iklan via DM (Baru!)*\n"
