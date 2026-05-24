@@ -120,8 +120,12 @@ class MasterCommandAgent
         if (preg_match('/\b(help|bantuan|menu|perintah)\b/u', $lower) && strlen($lower) <= 20) {
             return $this->execHelp();
         }
-        // "iklanku" / "iklan ku" / "jualanku" / "daganganku" / "produkku" — show own listings
-        if (preg_match('/^\s*(iklan\s*ku|jualan\s*ku|dagangan\s*ku|produk\s*ku|listing\s*ku|my\s*listings?)\s*$/iu', $command)) {
+        // Show own listings — terima banyak variasi: ku/saya/aku/punyaku/etc.
+        // "iklanku", "iklan ku", "iklan saya", "iklan aku", "listing saya", "jualan saya",
+        // "dagangan saya", "produk saya", "punya saya", "my listings"
+        if (preg_match('/^\s*(lihat\s+|tampilkan\s+|cek\s+|liat\s+)?(iklan|jualan|dagangan|produk|listing|barang|dagangan)\s*(ku|saya|aku|nya\s+saya|punyaku|punya\s+saya|gw|gue)\s*$/iu', $command)
+            || preg_match('/^\s*(iklanku|jualanku|daganganku|produkku|listingku|barangku)\s*$/iu', $command)
+            || preg_match('/^\s*(punyaku|punya\s+saya|punya\s+aku|my\s*listings?|my\s*ads?)\s*$/iu', $command)) {
             return $this->execMyListings();
         }
         // "hapus peringatan 628..." / "reset warning 628..." / "clear warning all"

@@ -288,9 +288,13 @@ class BotQueryAgent
                 return true;
             }
 
-            // Fast-path: "iklanku" / "iklan ku" / "jualanku" / "daganganku" — show own listings.
+            // Fast-path: tampilkan iklan sendiri — terima banyak variasi natural.
+            // "iklanku", "iklan ku", "iklan saya", "iklan aku", "listing saya",
+            // "jualan saya", "dagangan saya", "produk saya", "punya saya", "my listings"
             // Bypass Gemini — sering misklasifikasi kalimat 2 kata jadi search.
-            if (preg_match('/^\s*(iklan\s*ku|jualan\s*ku|dagangan\s*ku|produk\s*ku|listing\s*ku|my\s*listings?)\s*$/iu', $text)) {
+            if (preg_match('/^\s*(lihat\s+|tampilkan\s+|cek\s+|liat\s+)?(iklan|jualan|dagangan|produk|listing|barang)\s*(ku|saya|aku|punyaku|punya\s+saya|gw|gue)\s*$/iu', $text)
+                || preg_match('/^\s*(iklanku|jualanku|daganganku|produkku|listingku|barangku)\s*$/iu', $text)
+                || preg_match('/^\s*(punyaku|punya\s+saya|punya\s+aku|my\s*listings?|my\s*ads?)\s*$/iu', $text)) {
                 $reply = $this->search->myListings($message->sender_number, 20);
                 $this->whacenter->sendMessage($message->sender_number, $reply);
                 $log->update(['status' => 'success', 'output_payload' => ['intent' => 'my_listings_fastpath']]);
