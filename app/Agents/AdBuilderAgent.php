@@ -525,7 +525,12 @@ class AdBuilderAgent
 
     private function isCancelCommand(string $text): bool
     {
-        return (bool) preg_match('/^\s*(batal|cancel|hapus|stop|keluar)\s*$/iu', $text);
+        // Terima banyak variasi: batal/batalkan/batalin, cancel, stop, keluar,
+        // ga jadi/gak jadi/tidak jadi/nggak jadi, sudahan, lupakan, tutup
+        return (bool) preg_match(
+            '/^\s*(batal(kan|in)?|cancel|hapus|stop|keluar|sudahan|sudahin|lupakan|tutup|kelar(in)?|(ga|gak|nggak|gk|g|tidak|tdk)\s*jadi)\s*$/iu',
+            $text
+        );
     }
 
     /**
