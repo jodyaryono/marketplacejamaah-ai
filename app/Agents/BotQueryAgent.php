@@ -349,6 +349,13 @@ class BotQueryAgent
         $reply = $this->gemini->generateContent($prompt);
 
         if (!$reply || strtoupper(trim($reply)) === 'OFFTOPIC' || stripos(trim($reply), 'OFFTOPIC') === 0) {
+            // Guard against false positives: Gemini often flags jasa/services/kursus as
+            // off-topic even though those ARE valid marketplace listings. If the user's
+            // text clearly mentions selling/buying/services, give a helpful reply instead.
+            $tradeKeywords = '\b(jasa|jual|menjual|dijual|dagang|usaha|produk|barang|kursus|privat|les|belajar|tahsin|terapi|katering|cuci|antar|jemput|service|servis)\b';
+            if (preg_match('/' . $tradeKeywords . '/iu', $text)) {
+                return $this->offTopicSoftReply($text);
+            }
             return $this->offTopicReply();
         }
 
@@ -428,8 +435,22 @@ class BotQueryAgent
 
     private function offTopicReply(): string
     {
-        return "Untuk itu aku belum bisa bantu ya — fokusnya soal jual beli di Marketplace Jamaah 🛒\n\n"
-            . 'Ketik *bantuan* untuk lihat fitur lengkapnya 👇';
+        return "Aku fokusnya soal jual beli di *Marketplace Jamaah* 🛒\n\n"
+            . "Ini daftar yang bisa aku bantu ya 👇\n\n"
+            . $this->helpMessage();
+    }
+
+    /**
+     * Soft off-topic reply: user mentioned jasa/dagang/jual but Gemini still
+     * flagged off-topic. Acknowledge the product/jasa and guide them to post it.
+     */
+    private function offTopicSoftReply(string $text): string
+    {
+        $snippet = mb_strimwidth(trim($text), 0, 120, '...');
+        return "Wah keren! Jasa/produk seperti _\"{$snippet}\"_ bisa banget dipasarkan di Marketplace Jamaah 🌟\n\n"
+            . "📣 *Cara pasang iklan:* kirim *foto + deskripsi + harga* di *grup WhatsApp* — iklan otomatis tayang di website dalam hitungan detik.\n\n"
+            . "Atau ketik *buat iklan* di chat ini, nanti aku tuntun langkah demi langkah 😊\n\n"
+            . "🌐 {$this->baseUrl}";
     }
 
     private function fallbackParse(string $text): array
