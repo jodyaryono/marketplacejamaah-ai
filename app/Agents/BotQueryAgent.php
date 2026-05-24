@@ -545,8 +545,6 @@ class BotQueryAgent
             . "_\"Daftar kategori tersedia\"_\n\n"
             . "🤔 *AI Tanya Balik* jika pesan kurang jelas\n\n"
             . "⚠️ _Bot ini khusus marketplace. Pertanyaan di luar topik jual beli tidak dilayani._\n\n"
-            . "🪪 *Scan KTP*\n"
-            . "Ketik *scan ktp* → kirim foto KTP → AI baca otomatis\n\n"
             . "🌐 {$this->baseUrl}";
     }
 

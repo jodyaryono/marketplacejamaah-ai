@@ -82,7 +82,6 @@ class MemberOnboardingAgent
                 . "   Ketik _nomor iklan_ (mis. *146*) → muncul menu edit: harga, terjual, sembunyikan, aktifkan.\n\n"
                 . "📋 *Lihat Iklan Saya* — ketik _iklanku_\n\n"
                 . "📂 *Lihat Kategori* — ketik _kategori_\n\n"
-                . "🪪 *Scan KTP* — ketik _scan ktp_ lalu kirim foto KTP.\n\n"
                 . "🤖 *Tanya bebas* — bot pakai AI, jawab pertanyaan natural seputar marketplace.\n\n"
                 . "Kapan saja butuh menu ini lagi, ketik *bantuan* ya 🙏\n"
                 . "Selamat berjualan & berbelanja, semoga jadi ladang berkah! 🌟";
