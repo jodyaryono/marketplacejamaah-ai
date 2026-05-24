@@ -210,7 +210,22 @@ class HadithService
         $header = "🕌 *Hadits Harian — Adab Jual Beli*\n\n";
         $footer = "\n\n─────────────────\n_🤖 Bot Marketplace Jamaah — Muamalah yang berkah dimulai dari adab yang baik_";
 
-        return $header . $hadith['text'] . $footer;
+        $appeal = "\n\n─────────────────\n\n"
+            . "Assalamu'alaikum Warahmatullahi Wabarakatuh 🤲\n\n"
+            . "Bapak/Ibu Jamaah yang dirahmati Allah,\n\n"
+            . "Alhamdulillah, Marketplace Jamaah kita terus berkembang dan semoga telah membantu memudahkan penjualan produk Bapak/Ibu sekalian 🙏\n\n"
+            . "Platform ini dibangun dengan niat berbagi manfaat — gratis, tanpa syarat, dan insya Allah terus kami kembangkan.\n\n"
+            . "Jika Bapak/Ibu merasa platform ini memberikan manfaat untuk usaha dan rezeki keluarga, kami membuka pintu bagi siapa pun yang ingin *berkontribusi secara sukarela* sebagai bentuk apresiasi & dukungan keberlanjutan platform ini.\n\n"
+            . "💝 *Donasi Sukarela (seikhlasnya):*\n"
+            . "👉 https://jodyaryono.myr.id/payme\n\n"
+            . "Berapa pun yang Bapak/Ibu niatkan, insya Allah menjadi sedekah jariyah yang dicatat sebagai kebaikan. Tidak ada kewajiban sama sekali — hanya keikhlasan 🌟\n\n"
+            . "_\"Sebaik-baik manusia adalah yang paling bermanfaat bagi orang lain.\"_\n"
+            . "_(HR. Ahmad & Thabrani)_\n\n"
+            . "Jazakallahu khairan katsiran atas kepercayaan dan dukungan Bapak/Ibu semua 🙏\n\n"
+            . "Salam hangat,\n"
+            . "*Tim Marketplace Jamaah*";
+
+        return $header . $hadith['text'] . $footer . $appeal;
     }
 
     /**
