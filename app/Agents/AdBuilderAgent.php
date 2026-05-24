@@ -42,7 +42,7 @@ class AdBuilderAgent
     private function putState(string $phone, array $state): void
     {
         $state['last_activity_at'] = now()->toIso8601String();
-        $this->putState($phone, $state);
+        Cache::put(self::CACHE_PREFIX . $phone, $state, now()->addMinutes(self::CACHE_TTL_MINUTES));
         $this->registerActivePhone($phone);
     }
 
@@ -75,7 +75,7 @@ class AdBuilderAgent
      */
     public function cancelSession(string $phone): void
     {
-        $this->cancelSession($phone);
+        Cache::forget(self::CACHE_PREFIX . $phone);
         $this->unregisterActivePhone($phone);
     }
 
