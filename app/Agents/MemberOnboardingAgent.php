@@ -57,16 +57,36 @@ class MemberOnboardingAgent
 
             $greeting = $senderName ? "Assalamu'alaikum *{$senderName}*! 🙏" : "Assalamu'alaikum wa rahmatullahi wa barakatuh! 🙏";
 
+            $siteUrl = rtrim(config('app.url', 'https://marketplacejamaah-ai.jodyaryono.id'), '/');
+
             $intro = "{$greeting}\n\n"
                 . "✨ *Selamat datang di Marketplace Jamaah!* ✨\n\n"
-                . "Satu hal penting yang perlu kamu tahu dulu:\n\n"
-                . "🚀 *Cara pasang iklan itu GAMPANG banget!*\n"
-                . "Cukup *kirim foto / video + deskripsi + harga* di grup WhatsApp ini — "
-                . "iklanmu akan *otomatis muncul di website kami* dalam hitungan detik! 🌐\n\n"
-                . "🌐 *marketplacejamaah-ai.jodyaryono.id*\n\n"
+                . "🚀 *Cara pasang iklan GAMPANG banget!*\n"
+                . "Cukup kirim *foto/video + deskripsi + harga* di grup WhatsApp — "
+                . "iklanmu otomatis tayang di website dalam hitungan detik! 🌐\n\n"
+                . "🌐 *{$siteUrl}*\n\n"
                 . "Tidak perlu daftar, tidak perlu login, tidak perlu aplikasi lain. "
                 . "Cukup chat di grup seperti biasa 😊\n\n"
-                . "Kalau butuh panduan atau lihat semua fitur, tinggal ketik *bantuan* kapan saja ya 🙏";
+                . "━━━━━━━━━━━━━━━━━━\n"
+                . "✨ *Fitur Marketplace Jamaah AI*\n"
+                . "━━━━━━━━━━━━━━━━━━\n\n"
+                . "🛍️ *Buat Iklan via DM*\n"
+                . "   Ketik _buat iklan_ → kirim foto → AI rapikan otomatis → tayang!\n\n"
+                . "📦 *Iklan Otomatis via Grup*\n"
+                . "   Posting di grup seperti biasa, AI deteksi & tayangkan sendiri.\n\n"
+                . "🔍 *Cari Produk / Penjual (DM ke bot)*\n"
+                . "   _\"cari gamis ukuran L\"_ • _\"siapa jual kurma Ajwa?\"_\n\n"
+                . "📍 *Kirim Pin Lokasi*\n"
+                . "   Bot tawarkan: update lokasi bisnis / cari produk sekitar.\n\n"
+                . "✏️ *Edit Iklan Cepat*\n"
+                . "   Ketik _nomor iklan_ (mis. *146*) → muncul menu edit: harga, terjual, sembunyikan, aktifkan.\n\n"
+                . "📋 *Lihat Iklan Saya*\n"
+                . "   Ketik _iklanku_ untuk daftar lengkap.\n\n"
+                . "📂 *Lihat Kategori* — ketik _kategori_\n\n"
+                . "🪪 *Scan KTP* — ketik _scan ktp_ lalu kirim foto KTP.\n\n"
+                . "🤖 *Tanya bebas* — bot pakai AI, jawab pertanyaan natural seputar marketplace.\n\n"
+                . "Kapan saja butuh menu ini lagi, ketik *bantuan* ya 🙏\n"
+                . "Selamat berjualan & berbelanja, semoga jadi ladang berkah! 🌟";
 
             $this->whacenter->sendMessage($message->sender_number, $intro);
 
