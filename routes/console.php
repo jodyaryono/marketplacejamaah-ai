@@ -31,3 +31,8 @@ Schedule::command('onboard:missing --force --max-send=10 --delay=6')
     ->everyFifteenMinutes()
     ->withoutOverlapping(20)
     ->runInBackground();
+
+// Tanya user kalau session buat-iklan idle >10 menit; auto-cancel kalau diam 5 menit lagi.
+Schedule::command('ads:check-stale --threshold=10 --grace=5')
+    ->everyMinute()
+    ->withoutOverlapping(5);

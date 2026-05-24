@@ -18,6 +18,7 @@ class AdBuilderAgent
 {
     private const CACHE_TTL_MINUTES = 30;
     private const CACHE_PREFIX = 'ad_builder:';
+    private const ACTIVE_INDEX_KEY = 'ad_builder:active_phones';
 
     public function __construct(
         private GeminiService $gemini,
@@ -32,6 +33,77 @@ class AdBuilderAgent
     public function getState(string $phone): ?array
     {
         return Cache::get(self::CACHE_PREFIX . $phone);
+    }
+
+    /**
+     * Centralized state writer — stamps last_activity_at and registers the phone
+     * in the active-sessions index so the stale-session checker can find it.
+     */
+    private function putState(string $phone, array $state): void
+    {
+        $state['last_activity_at'] = now()->toIso8601String();
+        $this->putState($phone, $state);
+        $this->registerActivePhone($phone);
+    }
+
+    private function registerActivePhone(string $phone): void
+    {
+        $active = Cache::get(self::ACTIVE_INDEX_KEY, []);
+        if (!in_array($phone, $active, true)) {
+            $active[] = $phone;
+            Cache::put(self::ACTIVE_INDEX_KEY, $active, now()->addDay());
+        }
+    }
+
+    private function unregisterActivePhone(string $phone): void
+    {
+        $active = Cache::get(self::ACTIVE_INDEX_KEY, []);
+        $active = array_values(array_filter($active, fn($p) => $p !== $phone));
+        Cache::put(self::ACTIVE_INDEX_KEY, $active, now()->addDay());
+    }
+
+    /**
+     * Phones currently in an ad-builder session — used by ads:check-stale.
+     */
+    public function getActivePhones(): array
+    {
+        return Cache::get(self::ACTIVE_INDEX_KEY, []);
+    }
+
+    /**
+     * Cancel & clear an ad-builder session.
+     */
+    public function cancelSession(string $phone): void
+    {
+        $this->cancelSession($phone);
+        $this->unregisterActivePhone($phone);
+    }
+
+    /**
+     * Mark that the stale-confirmation prompt has been sent. Used by check-stale.
+     * Returns true if the flag was newly set, false if it was already present.
+     */
+    public function markStalePrompt(string $phone): bool
+    {
+        $state = $this->getState($phone);
+        if (!$state || !empty($state['stale_prompt_sent_at'])) {
+            return false;
+        }
+        $state['stale_prompt_sent_at'] = now()->toIso8601String();
+        // Bypass putState() so we DO NOT refresh last_activity_at — the grace
+        // window is measured against stale_prompt_sent_at and the original idle
+        // window stays intact for the cancel decision.
+        Cache::put(self::CACHE_PREFIX . $phone, $state, now()->addMinutes(self::CACHE_TTL_MINUTES));
+        return true;
+    }
+
+    public function clearStalePrompt(string $phone): void
+    {
+        $state = $this->getState($phone);
+        if ($state && isset($state['stale_prompt_sent_at'])) {
+            unset($state['stale_prompt_sent_at']);
+            $this->putState($phone, $state);
+        }
     }
 
     /**
@@ -51,7 +123,7 @@ class AdBuilderAgent
         if ($onBehalfPasmal) {
             $state['on_behalf_pasmal'] = true;
         }
-        Cache::put(self::CACHE_PREFIX . $phone, $state, now()->addMinutes(self::CACHE_TTL_MINUTES));
+        $this->putState($phone, $state);
 
         $onBehalfNote = $onBehalfPasmal ? "\n\n_📋 Mode: atas nama *Pasmal*_" : '';
 
@@ -73,7 +145,7 @@ class AdBuilderAgent
      */
     public function startSilent(string $phone): void
     {
-        Cache::put(self::CACHE_PREFIX . $phone, ['step' => 'waiting_input'], now()->addMinutes(self::CACHE_TTL_MINUTES));
+        $this->putState($phone, ['step' => 'waiting_input']);
     }
 
     /**
@@ -174,7 +246,7 @@ class AdBuilderAgent
             }
 
             // Save draft and go to 'enriching' step — ask for extra details before finalizing
-            Cache::put(self::CACHE_PREFIX . $phone, $newState, now()->addMinutes(self::CACHE_TTL_MINUTES));
+            $this->putState($phone, $newState);
 
             $this->pushPreview($phone, $draft, $this->formatEnrichPrompt($draft));
             return '';
@@ -190,7 +262,7 @@ class AdBuilderAgent
     public function handleTextWhileWaiting(string $phone, string $text): string
     {
         if ($this->isCancelCommand($text)) {
-            Cache::forget(self::CACHE_PREFIX . $phone);
+            $this->cancelSession($phone);
             return "❌ *Pembuatan iklan dibatalkan.*\n\nKetik *buat iklan* kapan saja untuk memulai lagi.";
         }
 
@@ -209,14 +281,14 @@ class AdBuilderAgent
         $draft = $state['draft'] ?? [];
 
         if ($this->isCancelCommand($text)) {
-            Cache::forget(self::CACHE_PREFIX . $phone);
+            $this->cancelSession($phone);
             return "❌ *Pembuatan iklan dibatalkan.*\n\nKetik *buat iklan* kapan saja untuk memulai lagi.";
         }
 
         // Detect "on behalf pasmal" at any enriching step
         if (self::isOnBehalfPasmal($text)) {
             $state['on_behalf_pasmal'] = true;
-            Cache::put(self::CACHE_PREFIX . $phone, $state, now()->addMinutes(self::CACHE_TTL_MINUTES));
+            $this->putState($phone, $state);
             return "✅ _Mode atas nama *Pasmal* aktif._\n\nLanjutkan dengan info produk, atau ketik *lanjut* untuk review.";
         }
 
@@ -230,7 +302,7 @@ class AdBuilderAgent
         if (preg_match('/^\s*(lanjut|next|skip|oke|ok|sudah|sudah\s+ok|tidak\s+ada|ga\s+ada|gak\s+ada|langsung\s+post)\s*$/iu', $text)) {
             $newState = ['step' => 'reviewing', 'draft' => $draft];
             if (!empty($state['on_behalf_pasmal'])) $newState['on_behalf_pasmal'] = true;
-            Cache::put(self::CACHE_PREFIX . $phone, $newState, now()->addMinutes(self::CACHE_TTL_MINUTES));
+            $this->putState($phone, $newState);
             $this->pushPreview($phone, $draft, $this->formatDraftPreview($draft, !empty($state['on_behalf_pasmal'])));
             return '';
         }
@@ -277,7 +349,7 @@ class AdBuilderAgent
 
         $newState = ['step' => 'reviewing', 'draft' => $draft];
         if (!empty($state['on_behalf_pasmal'])) $newState['on_behalf_pasmal'] = true;
-        Cache::put(self::CACHE_PREFIX . $phone, $newState, now()->addMinutes(self::CACHE_TTL_MINUTES));
+        $this->putState($phone, $newState);
         $this->pushPreview($phone, $draft, $this->formatDraftPreview($draft, !empty($state['on_behalf_pasmal'])));
         return '';
     }
@@ -297,7 +369,7 @@ class AdBuilderAgent
         $onBehalfPasmal = !empty($state['on_behalf_pasmal']);
 
         if ($this->isCancelCommand($text)) {
-            Cache::forget(self::CACHE_PREFIX . $phone);
+            $this->cancelSession($phone);
             return "❌ *Pembuatan iklan dibatalkan.*\n\nKetik *buat iklan* kapan saja untuk memulai lagi.";
         }
 
@@ -311,7 +383,7 @@ class AdBuilderAgent
         if (self::isOnBehalfPasmal($text)) {
             $state['on_behalf_pasmal'] = true;
             $onBehalfPasmal = true;
-            Cache::put(self::CACHE_PREFIX . $phone, $state, now()->addMinutes(self::CACHE_TTL_MINUTES));
+            $this->putState($phone, $state);
             return "✅ _Mode atas nama *Pasmal* aktif._\n\nKetik *ya* untuk posting.";
         }
 
@@ -358,7 +430,7 @@ class AdBuilderAgent
                 }
                 $updState = ['step' => 'reviewing', 'draft' => $draft];
                 if ($onBehalfPasmal) $updState['on_behalf_pasmal'] = true;
-                Cache::put(self::CACHE_PREFIX . $phone, $updState, now()->addMinutes(self::CACHE_TTL_MINUTES));
+                $this->putState($phone, $updState);
                 $this->pushPreview(
                     $phone,
                     $draft,
@@ -413,7 +485,7 @@ class AdBuilderAgent
 
         $newState = ['step' => 'reviewing', 'draft' => $draft];
         if ($onBehalfPasmal) $newState['on_behalf_pasmal'] = true;
-        Cache::put(self::CACHE_PREFIX . $phone, $newState, now()->addMinutes(self::CACHE_TTL_MINUTES));
+        $this->putState($phone, $newState);
 
         $this->pushPreview(
             $phone,
@@ -609,7 +681,7 @@ class AdBuilderAgent
         ]);
 
         // Clear state BEFORE delegating — success path below uses $listing directly.
-        Cache::forget(self::CACHE_PREFIX . $phone);
+        $this->cancelSession($phone);
 
         // Delegate WAG posting to BroadcastAgent — same path used by group-origin listings.
         $posted = false;

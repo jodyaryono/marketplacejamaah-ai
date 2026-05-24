@@ -67,6 +67,30 @@ class BotQueryAgent
             $adBuilderState = $this->adBuilder->getState($message->sender_number);
             if ($adBuilderState) {
                 $text  = trim($message->raw_body ?? '');
+
+                // Stale-session prompt was sent — short-circuit to lanjut/batal handling.
+                if (!empty($adBuilderState['stale_prompt_sent_at'])) {
+                    if (preg_match('/^\s*(lanjut|lanjutkan|teruskan|ya|iya|continue|y)\s*$/iu', $text)) {
+                        $this->adBuilder->clearStalePrompt($message->sender_number);
+                        $this->whacenter->sendMessage($message->sender_number,
+                            "✅ Oke, kita lanjut! 🙂\n\nSilakan kirim foto / instruksi berikutnya, atau ketik *batal* kalau berubah pikiran."
+                        );
+                        $log->update(['status' => 'success', 'output_payload' => ['intent' => 'ad_builder_resume']]);
+                        return true;
+                    }
+                    if (preg_match('/^\s*(batal|cancel|stop|tidak|gak|nggak|gak\s+jadi|nggak\s+jadi|tdk|tidak\s+jadi)\s*$/iu', $text)) {
+                        $this->adBuilder->cancelSession($message->sender_number);
+                        $this->whacenter->sendMessage($message->sender_number,
+                            "❌ *Pembuatan iklan dibatalkan.*\n\nKetik *buat iklan* kapan saja untuk memulai lagi."
+                        );
+                        $log->update(['status' => 'success', 'output_payload' => ['intent' => 'ad_builder_cancel_stale']]);
+                        return true;
+                    }
+                    // Anything else = user actively responded → clear stale flag and continue
+                    $this->adBuilder->clearStalePrompt($message->sender_number);
+                    $adBuilderState = $this->adBuilder->getState($message->sender_number) ?? $adBuilderState;
+                }
+
                 $step  = $adBuilderState['step'] ?? '';
                 $reply = match ($step) {
                     'waiting_input' => $this->adBuilder->handleTextWhileWaiting($message->sender_number, $text),
