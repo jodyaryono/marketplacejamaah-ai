@@ -145,15 +145,23 @@ class ProcessMessageJob implements ShouldQueue
                 if (!$handled) {
                     $contact = \App\Models\Contact::where('phone_number', $message->sender_number)->first();
                     if ($contact) {
-                        // Known contact (group member, registered or not) → AI replies contextually
-                        $handled = $botQuery->handle($message);
-                        if (!$handled) {
-                            // BotQueryAgent failed — send smart fallback
-                            $name = $contact->name ?? 'Kak';
-                            app(\App\Services\WhacenterService::class)->sendMessage(
-                                $message->sender_number,
-                                "*{$name}*, bisa diperjelas pertanyaannya? 😊 Ketik *bantuan* untuk lihat apa saja yang bisa aku bantu."
-                            );
+                        // Don't auto-reply to sticker/empty/media-only DMs — they're often
+                        // a tap-back reaction to our intro DM, not a real query. Sending the
+                        // confused fallback there feels spammy ("kenapa bot nanya gini?").
+                        $body = trim($message->raw_body ?? '');
+                        if ($body === '') {
+                            Log::info("ProcessMessageJob: skipping empty/media DM from {$message->sender_number} (no auto-reply)");
+                        } else {
+                            // Known contact (group member, registered or not) → AI replies contextually
+                            $handled = $botQuery->handle($message);
+                            if (!$handled) {
+                                // BotQueryAgent failed — send smart fallback (only for text messages)
+                                $name = $contact->name ?? 'Kak';
+                                app(\App\Services\WhacenterService::class)->sendMessage(
+                                    $message->sender_number,
+                                    "*{$name}*, bisa diperjelas pertanyaannya? 😊 Ketik *bantuan* untuk lihat apa saja yang bisa aku bantu."
+                                );
+                            }
                         }
                     } else {
                         // Unknown contact (may be LID number or never-in-group) — still try BotQueryAgent.
