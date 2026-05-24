@@ -208,28 +208,23 @@ class HadithService
     public static function formatForWhatsApp(array $hadith): string
     {
         $header = "🕌 *Hadits Harian — Adab Jual Beli*\n\n";
-        $footer = "\n\n─────────────────\n_🤖 Bot Marketplace Jamaah — Muamalah yang berkah dimulai dari adab yang baik_";
 
-        $appeal = "\n\n─────────────────\n\n"
+        $appeal = "\n\n─────────────────\n"
             . "Assalamu'alaikum Warahmatullahi Wabarakatuh 🤲\n\n"
-            . "Bapak/Ibu Jamaah yang dirahmati Allah,\n\n"
-            . "Alhamdulillah, *Marketplace Jamaah* kita terus berkembang dan semoga telah membantu memudahkan penjualan produk Bapak/Ibu sekalian 🙏\n\n"
-            . "Platform ini dibangun dengan niat berbagi manfaat — gratis, tanpa syarat, dan insya Allah terus kami kembangkan.\n\n"
-            . "Agar platform ini terus berjalan dengan baik, kami membutuhkan biaya operasional untuk:\n\n"
-            . "🖥️ *Sewa Server* — agar marketplace selalu online & cepat diakses\n"
-            . "🤖 *Layanan AI* — fitur cerdas yang membantu kemudahan transaksi\n"
-            . "🔧 *Perawatan Web* — pembaruan & keamanan sistem secara berkala\n\n"
-            . "Jika Bapak/Ibu merasa platform ini memberikan manfaat untuk usaha dan rezeki keluarga, kami membuka pintu bagi siapa pun yang ingin *berkontribusi secara sukarela* sebagai bentuk apresiasi & dukungan keberlangsungan platform ini.\n\n"
+            . "Bapak/Ibu Jamaah yang dirahmati Allah, alhamdulillah *Marketplace Jamaah* kita terus berkembang dan semoga memudahkan penjualan produk Bapak/Ibu sekalian 🙏\n\n"
+            . "Platform ini gratis tanpa syarat. Agar tetap berjalan, kami butuh biaya operasional:\n"
+            . "🖥️ *Sewa Server* — marketplace selalu online & cepat\n"
+            . "🤖 *Layanan AI* — fitur cerdas pendukung transaksi\n"
+            . "🔧 *Perawatan Web* — update & keamanan berkala\n\n"
+            . "Jika dirasa bermanfaat, Bapak/Ibu boleh *berkontribusi sukarela* sebagai apresiasi & dukungan keberlangsungan platform.\n\n"
             . "💝 *Donasi Sukarela (seikhlasnya):*\n"
             . "👉 https://jodyaryono.myr.id/payme\n\n"
-            . "Berapa pun yang Bapak/Ibu niatkan, insya Allah menjadi sedekah jariyah yang terus mengalir manfaatnya. Tidak ada kewajiban sama sekali — hanya keikhlasan 🌟\n\n"
-            . "_\"Sebaik-baik manusia adalah yang paling bermanfaat bagi orang lain.\"_\n"
-            . "_(HR. Ahmad & Thabrani)_\n\n"
-            . "Jazakallahu khairan katsiran atas kepercayaan dan dukungan Bapak/Ibu semua 🙏\n\n"
-            . "Salam hangat,\n"
+            . "Berapa pun niatnya, insya Allah menjadi sedekah jariyah yang terus mengalir manfaatnya. Tidak ada kewajiban — hanya keikhlasan 🌟\n\n"
+            . "_\"Sebaik-baik manusia adalah yang paling bermanfaat bagi orang lain.\"_ _(HR. Ahmad & Thabrani)_\n\n"
+            . "Jazakallahu khairan katsiran 🙏\n"
             . "*Tim Marketplace Jamaah*";
 
-        return $header . $hadith['text'] . $footer . $appeal;
+        return $header . $hadith['text'] . $appeal;
     }
 
     /**
