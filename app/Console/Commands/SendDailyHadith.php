@@ -39,6 +39,15 @@ class SendDailyHadith extends Command
         try {
             $result = $wa->sendGroupMessage($groupName, $message);
 
+            // Send donation appeal as a separate message so the link stays above
+            // WhatsApp's "Read more" fold and remains tappable.
+            sleep(2);
+            try {
+                $wa->sendGroupMessage($groupName, HadithService::donationAppeal());
+            } catch (\Throwable $eDonation) {
+                Log::warning('Daily hadith donation appeal failed to send', ['error' => $eDonation->getMessage()]);
+            }
+
             $recent[] = $hadith['index'];
             if (count($recent) > $historySize) {
                 $recent = array_slice($recent, -$historySize);
