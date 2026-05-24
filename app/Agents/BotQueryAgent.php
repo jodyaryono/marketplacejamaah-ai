@@ -352,7 +352,9 @@ class BotQueryAgent
                 $text = "Pesan sebelumnya: \"{$clarifyContext['original']}\" → Klarifikasi user: \"{$text}\"";
             }
 
-            // ── 8. Gemini intent detection ────────────────────────────────────
+            // ── 8. Gemini intent detection — ack instant supaya user tahu sedang diproses
+            $this->whacenter->sendMessage($message->sender_number, '⏳ _Sebentar ya, lagi memproses..._');
+
             $categoryNames  = Category::where('is_active', true)->pluck('name')->implode(', ');
             $promptTemplate = Setting::get('prompt_bot_intent', 'Deteksi intent: {text} Kategori: {categoryNames}');
             $prompt         = str_replace(['{text}', '{categoryNames}'], [$text, $categoryNames], $promptTemplate);

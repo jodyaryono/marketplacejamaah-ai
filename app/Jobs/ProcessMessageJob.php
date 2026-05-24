@@ -145,11 +145,13 @@ class ProcessMessageJob implements ShouldQueue
                 if (!$handled) {
                     $contact = \App\Models\Contact::where('phone_number', $message->sender_number)->first();
                     if ($contact) {
-                        // Don't auto-reply to sticker/empty/media-only DMs — they're often
-                        // a tap-back reaction to our intro DM, not a real query.
+                        // Don't auto-reply to sticker DMs (often tap-back reactions to our intro).
+                        // BUT: image/video must always go to BotQueryAgent because AdBuilder uses
+                        // handleImageMessage. Empty text without media also skipped (likely sticker).
                         $body = trim($message->raw_body ?? '');
-                        if ($body === '') {
-                            Log::info("ProcessMessageJob: skipping empty/media DM from {$message->sender_number} (no auto-reply)");
+                        $isMedia = in_array($message->message_type, ['image', 'imageMessage', 'video', 'videoMessage', 'document']);
+                        if ($body === '' && !$isMedia) {
+                            Log::info("ProcessMessageJob: skipping empty non-media DM from {$message->sender_number} (no auto-reply)");
                         } else {
                             // Known contact (group member, registered or not) → AI replies contextually
                             $handled = $botQuery->handle($message);
