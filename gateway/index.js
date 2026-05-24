@@ -657,20 +657,40 @@ async function _startSessionInternal(id, label, apiToken, webhookUrl, webhookEna
     client.on('group_join', async (notification) => {
         try {
             const groupJid = notification.chatId;
-            const participants = notification.recipientIds || [];
+            const recipientJids = notification.recipientIds || [];
             const chat = await notification.getChat();
             const groupName = chat && chat.name ? chat.name : groupJid;
             const sessObj = sessions.get(id);
             const wUrl = sessObj && sessObj.webhookUrl ? sessObj.webhookUrl : WEBHOOK_URL;
             const wEnabled = sessObj && sessObj.webhookEnabled !== undefined ? sessObj.webhookEnabled : WEBHOOK_ENABLED;
             if (!wUrl || !wEnabled) return;
+
+            // Resolve LID → real phone via getContactById, so Laravel doesn't skip new joiners
+            // whose recipientId comes through as @lid (WA multi-device privacy default).
+            const participantDetails = [];
+            const phones = [];
+            for (const jid of recipientJids) {
+                let phone = jid.replace(/@\S+/g, '');
+                let name = null;
+                try {
+                    const contact = await client.getContactById(jid);
+                    if (contact?.number) phone = contact.number;
+                    name = contact?.pushname || contact?.name || null;
+                } catch (resolveErr) {
+                    console.warn('[GroupJoin][' + id + '] resolve failed for ' + jid + ': ' + resolveErr.message);
+                }
+                phones.push(phone);
+                participantDetails.push({ jid: jid, phone: phone, name: name });
+            }
+
             const payload = {
                 phone_id: id,
                 type: 'group_participants_update',
                 action: 'add',
                 group_id: groupJid,
                 group_name: groupName,
-                participants: participants.map(function(p) { return p.replace(/@\S+/g, ''); }),
+                participants: phones,
+                participant_details: participantDetails,
                 timestamp: Math.floor(Date.now() / 1000),
             };
             await fetch(wUrl, {
@@ -678,7 +698,7 @@ async function _startSessionInternal(id, label, apiToken, webhookUrl, webhookEna
                 headers: { 'Content-Type': 'application/json', 'X-Webhook-Secret': process.env.WEBHOOK_SECRET || '' },
                 body: JSON.stringify(payload),
             });
-            console.log('[GroupJoin][' + id + '] ' + participants.length + ' member(s) added to ' + groupName);
+            console.log('[GroupJoin][' + id + '] ' + recipientJids.length + ' member(s) added to ' + groupName + ' → phones: ' + phones.join(','));
         } catch (e) { console.error('[GroupJoin][' + id + ']', e.message); }
     });
 
