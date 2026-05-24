@@ -210,16 +210,14 @@ class HadithService
         $header = "🕌 *Hadits Harian — Adab Jual Beli*\n\n";
 
         $appeal = "\n\n─────────────────\n"
-            . "Assalamu'alaikum Warahmatullahi Wabarakatuh 🤲\n\n"
-            . "Bapak/Ibu Jamaah yang dirahmati Allah, alhamdulillah *Marketplace Jamaah* kita terus berkembang dan semoga memudahkan penjualan produk Bapak/Ibu sekalian 🙏\n\n"
-            . "Platform ini gratis tanpa syarat. Agar tetap berjalan, kami butuh biaya operasional:\n"
-            . "🖥️ *Sewa Server* — marketplace selalu online & cepat\n"
+            . "💝 *Dukung Marketplace Jamaah*\n"
+            . "👉 https://jodyaryono.myr.id/payme\n\n"
+            . "Assalamu'alaikum Bapak/Ibu Jamaah 🤲\n\n"
+            . "Platform *Marketplace Jamaah* gratis tanpa syarat. Agar tetap berjalan, kami butuh biaya operasional:\n"
+            . "🖥️ *Sewa Server* — agar selalu online & cepat\n"
             . "🤖 *Layanan AI* — fitur cerdas pendukung transaksi\n"
             . "🔧 *Perawatan Web* — update & keamanan berkala\n\n"
-            . "Jika dirasa bermanfaat, Bapak/Ibu boleh *berkontribusi sukarela* sebagai apresiasi & dukungan keberlangsungan platform.\n\n"
-            . "💝 *Donasi Sukarela (seikhlasnya):*\n"
-            . "👉 https://jodyaryono.myr.id/payme\n\n"
-            . "Berapa pun niatnya, insya Allah menjadi sedekah jariyah yang terus mengalir manfaatnya. Tidak ada kewajiban — hanya keikhlasan 🌟\n\n"
+            . "Jika dirasa bermanfaat, silakan *berkontribusi sukarela* lewat link di atas — berapa pun, insya Allah menjadi sedekah jariyah 🌟\n\n"
             . "_\"Sebaik-baik manusia adalah yang paling bermanfaat bagi orang lain.\"_ _(HR. Ahmad & Thabrani)_\n\n"
             . "Jazakallahu khairan katsiran 🙏\n"
             . "*Tim Marketplace Jamaah*";
