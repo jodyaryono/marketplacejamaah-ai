@@ -288,6 +288,29 @@ class BotQueryAgent
                 return true;
             }
 
+            // ── 6b. Bare name reply (1-3 short words, alphabetic) from a contact
+            // whose stored name is still empty/phone — they're likely answering an
+            // earlier "boleh tau namanya?" question. Capture the name and respond
+            // with the help menu instead of misrouting to search.
+            if (preg_match('/^[A-Za-zÀ-ÿ\'\.\s]{2,40}$/u', $text)) {
+                $words = preg_split('/\s+/u', trim($text));
+                if (is_array($words) && count($words) >= 1 && count($words) <= 3) {
+                    $contact = Contact::where('phone_number', $message->sender_number)->first();
+                    $nameEmpty = !$contact || !$contact->name || $contact->name === $message->sender_number
+                        || preg_match('/^\+?[\d\s\-]{7,}$/', $contact->name);
+                    if ($contact && $nameEmpty) {
+                        $cleanName = trim(preg_replace('/\s+/u', ' ', $text));
+                        $contact->update(['name' => $cleanName]);
+                        $sapaan = $contact->fresh()->getSapaan();
+                        $reply = "Salam kenal *{$sapaan}*! 🙏 Senang bisa kenalan ya 😊\n\n"
+                            . $this->helpMessage();
+                        $this->whacenter->sendMessage($message->sender_number, $reply);
+                        $log->update(['status' => 'success', 'output_payload' => ['intent' => 'bare_name_captured', 'name' => $cleanName]]);
+                        return true;
+                    }
+                }
+            }
+
             // ── 7. Clarify context injection ──────────────────────────────────
             $clarifyKey = 'clarify_pending:' . $message->sender_number;
             $clarifyContext = null;

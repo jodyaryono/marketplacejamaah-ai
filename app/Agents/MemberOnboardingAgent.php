@@ -66,8 +66,7 @@ class MemberOnboardingAgent
                 . "🌐 *marketplacejamaah-ai.jodyaryono.id*\n\n"
                 . "Tidak perlu daftar, tidak perlu login, tidak perlu aplikasi lain. "
                 . "Cukup chat di grup seperti biasa 😊\n\n"
-                . "Nah, supaya aku bisa daftarin kamu resmi sebagai anggota, "
-                . "boleh aku kenalan dulu dong? Nama Kakak siapa? 😊";
+                . "Kalau butuh panduan atau lihat semua fitur, tinggal ketik *bantuan* kapan saja ya 🙏";
 
             $this->whacenter->sendMessage($message->sender_number, $intro);
 
