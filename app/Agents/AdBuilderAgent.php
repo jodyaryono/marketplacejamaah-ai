@@ -414,8 +414,9 @@ class AdBuilderAgent
                     $lv = mb_strtolower($value);
                     if (preg_match('/\b(nego)\b/iu', $lv)) $draft['price_type'] = 'nego';
                     elseif (preg_match('/\b(lelang|auction)\b/iu', $lv)) $draft['price_type'] = 'lelang';
+                    elseif (preg_match('/\b(langganan|subscription|monthly|bulanan|tahunan|berlangganan|trial)\b/iu', $lv)) $draft['price_type'] = 'langganan';
                     elseif (preg_match('/\b(fix|tetap)\b/iu', $lv)) $draft['price_type'] = 'fix';
-                    $clean = preg_replace('/\b(nego|fix|tetap|lelang|auction)\b\s*/iu', '', $value);
+                    $clean = preg_replace('/\b(nego|fix|tetap|lelang|auction|langganan|subscription|monthly|bulanan|tahunan|berlangganan)\b\s*/iu', '', $value);
                     if (preg_match('/(\d[\d.,]*)\s*(jt|juta)/iu', $clean, $jm)) {
                         $draft['price'] = (int) round((float) str_replace(['.', ','], ['', '.'], $jm[1]) * 1000000);
                     } elseif (preg_match('/(\d[\d.,]*)\s*[kK]\b/', $clean, $km)) {
@@ -569,23 +570,26 @@ class AdBuilderAgent
         if (!$priceStr && !empty($draft['price']) && $draft['price'] > 0) {
             $rp = 'Rp ' . number_format((float) $draft['price'], 0, ',', '.');
             $priceStr = match ($priceType) {
-                'nego'   => "{$rp} (Nego)",
-                'lelang' => "Lelang mulai {$rp}",
-                default  => $rp,
+                'nego'      => "{$rp} (Nego)",
+                'lelang'    => "Lelang mulai {$rp}",
+                'langganan' => "{$rp} / bulan",
+                default     => $rp,
             };
         }
         if (!$priceStr) {
             $priceStr = match ($priceType) {
-                'nego'   => 'Harga Nego',
-                'lelang' => 'Harga Lelang',
-                default  => 'Belum dicantumkan',
+                'nego'      => 'Harga Nego',
+                'lelang'    => 'Harga Lelang',
+                'langganan' => 'Lihat detail di deskripsi',
+                default     => 'Belum dicantumkan',
             };
         }
 
         $priceTypeLabel = match ($priceType) {
-            'nego'   => '🤝 Nego',
-            'lelang' => '🔨 Lelang',
-            default  => '🏷️ Fix',
+            'nego'      => '🤝 Nego',
+            'lelang'    => '🔨 Lelang',
+            'langganan' => '🔁 Langganan',
+            default     => '🏷️ Fix',
         };
 
         $condition = match (mb_strtolower($draft['condition'] ?? '')) {
