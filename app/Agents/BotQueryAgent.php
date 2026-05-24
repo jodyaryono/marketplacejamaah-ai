@@ -68,16 +68,9 @@ class BotQueryAgent
             if ($adBuilderState) {
                 $text  = trim($message->raw_body ?? '');
 
-                // Stale-session prompt was sent — short-circuit to lanjut/batal handling.
+                // Stale-session prompt was sent — handle lanjut/batal, then fall through
+                // so the existing step handler can act on the user's resumed intent.
                 if (!empty($adBuilderState['stale_prompt_sent_at'])) {
-                    if (preg_match('/^\s*(lanjut|lanjutkan|teruskan|ya|iy|iya|yes|oke?|sip|continue|y)\s*$/iu', $text)) {
-                        $this->adBuilder->clearStalePrompt($message->sender_number);
-                        $this->whacenter->sendMessage($message->sender_number,
-                            "✅ Oke, kita lanjut! 🙂\n\nSilakan kirim foto / instruksi berikutnya, atau ketik *batal* kalau berubah pikiran."
-                        );
-                        $log->update(['status' => 'success', 'output_payload' => ['intent' => 'ad_builder_resume']]);
-                        return true;
-                    }
                     if (preg_match('/^\s*(batal|cancel|stop|tidak|gak|nggak|gak\s+jadi|nggak\s+jadi|tdk|tidak\s+jadi)\s*$/iu', $text)) {
                         $this->adBuilder->cancelSession($message->sender_number);
                         $this->whacenter->sendMessage($message->sender_number,
@@ -86,9 +79,24 @@ class BotQueryAgent
                         $log->update(['status' => 'success', 'output_payload' => ['intent' => 'ad_builder_cancel_stale']]);
                         return true;
                     }
-                    // Anything else = user actively responded → clear stale flag and continue
+
+                    // Any resume-affirmative answer → clear flag and fall through.
+                    // handleReview already treats 'lanjut'/'ya'/'oke'/'sip' as confirm-and-post,
+                    // and handleEnriching treats them as skip-to-review. So just clearing the
+                    // flag is enough — the step handler will do the right thing.
+                    $isResume = (bool) preg_match('/^\s*(lanjut|lanjutkan|teruskan|ya|iy|iya|yes|oke?|sip|continue|y|post|posting|kirim)\s*$/iu', $text);
                     $this->adBuilder->clearStalePrompt($message->sender_number);
                     $adBuilderState = $this->adBuilder->getState($message->sender_number) ?? $adBuilderState;
+
+                    // If we're in 'waiting_input' (no draft yet) and user said "lanjut",
+                    // they don't have anything to post — coach them to send a photo instead.
+                    if ($isResume && ($adBuilderState['step'] ?? '') === 'waiting_input') {
+                        $this->whacenter->sendMessage($message->sender_number,
+                            "✅ Oke, lanjut! 🙂\n\nDraftnya belum ada — silakan kirim *foto produk* dulu ya."
+                        );
+                        $log->update(['status' => 'success', 'output_payload' => ['intent' => 'ad_builder_resume_waiting']]);
+                        return true;
+                    }
                 }
 
                 $step  = $adBuilderState['step'] ?? '';
