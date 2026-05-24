@@ -243,6 +243,15 @@ class BotQueryAgent
                         ->limit(5)
                         ->get(['id', 'title']);
 
+                    // Only one active listing → apply edit directly, no need to ask.
+                    if ($recent->count() === 1) {
+                        $only = $recent->first();
+                        $reply = $this->listingEdit->handleEditListing($message, $only->id, $text);
+                        $this->whacenter->sendMessage($message->sender_number, $reply);
+                        $log->update(['status' => 'success', 'output_payload' => ['intent' => 'edit_freeform_autoapply', 'listing_id' => $only->id]]);
+                        return true;
+                    }
+
                     Cache::put('edit_freeform_pending:' . $message->sender_number, [
                         'original_text' => $text,
                     ], now()->addMinutes(10));
