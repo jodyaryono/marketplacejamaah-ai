@@ -120,6 +120,12 @@ class MasterCommandAgent
         if (preg_match('/\b(help|bantuan|menu|perintah)\b/u', $lower) && strlen($lower) <= 20) {
             return $this->execHelp();
         }
+        // Cancel — "batal" / "batalkan" / "ga jadi" / dst. Selalu balas ramah,
+        // baik ada session AdBuilder aktif maupun tidak.
+        if (preg_match('/^\s*(batal(kan|in)?|cancel|stop|keluar|sudahan|sudahin|lupakan|tutup|(ga|gak|nggak|gk|g|tidak|tdk)\s*jadi)\s*$/iu', $command)) {
+            return $this->execCancel();
+        }
+
         // Create ad — "buat iklan" / "buatkan iklan" / "bikin iklan" / "pasang iklan" / "iklan baru"
         // Master juga harus bisa memicu AdBuilder flow lewat DM.
         if (preg_match('/^\s*(buat|buatkan|bikin|bikinin|pasang|pasangkan|posting|post|tambah|tambahkan|tambahin)\s+(iklan|jualan|dagangan|produk|listing|barang|ad)\b/iu', $command)
@@ -505,6 +511,25 @@ class MasterCommandAgent
     {
         Artisan::call('monitor:run', ['--force' => true]);
         return ['system_health_report' => 'sent'];
+    }
+
+    private function execCancel(): array
+    {
+        $masterPhone = config('services.wa_gateway.master_phone', '');
+        $hadSession = $masterPhone !== '' && \Illuminate\Support\Facades\Cache::has('ad_builder:' . $masterPhone);
+        if ($hadSession) {
+            app(\App\Agents\AdBuilderAgent::class)->cancelSession($masterPhone);
+        }
+        \Illuminate\Support\Facades\Cache::forget('edit_pending:' . $masterPhone);
+        \Illuminate\Support\Facades\Cache::forget('edit_freeform_pending:' . $masterPhone);
+        \Illuminate\Support\Facades\Cache::forget('clarify_pending:' . $masterPhone);
+        \Illuminate\Support\Facades\Cache::forget('loc_pending:' . $masterPhone);
+
+        $msg = $hadSession
+            ? "✅ Terima kasih, iklan Kakak sudah dibatalkan.\n\nSilakan ketik *buat iklan* untuk membuat iklan baru, atau biarkan saja kalau tidak ada yang perlu dibuat. 🙏"
+            : "✅ Oke, tidak ada yang sedang dikerjakan kok 😊\n\nKalau mau mulai, ketik *buat iklan* ya.";
+        $this->reply($msg);
+        return ['cancel' => true, 'had_session' => $hadSession];
     }
 
     private function execCreateAd(): array

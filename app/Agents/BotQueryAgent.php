@@ -288,6 +288,26 @@ class BotQueryAgent
                 return true;
             }
 
+            // Fast-path: cancel — terima batal/batalkan/ga jadi/dst. Balas ramah
+            // walau tidak ada session aktif (anti generic "perintah tidak dikenali").
+            if (preg_match('/^\s*(batal(kan|in)?|cancel|stop|keluar|sudahan|sudahin|lupakan|tutup|(ga|gak|nggak|gk|g|tidak|tdk)\s*jadi)\s*$/iu', $text)) {
+                $phone = $message->sender_number;
+                $hadSession = Cache::has('ad_builder:' . $phone);
+                if ($hadSession) {
+                    $this->adBuilder->cancelSession($phone);
+                }
+                Cache::forget('edit_pending:' . $phone);
+                Cache::forget('edit_freeform_pending:' . $phone);
+                Cache::forget('clarify_pending:' . $phone);
+                Cache::forget('loc_pending:' . $phone);
+                $reply = $hadSession
+                    ? "✅ Terima kasih, iklan Kakak sudah dibatalkan.\n\nSilakan ketik *buat iklan* untuk membuat iklan baru, atau biarkan saja kalau tidak ada yang perlu dibuat. 🙏"
+                    : "✅ Oke, tidak ada yang sedang dikerjakan kok 😊\n\nKalau mau mulai, ketik *buat iklan* ya.";
+                $this->whacenter->sendMessage($phone, $reply);
+                $log->update(['status' => 'success', 'output_payload' => ['intent' => 'cancel', 'had_session' => $hadSession]]);
+                return true;
+            }
+
             // Fast-path: tampilkan iklan sendiri — terima banyak variasi natural.
             // "iklanku", "iklan ku", "iklan saya", "iklan aku", "listing saya",
             // "jualan saya", "dagangan saya", "produk saya", "punya saya", "my listings"
