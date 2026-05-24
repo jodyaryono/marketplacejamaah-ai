@@ -251,6 +251,13 @@ class WhatsAppListenerAgent
             if (!$nameIsLocked) {
                 $nameUpdate['name'] = $senderName ?? $contact->name;
             }
+            // Always sync the latest WhatsApp pushname (separate from onboarding name)
+            // so we can fall back to it for greetings when contact.name looks messy
+            // (e.g. saved from an old phone-book entry like "Darwo Maryono, CDAI" while
+            // the actual user pushname is "Abu Syakir").
+            if ($senderName && $senderName !== $contact->pushname) {
+                $nameUpdate['pushname'] = $senderName;
+            }
             $contact->update($nameUpdate);
 
             // Avoid duplicate messages by message_id (webhook replay protection)

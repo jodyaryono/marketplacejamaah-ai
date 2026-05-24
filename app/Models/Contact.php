@@ -13,6 +13,7 @@ class Contact extends Model
     protected $fillable = [
         'phone_number',
         'name',
+        'pushname',
         'honorific',
         'avatar',
         'message_count',
@@ -52,7 +53,17 @@ class Contact extends Model
      */
     public function getSapaan(?string $fallbackName = null): string
     {
+        // Prefer WA pushname when contact.name looks like an old phone-book entry —
+        // i.e. has a comma + title fragment ("Darwo Maryono, CDAI" / ", S.E." / ", M.M.")
+        // — because that's almost certainly what the person actually calls themselves.
+        $messyNamePattern = '/,\s*[A-Z][A-Za-z.\s]{1,12}$/';
         $rawName = $this->name ?? $fallbackName;
+        if ($this->pushname && $rawName && preg_match($messyNamePattern, $rawName)) {
+            $rawName = $this->pushname;
+        }
+        if (!$rawName && $this->pushname) {
+            $rawName = $this->pushname;
+        }
         $isPhone = !$rawName || preg_match('/^\+?[\d\s\-]{7,}$/', $rawName);
         $name = $isPhone ? null : $rawName;
         $honorific = ucfirst($this->getHonorific());
