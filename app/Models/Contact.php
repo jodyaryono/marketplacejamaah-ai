@@ -41,11 +41,12 @@ class Contact extends Model
     ];
 
     /**
-     * Returns the honorific title: pak, bu, mas, mbak, or kak (default).
+     * Returns the honorific title: pak, bu, mas, mbak, or kakak (default).
+     * Default "Kakak" universal — segala umur/gender (user preference 2026-05-24).
      */
     public function getHonorific(): string
     {
-        return $this->honorific ?? 'Kak';
+        return $this->honorific ?? 'Kakak';
     }
 
     /**

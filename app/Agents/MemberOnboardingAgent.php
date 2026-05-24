@@ -55,20 +55,20 @@ class MemberOnboardingAgent
             $isPhone = $rawName === '' || preg_match('/^\+?[\d\s\-]{7,}$/', $rawName);
             $senderName = $isPhone ? null : $rawName;
 
-            $greeting = $senderName ? "Assalamu'alaikum *{$senderName}*! 🙏" : "Assalamu'alaikum wa rahmatullahi wa barakatuh! 🙏";
+            $greeting = $senderName ? "Assalamu'alaikum *Kakak {$senderName}*! 🙏" : "Assalamu'alaikum *Kakak*! 🙏";
 
             $siteUrl = rtrim(config('app.url', 'https://marketplacejamaah-ai.jodyaryono.id'), '/');
 
             $intro = "{$greeting}\n\n"
                 . "✨ *Selamat datang di Marketplace Jamaah!* ✨\n\n"
-                . "🛍️ *Cara pasang iklan — cukup di sini (chat pribadi ke bot)*\n"
-                . "1. Ketik *buat iklan* di chat ini\n"
+                . "🛍️ *Cara pasang iklan — CUKUP CHAT DI SINI (bukan di grup)*\n"
+                . "1. Ketik *buat iklan* di chat ini denganku\n"
                 . "2. Kirim *foto produk + deskripsi + harga*\n"
-                . "3. AI rapikan & polish otomatis\n"
-                . "4. Kamu konfirmasi → iklan tayang di website + grup 🌐\n\n"
+                . "3. AI rapikan & polish otomatis ✨\n"
+                . "4. Kakak konfirmasi → iklan tayang di website + grup 🌐\n\n"
                 . "🌐 *{$siteUrl}*\n\n"
-                . "Tidak perlu daftar, tidak perlu login, tidak perlu aplikasi lain.\n"
-                . "_Cukup di chat pribadi ini ya — biar grup tetap bersih dari iklan langsung._ 😊\n\n"
+                . "_Jangan posting iklan di grup ya — kalau Kakak post di grup, otomatis aku pindahkan ke chat ini biar bisa dirapikan dulu._ 😊\n"
+                . "_Tidak perlu daftar, tidak perlu login, tidak perlu aplikasi lain. Cukup chat dengan saya di sini._\n\n"
                 . "━━━━━━━━━━━━━━━━━━\n"
                 . "✨ *Fitur Marketplace Jamaah AI*\n"
                 . "━━━━━━━━━━━━━━━━━━\n\n"
