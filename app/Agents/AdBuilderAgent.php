@@ -236,6 +236,42 @@ class AdBuilderAgent
 
             // Preserve on_behalf_pasmal flag from previous state
             $currentState = Cache::get(self::CACHE_PREFIX . $phone, []);
+
+            // MULTI-IMAGE MERGE: kalau sudah ada draft (user kirim foto kedua/ketiga
+            // dalam 1 batch ad — mis. banner + pricing page + spec), gabungkan info
+            // baru ke draft lama daripada overwrite. Foto kemudian biasanya membawa
+            // info pelengkap (harga, spec, dll) yang harus ditambah, bukan ganti.
+            $existingDraft = $currentState['draft'] ?? null;
+            if ($existingDraft && !empty($existingDraft['title'])) {
+                $merged = $existingDraft;
+                // Field non-empty dari analisa baru menang HANYA kalau field lama kosong/default.
+                foreach (['title','description','category','condition','location','notes','price_label','price_type'] as $k) {
+                    $newVal = trim((string) ($draft[$k] ?? ''));
+                    $oldVal = trim((string) ($merged[$k] ?? ''));
+                    if ($newVal !== '' && ($oldVal === '' || $oldVal === 'fix' || $oldVal === '-')) {
+                        $merged[$k] = $newVal;
+                    }
+                }
+                // Price numeric: kalau lama 0/null dan baru > 0, ambil baru.
+                if ((empty($merged['price']) || $merged['price'] <= 0) && !empty($draft['price']) && $draft['price'] > 0) {
+                    $merged['price'] = $draft['price'];
+                }
+                // Description: kalau berbeda dan baru bawa info pricing, append (tidak duplikat).
+                $newDesc = trim((string) ($draft['description'] ?? ''));
+                $oldDesc = trim((string) ($merged['description'] ?? ''));
+                if ($newDesc !== '' && $oldDesc !== '' && stripos($oldDesc, mb_substr($newDesc, 0, 40)) === false) {
+                    $merged['description'] = $oldDesc . "\n\n" . $newDesc;
+                }
+                // Media: kumpulkan semua URL gambar ke array media_urls
+                $mediaUrls = $merged['media_urls'] ?? (isset($merged['media_url']) && $merged['media_url'] ? [$merged['media_url']] : []);
+                if ($mediaUrl && !in_array($mediaUrl, $mediaUrls, true)) {
+                    $mediaUrls[] = $mediaUrl;
+                }
+                $merged['media_urls'] = $mediaUrls;
+                $merged['media_url'] = $mediaUrls[0] ?? $mediaUrl;  // primary stays first
+                $draft = $merged;
+            }
+
             $newState = ['step' => 'enriching', 'draft' => $draft];
             if (!empty($currentState['on_behalf_pasmal'])) {
                 $newState['on_behalf_pasmal'] = true;
@@ -682,7 +718,9 @@ class AdBuilderAgent
             'price_type' => $draft['price_type'] ?? 'fix',
             'contact_number' => $contactPhone,
             'contact_name' => $name,
-            'media_urls' => !empty($draft['media_url']) ? [$draft['media_url']] : null,
+            'media_urls' => !empty($draft['media_urls']) && is_array($draft['media_urls'])
+                ? array_values(array_unique($draft['media_urls']))
+                : (!empty($draft['media_url']) ? [$draft['media_url']] : null),
             'location' => $draft['location'] ?? null,
             'condition' => $condition,
             'status' => 'active',
