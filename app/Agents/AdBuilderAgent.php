@@ -450,22 +450,20 @@ class AdBuilderAgent
             optional($lock)->release();
         }
 
-        $captionLine = $cleanCaption !== ''
-            ? "✏️ Caption tercatat: _\"" . mb_strimwidth($cleanCaption, 0, 80, '...') . "\"_\n\n"
-            : '';
-
+        // Foto PERTAMA: ack lengkap dengan instruksi + catatan bahwa foto ini
+        // jadi cover iklan. Foto kedua+: SILENT (return '') — sebelumnya tiap
+        // foto kirim "X foto terkumpul" yang bikin chat ramai & user bingung.
         if ($count === 1) {
-            return "📸 *Foto/video diterima!*\n"
+            $captionLine = $cleanCaption !== ''
+                ? "✏️ _Caption tercatat: \"" . mb_strimwidth($cleanCaption, 0, 80, '...') . "\"_\n"
+                : '';
+            return "📸 *Foto diterima — ini akan jadi cover iklan.*\n"
                 . $captionLine
-                . "Ada *foto/video lain*? Atau *info tambahan* (harga, lokasi, kontak, spek)?\n\n"
-                . "• Kirim foto/video lain → ditambahkan ke batch\n"
-                . "• Ketik info apa saja → ikut jadi konteks AI\n"
-                . "• Ketik *cukup* / *analisa* → AI mulai buat draft sekarang\n"
-                . "• Ketik *batal* → batalkan";
+                . "\n"
+                . "Boleh kirim *foto/video lain* atau *info tambahan* (harga, lokasi, kontak, spek).\n\n"
+                . "Ketik *cukup* kalau sudah selesai upload, *batal* untuk membatalkan.";
         }
-        return "📸 *{$count} foto/video terkumpul.*"
-            . ($cleanCaption !== '' ? "\n✏️ _Caption foto ini: \"" . mb_strimwidth($cleanCaption, 0, 60, '...') . "\"_" : '')
-            . "\n\nKirim lagi atau ketik *cukup* untuk mulai AI analisa.";
+        return '';
     }
 
     /**
@@ -548,8 +546,7 @@ class AdBuilderAgent
             return "⚠️ Belum ada foto/video. Kirim foto produk dulu ya.";
         }
 
-        $totalImg = count($batch);
-        $this->whacenter->sendMessage($phone, "⏳ _Sedang menganalisa {$totalImg} foto + catatan dan menyiapkan draft iklan..._");
+        $this->whacenter->sendMessage($phone, "⚡ _Sebentar, AI sedang menganalisa..._");
 
         $combinedCaption = trim(
             ($state['initial_caption'] ?? '')
@@ -557,7 +554,15 @@ class AdBuilderAgent
         );
 
         $merged = null;
+        // Collect URLs dalam URUTAN batch (cover = foto pertama yang user upload),
+        // terlepas dari apakah analyze sukses atau tidak. Cover page jangan
+        // ke-skip cuma karena AI gagal extract draft dari foto itu.
         $mediaUrls = [];
+        foreach ($batch as $item) {
+            if (!empty($item['url'])) {
+                $mediaUrls[] = $item['url'];
+            }
+        }
         $failures = 0;
 
         foreach ($batch as $item) {
@@ -570,9 +575,6 @@ class AdBuilderAgent
             if (!$draft || empty($draft['title'])) {
                 $failures++;
                 continue;
-            }
-            if (!empty($item['url'])) {
-                $mediaUrls[] = $item['url'];
             }
             if (!$merged) {
                 $merged = $draft;
@@ -598,7 +600,7 @@ class AdBuilderAgent
         if (!$merged) {
             Log::warning('AdBuilderAgent::processCollectedBatch all failed', [
                 'phone' => $phone,
-                'batch_count' => $totalImg,
+                'batch_count' => count($batch),
                 'failures' => $failures,
                 'has_path' => array_map(fn($i) => !empty($i['path']), $batch),
                 'has_url' => array_map(fn($i) => !empty($i['url']), $batch),
