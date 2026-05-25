@@ -553,60 +553,37 @@ class AdBuilderAgent
             . (!empty($state['extra_caption']) ? "\n\nInfo tambahan dari penjual: " . trim($state['extra_caption']) : '')
         );
 
-        $merged = null;
-        // Collect URLs dalam URUTAN batch (cover = foto pertama yang user upload),
-        // terlepas dari apakah analyze sukses atau tidak. Cover page jangan
-        // ke-skip cuma karena AI gagal extract draft dari foto itu.
+        // Cover = foto pertama yang user upload (urutan batch).
         $mediaUrls = [];
         foreach ($batch as $item) {
             if (!empty($item['url'])) {
                 $mediaUrls[] = $item['url'];
             }
         }
-        $failures = 0;
 
-        foreach ($batch as $item) {
-            $draft = $this->analyzeSingleImageWithCaption(
-                $item['url'] ?? null,
-                $item['path'] ?? null,
-                $item['mime'] ?? null,
-                $combinedCaption
-            );
-            if (!$draft || empty($draft['title'])) {
-                $failures++;
-                continue;
-            }
-            if (!$merged) {
-                $merged = $draft;
-            } else {
-                foreach (['title','description','category','condition','location','notes','price_label','price_type'] as $k) {
-                    $newVal = trim((string) ($draft[$k] ?? ''));
-                    $oldVal = trim((string) ($merged[$k] ?? ''));
-                    if ($newVal !== '' && ($oldVal === '' || $oldVal === 'fix' || $oldVal === '-')) {
-                        $merged[$k] = $newVal;
-                    }
-                }
-                if ((empty($merged['price']) || $merged['price'] <= 0) && !empty($draft['price']) && $draft['price'] > 0) {
-                    $merged['price'] = $draft['price'];
-                }
-                $newDesc = trim((string) ($draft['description'] ?? ''));
-                $oldDesc = trim((string) ($merged['description'] ?? ''));
-                if ($newDesc !== '' && $oldDesc !== '' && stripos($oldDesc, mb_substr($newDesc, 0, 40)) === false) {
-                    $merged['description'] = $oldDesc . "\n\n" . $newDesc;
-                }
-            }
-        }
-
-        if (!$merged) {
-            Log::warning('AdBuilderAgent::processCollectedBatch all failed', [
+        // SINGLE multimodal call: kirim SEMUA foto + caption gabungan ke Gemini
+        // dalam 1 request. Sebelumnya tiap foto = 1 call → cepat kena rate-limit
+        // 429 (Gemini free tier ~15 RPM, vision lebih berat). Hasil draft juga
+        // lebih koheren karena AI lihat semua foto sekaligus.
+        $images = $this->loadBatchImagesAsBase64($batch);
+        if (empty($images)) {
+            Log::warning('AdBuilderAgent::processCollectedBatch no readable images', [
                 'phone' => $phone,
                 'batch_count' => count($batch),
-                'failures' => $failures,
-                'has_path' => array_map(fn($i) => !empty($i['path']), $batch),
-                'has_url' => array_map(fn($i) => !empty($i['url']), $batch),
+            ]);
+            return "❌ Foto-foto tidak bisa dibaca. Coba ketik *batal* lalu mulai lagi dengan foto yang lebih jelas.";
+        }
+
+        $merged = $this->analyzeBatchImages($images, $combinedCaption);
+        if (!$merged || empty($merged['title'])) {
+            Log::warning('AdBuilderAgent::processCollectedBatch gemini multi-image failed', [
+                'phone' => $phone,
+                'batch_count' => count($batch),
+                'image_count' => count($images),
             ]);
             return "❌ AI gagal menganalisa foto-foto Kakak. Coba ketik *batal* lalu mulai lagi dengan foto yang lebih jelas.";
         }
+        $failures = count($batch) - count($images);
 
         $merged['media_urls'] = array_values(array_unique($mediaUrls));
         $merged['media_url'] = $merged['media_urls'][0] ?? null;
@@ -634,8 +611,83 @@ class AdBuilderAgent
     }
 
     /**
+     * Load semua foto di batch jadi array of ['mime_type','data' (base64)].
+     * Prefer file di disk; fallback download URL kalau path hilang. Item yang
+     * gagal di-load di-skip (failures di-count di caller).
+     */
+    private function loadBatchImagesAsBase64(array $batch): array
+    {
+        $out = [];
+        foreach ($batch as $item) {
+            $path = $item['path'] ?? null;
+            $url  = $item['url'] ?? null;
+            $mime = $item['mime'] ?? 'image/jpeg';
+            try {
+                if ($path && Storage::disk('local')->exists($path)) {
+                    $out[] = ['mime_type' => $mime, 'data' => base64_encode(Storage::disk('local')->get($path))];
+                    continue;
+                }
+                if ($url) {
+                    $resp = Http::timeout(15)->get($url);
+                    if ($resp->failed()) {
+                        Log::warning('AdBuilderAgent::loadBatchImagesAsBase64 url failed', ['url' => $url, 'status' => $resp->status()]);
+                        continue;
+                    }
+                    $out[] = [
+                        'mime_type' => $resp->header('Content-Type') ?: $mime,
+                        'data' => base64_encode($resp->body()),
+                    ];
+                }
+            } catch (\Throwable $e) {
+                Log::warning('AdBuilderAgent::loadBatchImagesAsBase64 exception', ['error' => $e->getMessage()]);
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Single Gemini multimodal call dengan SEMUA foto sekaligus. Hemat quota,
+     * hasil draft koheren.
+     */
+    private function analyzeBatchImages(array $images, string $caption): ?array
+    {
+        try {
+            $categories = Category::where('is_active', true)->pluck('name')->implode(', ');
+            $promptTemplate = Setting::get('prompt_ad_builder_polish', '');
+            if (trim($promptTemplate) === '') {
+                $promptTemplate = 'Kamu copywriter Marketplace Jamaah. Lihat SEMUA foto produk + caption "{caption}". '
+                    . 'Buat 1 draft iklan terpadu yang mempertahankan URL produk & kontak dan buang kalimat instruksi meta. '
+                    . 'Kategori tersedia: {categories}. '
+                    . 'Jawab HANYA JSON: {"title":"...","description":"...","price":0,"price_label":"","price_type":"fix","category":"...","condition":"baru","location":"","notes":""}';
+                Log::warning('AdBuilderAgent: prompt_ad_builder_polish empty, using fallback');
+            }
+            // Tambahan instruksi multi-image di akhir prompt
+            $multiImageHint = "\n\nCATATAN: ada " . count($images) . " foto produk yang dilampirkan. "
+                . "Foto pertama adalah cover utama. Pertimbangkan info dari SEMUA foto saat membuat title, description, dan extract harga/spek/kondisi. "
+                . "Hasilkan SATU draft iklan terpadu, bukan beberapa.";
+            $prompt = str_replace(
+                ['{caption}', '{categories}'],
+                [$caption ?: 'tidak ada keterangan dari penjual', $categories],
+                $promptTemplate
+            ) . $multiImageHint;
+
+            $result = $this->gemini->analyzeMultipleImagesWithText($images, $prompt);
+            if (!$result) {
+                return null;
+            }
+            $clean = preg_replace('/```json\s*/i', '', $result);
+            $clean = preg_replace('/```\s*/i', '', $clean);
+            $draft = json_decode(trim($clean), true);
+            return is_array($draft) ? $draft : null;
+        } catch (\Throwable $e) {
+            Log::warning('AdBuilderAgent::analyzeBatchImages failed', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    /**
+     * @deprecated kept for backward-compat path di handleImage (enriching step).
      * Helper: analyze 1 image dengan Gemini, return parsed draft array atau null.
-     * Dipakai oleh processCollectedBatch.
      */
     private function analyzeSingleImageWithCaption(?string $url, ?string $path, ?string $mime, string $caption): ?array
     {

@@ -260,6 +260,75 @@ class GeminiService
         return null;
     }
 
+    /**
+     * Analisa BANYAK gambar dalam SATU panggilan Gemini multimodal.
+     * Hemat quota (1 RPM vs N RPM) dan hasil draft lebih koheren karena AI
+     * lihat semua foto sekaligus.
+     *
+     * @param array $images array of ['mime_type' => string, 'data' => base64 string]
+     */
+    public function analyzeMultipleImagesWithText(array $images, string $prompt): ?string
+    {
+        if (empty($images)) {
+            return null;
+        }
+        if ($this->isCircuitOpen()) {
+            Log::warning('GeminiService: circuit breaker OPEN — falling back to Groq vision (first image only)');
+            $first = $images[0];
+            return $this->callGroqVision($first['data'], $first['mime_type'], $prompt);
+        }
+
+        try {
+            $parts = [['text' => $prompt]];
+            foreach ($images as $img) {
+                $parts[] = ['inline_data' => [
+                    'mime_type' => $img['mime_type'] ?? 'image/jpeg',
+                    'data'      => $img['data'],
+                ]];
+            }
+            $url      = "{$this->endpoint}/{$this->model}:generateContent";
+            $response = Http::withHeaders([
+                'Content-Type'   => 'application/json',
+                'X-goog-api-key' => $this->apiKey,
+            ])->timeout(45)->post($url, [
+                'contents' => [['parts' => $parts]],
+            ]);
+
+            if ($response->failed()) {
+                Log::error('GeminiService::analyzeMultipleImagesWithText failed', [
+                    'status' => $response->status(),
+                    'body'   => mb_substr($response->body(), 0, 300),
+                    'image_count' => count($images),
+                ]);
+                $this->recordFailure();
+                // Fallback Groq vision hanya support 1 image — pakai foto pertama.
+                $first = $images[0];
+                return $this->callGroqVision($first['data'], $first['mime_type'], $prompt);
+            }
+
+            $data  = $response->json();
+            $usage = $data['usageMetadata'] ?? [];
+            $this->recordTokenUsage(
+                $usage['promptTokenCount'] ?? 0,
+                $usage['candidatesTokenCount'] ?? 0,
+                'image'
+            );
+            $this->recordModelUsage(
+                'gemini', $this->model, 'image',
+                $usage['promptTokenCount'] ?? 0,
+                $usage['candidatesTokenCount'] ?? 0
+            );
+
+            $this->resetCircuit();
+            return $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+        } catch (\Exception $e) {
+            Log::error('GeminiService::analyzeMultipleImagesWithText exception', ['error' => $e->getMessage()]);
+            $this->recordFailure();
+            $first = $images[0];
+            return $this->callGroqVision($first['data'], $first['mime_type'], $prompt);
+        }
+    }
+
     public function analyzeImageWithText(string $base64Image, string $mimeType, string $prompt): ?string
     {
         if ($this->isCircuitOpen()) {
