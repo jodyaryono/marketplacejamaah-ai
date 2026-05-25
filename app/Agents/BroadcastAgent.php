@@ -55,20 +55,10 @@ class BroadcastAgent
         // Jika pesan asli dari master/owner langsung di WAG: bot tetap repost dengan
         // ISI PENUH (judul + deskripsi lengkap + harga/kategori/lokasi) dan tambahkan
         // link halaman iklan — JANGAN dipotong/disingkat. Aturan owner: boleh ditambah,
-        // tidak boleh dikurangi. Tambahan: DM master juga sebagai konfirmasi cepat.
-        $isMaster = MasterCommandAgent::isMasterPhone($message->sender_number ?? '');
-        if ($isMaster) {
-            try {
-                $listingUrl = $listing->share_url;
-                $this->whacenter->sendMessage(
-                    $message->sender_number,
-                    "✅ *Iklan tayang!*\n\n📦 *{$listing->title}*\n🔗 {$listingUrl}\n\n_Edit kapan saja: ketik *edit #{$listing->id}*_"
-                );
-            } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::warning('BroadcastAgent: master DM confirmation failed', ['error' => $e->getMessage()]);
-            }
-            // Fall through ke logika repost penuh di bawah.
-        }
+        // tidak boleh dikurangi.
+        // CATATAN: DM konfirmasi sudah dikirim oleh AdBuilderAgent::executeConfirmation
+        // (return value-nya). Jangan double-DM dari sini — sebelumnya bikin link
+        // preview ke-render 2x di chat master.
 
         $priceLabel   = $listing->price_formatted ?? 'Harga Nego';
         $listingUrl   = $listing->share_url;
