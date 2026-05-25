@@ -327,8 +327,28 @@ class MasterCommandAgent
         }
 
         $title = $listing->title ?? 'Tanpa judul';
+        $group = $listing->group; // capture sebelum delete
         $listing->delete();
         $this->reply("🗑️ Iklan *#{$id}* — _{$title}_ berhasil dihapus.");
+
+        // Info ke grup tempat iklan diposting bahwa iklan ini sudah ditarik
+        // oleh penjual / admin — supaya member grup yang lihat link iklan tahu
+        // bahwa listing-nya sudah tidak aktif.
+        if ($group && !empty($group->group_name)) {
+            try {
+                $this->whacenter->sendGroupMessage(
+                    $group->group_name,
+                    "ℹ️ *Iklan #{$id} — _{$title}_* sudah *ditarik/dihapus* oleh penjual. Mohon abaikan postingan terkait di atas. Terima kasih 🙏"
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('execDeleteListing: notify group failed', [
+                    'listing_id' => $id,
+                    'group' => $group->group_name,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
         return ['deleted_listing' => $id];
     }
 
