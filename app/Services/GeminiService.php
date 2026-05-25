@@ -273,9 +273,8 @@ class GeminiService
             return null;
         }
         if ($this->isCircuitOpen()) {
-            Log::warning('GeminiService: circuit breaker OPEN — falling back to Groq vision (first image only)');
-            $first = $images[0];
-            return $this->callGroqVision($first['data'], $first['mime_type'], $prompt);
+            Log::warning('GeminiService: circuit breaker OPEN — falling back to Groq vision multi');
+            return $this->callGroqVisionMulti($images, $prompt);
         }
 
         try {
@@ -295,15 +294,13 @@ class GeminiService
             ]);
 
             if ($response->failed()) {
-                Log::error('GeminiService::analyzeMultipleImagesWithText failed', [
+                Log::error('GeminiService::analyzeMultipleImagesWithText failed, fallback to Groq multi-image', [
                     'status' => $response->status(),
                     'body'   => mb_substr($response->body(), 0, 300),
                     'image_count' => count($images),
                 ]);
                 $this->recordFailure();
-                // Fallback Groq vision hanya support 1 image — pakai foto pertama.
-                $first = $images[0];
-                return $this->callGroqVision($first['data'], $first['mime_type'], $prompt);
+                return $this->callGroqVisionMulti($images, $prompt);
             }
 
             $data  = $response->json();
@@ -322,10 +319,9 @@ class GeminiService
             $this->resetCircuit();
             return $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
         } catch (\Exception $e) {
-            Log::error('GeminiService::analyzeMultipleImagesWithText exception', ['error' => $e->getMessage()]);
+            Log::error('GeminiService::analyzeMultipleImagesWithText exception, fallback to Groq multi-image', ['error' => $e->getMessage()]);
             $this->recordFailure();
-            $first = $images[0];
-            return $this->callGroqVision($first['data'], $first['mime_type'], $prompt);
+            return $this->callGroqVisionMulti($images, $prompt);
         }
     }
 
@@ -469,24 +465,41 @@ class GeminiService
      */
     private function callGroqVision(string $base64Image, string $mimeType, string $prompt): ?string
     {
-        if (empty($this->groqApiKey)) {
+        return $this->callGroqVisionMulti(
+            [['mime_type' => $mimeType, 'data' => $base64Image]],
+            $prompt
+        );
+    }
+
+    /**
+     * Groq vision multi-image fallback. OpenAI-compatible chat completion
+     * mendukung multiple 'image_url' content parts. Vision model di Groq
+     * mendukung beberapa image per request (terkadang dibatasi 5).
+     */
+    private function callGroqVisionMulti(array $images, string $prompt): ?string
+    {
+        if (empty($this->groqApiKey) || empty($images)) {
             return null;
         }
 
         try {
+            $content = [['type' => 'text', 'text' => $prompt]];
+            foreach ($images as $img) {
+                $mime = $img['mime_type'] ?? 'image/jpeg';
+                $b64  = $img['data'] ?? '';
+                if ($b64 === '') continue;
+                $content[] = ['type' => 'image_url', 'image_url' => [
+                    'url' => "data:{$mime};base64,{$b64}",
+                ]];
+            }
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $this->groqApiKey,
                 'Content-Type'  => 'application/json',
-            ])->timeout(30)->post($this->groqEndpoint, [
+            ])->timeout(45)->post($this->groqEndpoint, [
                 'model'    => $this->groqVisionModel,
                 'messages' => [[
                     'role'    => 'user',
-                    'content' => [
-                        ['type' => 'text', 'text' => $prompt],
-                        ['type' => 'image_url', 'image_url' => [
-                            'url' => "data:{$mimeType};base64,{$base64Image}",
-                        ]],
-                    ],
+                    'content' => $content,
                 ]],
                 'temperature' => 0.1,
                 'max_tokens'  => 2048,
