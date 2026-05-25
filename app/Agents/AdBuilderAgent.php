@@ -13,12 +13,16 @@ use App\Services\WhacenterService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class AdBuilderAgent
 {
     private const CACHE_TTL_MINUTES = 30;
     private const CACHE_PREFIX = 'ad_builder:';
     private const ACTIVE_INDEX_KEY = 'ad_builder:active_phones';
+    private const LOCK_PREFIX = 'ad_builder_lock:';
+    private const BATCH_DIR = 'adbuilder';
 
     public function __construct(
         private GeminiService $gemini,
@@ -77,6 +81,28 @@ class AdBuilderAgent
     {
         Cache::forget(self::CACHE_PREFIX . $phone);
         $this->unregisterActivePhone($phone);
+        $this->cleanupBatchFiles($phone);
+    }
+
+    /**
+     * Hapus folder media batch on-disk untuk phone tertentu. Dipanggil setelah
+     * batch sukses di-analyze, saat cancel, atau saat session di-clear.
+     */
+    private function cleanupBatchFiles(string $phone): void
+    {
+        try {
+            $dir = self::BATCH_DIR . '/' . $this->safePhone($phone);
+            if (Storage::disk('local')->exists($dir)) {
+                Storage::disk('local')->deleteDirectory($dir);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('AdBuilderAgent::cleanupBatchFiles failed', ['phone' => $phone, 'error' => $e->getMessage()]);
+        }
+    }
+
+    private function safePhone(string $phone): string
+    {
+        return preg_replace('/[^0-9]/', '', $phone) ?: 'unknown';
     }
 
     /**
@@ -170,7 +196,10 @@ class AdBuilderAgent
         $step = $state['step'] ?? 'waiting_input';
 
         if (in_array($step, ['waiting_input', 'collecting'], true)) {
-            return $this->addToCollectingBatch($phone, $mediaUrl, $mediaData, $caption, $state);
+            // Persist base64 ke disk DULU di luar lock — write file bisa lambat,
+            // jangan tahan lock selama itu. Hanya path + url + mime yang masuk cache.
+            [$mediaPath, $mediaMime] = $this->persistMediaToDisk($phone, $mediaUrl, $mediaData);
+            return $this->addToCollectingBatch($phone, $mediaUrl, $mediaPath, $mediaMime, $caption);
         }
 
         // step 'enriching' / 'reviewing' → user kirim foto tambahan setelah draft
@@ -345,23 +374,82 @@ class AdBuilderAgent
      * User kirim semua foto/video + deskripsi dulu, baru ketik "cukup" untuk
      * trigger analyze SEMUA sekaligus.
      */
-    private function addToCollectingBatch(string $phone, ?string $url, ?array $data, string $caption, array $state): string
+    /**
+     * Tulis media (base64 atau download URL) ke storage/app/adbuilder/{phone}/{uuid}.
+     * Return [relativePath|null, mime|null]. Tidak menahan lock — file I/O di luar
+     * critical section. Kalau gagal, batch entry tetap dibuat dengan path=null dan
+     * fallback ke URL saat analyze (URL WhaCenter bisa expired tapi worth a try).
+     */
+    private function persistMediaToDisk(string $phone, ?string $url, ?array $data): array
+    {
+        try {
+            $base64 = null;
+            $mime = null;
+            if ($data && !empty($data['data'])) {
+                $base64 = $data['data'];
+                $mime = $data['mimetype'] ?? 'image/jpeg';
+            } elseif ($url) {
+                $resp = Http::timeout(15)->get($url);
+                if ($resp->failed()) {
+                    return [null, null];
+                }
+                $base64 = base64_encode($resp->body());
+                $mime = $resp->header('Content-Type') ?: 'image/jpeg';
+            } else {
+                return [null, null];
+            }
+
+            $ext = match (true) {
+                str_contains($mime, 'png') => 'png',
+                str_contains($mime, 'webp') => 'webp',
+                str_contains($mime, 'gif') => 'gif',
+                str_contains($mime, 'mp4') => 'mp4',
+                str_contains($mime, 'video') => 'mp4',
+                default => 'jpg',
+            };
+            $rel = self::BATCH_DIR . '/' . $this->safePhone($phone) . '/' . Str::uuid()->toString() . '.' . $ext;
+            Storage::disk('local')->put($rel, base64_decode($base64));
+            return [$rel, $mime];
+        } catch (\Throwable $e) {
+            Log::warning('AdBuilderAgent::persistMediaToDisk failed', ['phone' => $phone, 'error' => $e->getMessage()]);
+            return [null, null];
+        }
+    }
+
+    private function addToCollectingBatch(string $phone, ?string $url, ?string $path, ?string $mime, string $caption): string
     {
         // Filter caption: buang kalimat instruksi meta (mis. 'saya mau buat iklan')
         // dan URL telanjang supaya tidak nempel sebagai 'caption produk'.
         $cleanCaption = $this->stripMetaInstructions($caption);
 
-        $batch = $state['batch'] ?? [];
-        $batch[] = ['url' => $url, 'data' => $data, 'caption' => $cleanCaption];
-
-        $state['step'] = 'collecting';
-        $state['batch'] = $batch;
-        if ($cleanCaption !== '' && empty($state['initial_caption'])) {
-            $state['initial_caption'] = $cleanCaption;
+        // ATOMIC read-modify-write — multiple WA image webhooks datang paralel
+        // saat user kirim foto burst. Tanpa lock, batch corrupt (counter 3→2→4).
+        $lock = Cache::lock(self::LOCK_PREFIX . $phone, 10);
+        $count = 0;
+        try {
+            $lock->block(5);
+            $state = Cache::get(self::CACHE_PREFIX . $phone, []);
+            $batch = $state['batch'] ?? [];
+            $batch[] = [
+                'url' => $url,
+                'path' => $path,
+                'mime' => $mime,
+                'caption' => $cleanCaption,
+            ];
+            $state['step'] = 'collecting';
+            $state['batch'] = $batch;
+            if ($cleanCaption !== '' && empty($state['initial_caption'])) {
+                $state['initial_caption'] = $cleanCaption;
+            }
+            $this->putState($phone, $state);
+            $count = count($batch);
+        } catch (\Illuminate\Contracts\Cache\LockTimeoutException) {
+            Log::warning('AdBuilderAgent::addToCollectingBatch lock timeout', ['phone' => $phone]);
+            return "📸 Foto diterima (sedang diproses). Kirim *cukup* kalau sudah selesai upload.";
+        } finally {
+            optional($lock)->release();
         }
-        $this->putState($phone, $state);
 
-        $count = count($batch);
         $captionLine = $cleanCaption !== ''
             ? "✏️ Caption tercatat: _\"" . mb_strimwidth($cleanCaption, 0, 80, '...') . "\"_\n\n"
             : '';
@@ -424,7 +512,20 @@ class AdBuilderAgent
         }
 
         if (preg_match('/^\s*(cukup|sudah|sudahin|analisa|analyze|proses|lanjut|next|ok|oke|sip|tidak\s*ada\s*lagi|tidak\s*ada|ga\s*ada|gak\s*ada|nggak\s*ada|tidak|gak|nggak|done|finish|selesai)\s*$/iu', $text)) {
-            return $this->processCollectedBatch($phone, $state);
+            // Re-read state freshly DI DALAM lock supaya tidak race dengan
+            // image webhook yang masih push batch. Caller mengirim state lama
+            // dari handler text, tapi foto mungkin baru masuk milidetik lalu.
+            $lock = Cache::lock(self::LOCK_PREFIX . $phone, 15);
+            $freshState = $state;
+            try {
+                $lock->block(5);
+                $freshState = Cache::get(self::CACHE_PREFIX . $phone, $state);
+            } catch (\Illuminate\Contracts\Cache\LockTimeoutException) {
+                Log::warning('AdBuilderAgent::handleCollecting cukup lock timeout', ['phone' => $phone]);
+            } finally {
+                optional($lock)->release();
+            }
+            return $this->processCollectedBatch($phone, $freshState);
         }
 
         // Append sebagai deskripsi tambahan (multiple entries digabung)
@@ -460,7 +561,12 @@ class AdBuilderAgent
         $failures = 0;
 
         foreach ($batch as $item) {
-            $draft = $this->analyzeSingleImageWithCaption($item['url'], $item['data'], $combinedCaption);
+            $draft = $this->analyzeSingleImageWithCaption(
+                $item['url'] ?? null,
+                $item['path'] ?? null,
+                $item['mime'] ?? null,
+                $combinedCaption
+            );
             if (!$draft || empty($draft['title'])) {
                 $failures++;
                 continue;
@@ -490,6 +596,13 @@ class AdBuilderAgent
         }
 
         if (!$merged) {
+            Log::warning('AdBuilderAgent::processCollectedBatch all failed', [
+                'phone' => $phone,
+                'batch_count' => $totalImg,
+                'failures' => $failures,
+                'has_path' => array_map(fn($i) => !empty($i['path']), $batch),
+                'has_url' => array_map(fn($i) => !empty($i['url']), $batch),
+            ]);
             return "❌ AI gagal menganalisa foto-foto Kakak. Coba ketik *batal* lalu mulai lagi dengan foto yang lebih jelas.";
         }
 
@@ -505,6 +618,11 @@ class AdBuilderAgent
         }
         $this->putState($phone, $newState);
 
+        // Batch sudah berhasil dianalisa & merged ke draft. File-file media di
+        // disk sudah tidak diperlukan lagi (media_urls dipegang via WhaCenter URL
+        // untuk posting). Bebaskan storage.
+        $this->cleanupBatchFiles($phone);
+
         $this->pushPreview($phone, $merged, $this->formatEnrichPrompt($merged));
 
         if ($failures > 0) {
@@ -517,20 +635,26 @@ class AdBuilderAgent
      * Helper: analyze 1 image dengan Gemini, return parsed draft array atau null.
      * Dipakai oleh processCollectedBatch.
      */
-    private function analyzeSingleImageWithCaption(?string $url, ?array $data, string $caption): ?array
+    private function analyzeSingleImageWithCaption(?string $url, ?string $path, ?string $mime, string $caption): ?array
     {
         try {
-            if ($data && !$url) {
-                $base64 = $data['data'];
-                $mimeType = $data['mimetype'] ?? 'image/jpeg';
+            $base64 = null;
+            $mimeType = $mime ?: 'image/jpeg';
+            // Prefer disk file — paling reliable (URL WhaCenter bisa expired).
+            if ($path && Storage::disk('local')->exists($path)) {
+                $base64 = base64_encode(Storage::disk('local')->get($path));
             } elseif ($url) {
-                $resp = \Illuminate\Support\Facades\Http::timeout(15)->get($url);
+                $resp = Http::timeout(15)->get($url);
                 if ($resp->failed()) {
+                    Log::warning('AdBuilderAgent::analyzeSingleImageWithCaption url fetch failed', [
+                        'url' => $url, 'status' => $resp->status(),
+                    ]);
                     return null;
                 }
                 $base64 = base64_encode($resp->body());
-                $mimeType = $resp->header('Content-Type') ?: 'image/jpeg';
+                $mimeType = $resp->header('Content-Type') ?: $mimeType;
             } else {
+                Log::warning('AdBuilderAgent::analyzeSingleImageWithCaption no path nor url');
                 return null;
             }
 
