@@ -358,15 +358,22 @@ class AdBuilderAgent
         $this->putState($phone, $state);
 
         $count = count($batch);
+        $captionLine = $caption !== ''
+            ? "✏️ Caption tercatat: _\"" . mb_strimwidth($caption, 0, 80, '...') . "\"_\n\n"
+            : '';
+
         if ($count === 1) {
-            return "📸 *Foto/video diterima!*\n\n"
-                . "Ada *foto/video lain* yang mau ditambahkan? Atau ada *deskripsi tambahan* (harga, lokasi, kontak, spek detail)?\n\n"
+            return "📸 *Foto/video diterima!*\n"
+                . $captionLine
+                . "Ada *foto/video lain*? Atau *info tambahan* (harga, lokasi, kontak, spek)?\n\n"
                 . "• Kirim foto/video lain → ditambahkan ke batch\n"
-                . "• Ketik deskripsi apa saja → ikut jadi konteks AI\n"
-                . "• Ketik *cukup* / *analisa* / *tidak ada lagi* → AI mulai buat draft dari semua data\n"
+                . "• Ketik info apa saja → ikut jadi konteks AI\n"
+                . "• Ketik *cukup* / *analisa* → AI mulai buat draft sekarang\n"
                 . "• Ketik *batal* → batalkan";
         }
-        return "📸 *{$count} foto/video terkumpul.* Kirim lagi atau ketik *cukup* untuk mulai AI analisa.";
+        return "📸 *{$count} foto/video terkumpul.*"
+            . ($caption !== '' ? "\n✏️ _Caption foto ini: \"" . mb_strimwidth($caption, 0, 60, '...') . "\"_" : '')
+            . "\n\nKirim lagi atau ketik *cukup* untuk mulai AI analisa.";
     }
 
     /**
