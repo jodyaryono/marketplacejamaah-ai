@@ -694,10 +694,26 @@ class AdBuilderAgent
                     . 'Jawab HANYA JSON: {"title":"...","description":"...","price":0,"price_label":"","price_type":"fix","category":"...","condition":"baru","location":"","notes":""}';
                 Log::warning('AdBuilderAgent: prompt_ad_builder_polish empty, using fallback');
             }
-            // Tambahan instruksi multi-image di akhir prompt
+            // Tambahan instruksi multi-image + ATURAN HARGA & TIPE HARGA yang KETAT.
+            // Ditambah selalu (bukan menggantikan setting) supaya prompt user-defined
+            // tetap dipakai sebagai kerangka utama, plus rule price normalisasi yang
+            // dulu sering keliru (mis. "Rp 975 ribu" diparse 975 rupiah, atau
+            // "/ bulan" tidak dideteksi sebagai langganan).
             $multiImageHint = "\n\nCATATAN: ada " . count($images) . " foto produk yang dilampirkan. "
-                . "Foto pertama adalah cover utama. Pertimbangkan info dari SEMUA foto saat membuat title, description, dan extract harga/spek/kondisi. "
-                . "Hasilkan SATU draft iklan terpadu, bukan beberapa.";
+                . "Foto pertama adalah cover utama. Pertimbangkan info dari SEMUA foto (cover, halaman pricing, halaman spesifikasi, dll) saat membuat title, description, dan extract harga/spek/kondisi. "
+                . "Hasilkan SATU draft iklan terpadu, bukan beberapa."
+                . "\n\nATURAN HARGA (WAJIB DIIKUTI):"
+                . "\n- price WAJIB angka bulat dalam RUPIAH PENUH. Jangan tulis 975 untuk maksud 975 ribu — tulis 975000."
+                . "\n- 'Rp 975', '975rb', '975 ribu', '975K', 'Rp975K' → price = 975000."
+                . "\n- '1,5 juta', '1.5jt', '1500K', 'Rp1.500.000' → price = 1500000."
+                . "\n- '25K' / '25rb' → price = 25000. '250rb' → 250000."
+                . "\n- Kalau harga tidak eksplisit di gambar/caption → price = 0, price_label = ''."
+                . "\n- price_label = string yang menampilkan harga formatted (mis. 'Rp 975.000 / bulan'), boleh dengan suffix '/bulan', '/tahun', dst sesuai konteks."
+                . "\n\nATURAN price_type (WAJIB DIIKUTI):"
+                . "\n- 'langganan' kalau ada indikasi BERLANGGANAN/RECURRING: kata kunci 'per bulan', '/bulan', 'monthly', 'tahunan', '/tahun', 'per tahun', 'subscription', 'langganan', 'mulai Rp X /bulan', 'starts from /month'."
+                . "\n- 'nego' kalau ada 'nego', 'negotiable', 'harga nego', 'hubungi penjual', 'PM/DM untuk harga'."
+                . "\n- 'lelang' kalau ada 'lelang', 'auction', 'bid'."
+                . "\n- 'fix' DEFAULT — hanya kalau benar2 harga tunggal sekali bayar dan tidak match di atas.";
             $prompt = str_replace(
                 ['{caption}', '{categories}'],
                 [$caption ?: 'tidak ada keterangan dari penjual', $categories],
@@ -711,11 +727,57 @@ class AdBuilderAgent
             $clean = preg_replace('/```json\s*/i', '', $result);
             $clean = preg_replace('/```\s*/i', '', $clean);
             $draft = json_decode(trim($clean), true);
-            return is_array($draft) ? $draft : null;
+            if (!is_array($draft)) {
+                return null;
+            }
+            return $this->normalizeDraftPrice($draft);
         } catch (\Throwable $e) {
             Log::warning('AdBuilderAgent::analyzeBatchImages failed', ['error' => $e->getMessage()]);
             return null;
         }
+    }
+
+    /**
+     * Safety net post-process untuk price & price_type. AI kadang masih salah
+     * meskipun prompt sudah explicit — di sini kita coba normalisasi
+     * deterministik berdasar price_label & description.
+     */
+    private function normalizeDraftPrice(array $draft): array
+    {
+        $label = (string) ($draft['price_label'] ?? '');
+        $desc  = (string) ($draft['description'] ?? '');
+        $combined = $label . ' ' . $desc;
+        $price = (int) ($draft['price'] ?? 0);
+
+        // (1) Auto-detect price_type langganan dari pola '/bulan' / '/tahun' / 'monthly'
+        $type = strtolower((string) ($draft['price_type'] ?? 'fix'));
+        if ($type === 'fix' || $type === '') {
+            if (preg_match('/(\/\s*(bulan|bln|tahun|thn|th|month|year)\b|per\s+(bulan|tahun|bln|thn|month|year)\b|monthly|yearly|subscription|langganan)/iu', $combined)) {
+                $draft['price_type'] = 'langganan';
+            } elseif (preg_match('/\b(nego|negotiable|hub(?:ungi)?\s+penjual|pm\s+harga|dm\s+harga)\b/iu', $combined)) {
+                $draft['price_type'] = 'nego';
+            } elseif (preg_match('/\b(lelang|auction|bid)\b/iu', $combined)) {
+                $draft['price_type'] = 'lelang';
+            }
+        }
+
+        // (2) Kalau price kelihatan terlalu kecil padahal label menyebut 'ribu/rb/K',
+        // koreksi dengan extract dari label.
+        if ($price > 0 && $price < 1000 && preg_match('/(\d[\d.,]*)\s*(rb|ribu|k)\b/iu', $label, $m)) {
+            $n = (int) preg_replace('/[^0-9]/', '', $m[1]);
+            if ($n > 0) {
+                $draft['price'] = $n * 1000;
+            }
+        }
+        // Sama untuk 'juta/jt'
+        if ((int) ($draft['price'] ?? 0) < 1000 && preg_match('/(\d[\d.,]*)\s*(jt|juta)\b/iu', $label, $m)) {
+            $n = (float) str_replace(',', '.', preg_replace('/[^\d,\.]/u', '', $m[1]));
+            if ($n > 0) {
+                $draft['price'] = (int) round($n * 1000000);
+            }
+        }
+
+        return $draft;
     }
 
     /**
