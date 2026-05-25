@@ -164,9 +164,18 @@ class AdBuilderAgent
             return '❌ Gagal menerima gambar. Silakan coba kirim ulang foto produkmu.';
         }
 
-        // Ack "Sedang menganalisa..." HANYA untuk foto pertama (belum ada draft).
-        // Foto kedua+ dalam batch: silent, hindari spam.
-        $hasExistingDraft = !empty(Cache::get(self::CACHE_PREFIX . $phone, [])['draft']['title'] ?? null);
+        // COLLECT-FIRST flow: jangan analyze langsung. Kumpulkan dulu, baru
+        // analyze SEMUA sekaligus saat user bilang "cukup" / "analisa".
+        $state = Cache::get(self::CACHE_PREFIX . $phone, []);
+        $step = $state['step'] ?? 'waiting_input';
+
+        if (in_array($step, ['waiting_input', 'collecting'], true)) {
+            return $this->addToCollectingBatch($phone, $mediaUrl, $mediaData, $caption, $state);
+        }
+
+        // step 'enriching' / 'reviewing' → user kirim foto tambahan setelah draft
+        // sudah ada. Tetap pakai pola lama (analyze + merge).
+        $hasExistingDraft = !empty($state['draft']['title'] ?? null);
         if (!$hasExistingDraft) {
             $this->whacenter->sendMessage($phone, '⏳ _Sedang menganalisa gambar dan menyiapkan draft iklan..._');
         }
@@ -331,6 +340,184 @@ class AdBuilderAgent
      * Handle text when user is in 'enriching' step (AI already has draft, waiting for extra info).
      * User can add price, description, or say "lanjut" to proceed to review.
      */
+    /**
+     * Push image ke batch koleksi (collecting step). Tidak analyze dulu.
+     * User kirim semua foto/video + deskripsi dulu, baru ketik "cukup" untuk
+     * trigger analyze SEMUA sekaligus.
+     */
+    private function addToCollectingBatch(string $phone, ?string $url, ?array $data, string $caption, array $state): string
+    {
+        $batch = $state['batch'] ?? [];
+        $batch[] = ['url' => $url, 'data' => $data, 'caption' => $caption];
+
+        $state['step'] = 'collecting';
+        $state['batch'] = $batch;
+        if ($caption !== '' && empty($state['initial_caption'])) {
+            $state['initial_caption'] = $caption;
+        }
+        $this->putState($phone, $state);
+
+        $count = count($batch);
+        if ($count === 1) {
+            return "📸 *Foto/video diterima!*\n\n"
+                . "Ada *foto/video lain* yang mau ditambahkan? Atau ada *deskripsi tambahan* (harga, lokasi, kontak, spek detail)?\n\n"
+                . "• Kirim foto/video lain → ditambahkan ke batch\n"
+                . "• Ketik deskripsi apa saja → ikut jadi konteks AI\n"
+                . "• Ketik *cukup* / *analisa* / *tidak ada lagi* → AI mulai buat draft dari semua data\n"
+                . "• Ketik *batal* → batalkan";
+        }
+        return "📸 *{$count} foto/video terkumpul.* Kirim lagi atau ketik *cukup* untuk mulai AI analisa.";
+    }
+
+    /**
+     * Handle text message saat step='collecting'.
+     * - cancel → batalkan
+     * - cukup/analisa/dst → trigger batch analyze
+     * - lainnya → append sebagai deskripsi tambahan
+     */
+    public function handleCollecting(string $phone, string $text, array $state): string
+    {
+        if ($this->isCancelCommand($text)) {
+            $this->cancelSession($phone);
+            return "❌ *Pembuatan iklan dibatalkan.*\n\nKetik *buat iklan* kapan saja untuk memulai lagi.";
+        }
+
+        if (preg_match('/^\s*(cukup|sudah|sudahin|analisa|analyze|proses|lanjut|next|ok|oke|sip|tidak\s*ada\s*lagi|tidak\s*ada|ga\s*ada|gak\s*ada|nggak\s*ada|tidak|gak|nggak|done|finish|selesai)\s*$/iu', $text)) {
+            return $this->processCollectedBatch($phone, $state);
+        }
+
+        // Append sebagai deskripsi tambahan (multiple entries digabung)
+        $extra = trim(($state['extra_caption'] ?? '') . "\n" . $text);
+        $state['extra_caption'] = $extra;
+        $this->putState($phone, $state);
+
+        $batchCount = count($state['batch'] ?? []);
+        return "✏️ Catatan tambahan disimpan ({$batchCount} foto/video terkumpul).\n\nKirim foto/video lagi, tambah deskripsi, atau ketik *cukup* untuk mulai AI analisa.";
+    }
+
+    /**
+     * Eksekusi batch analyze: loop semua foto, kirim ke Gemini bersama caption
+     * gabungan, merge hasil jadi 1 draft, masuk step=enriching, kirim preview.
+     */
+    private function processCollectedBatch(string $phone, array $state): string
+    {
+        $batch = $state['batch'] ?? [];
+        if (empty($batch)) {
+            return "⚠️ Belum ada foto/video. Kirim foto produk dulu ya.";
+        }
+
+        $totalImg = count($batch);
+        $this->whacenter->sendMessage($phone, "⏳ _Sedang menganalisa {$totalImg} foto + catatan dan menyiapkan draft iklan..._");
+
+        $combinedCaption = trim(
+            ($state['initial_caption'] ?? '')
+            . (!empty($state['extra_caption']) ? "\n\nInfo tambahan dari penjual: " . trim($state['extra_caption']) : '')
+        );
+
+        $merged = null;
+        $mediaUrls = [];
+        $failures = 0;
+
+        foreach ($batch as $item) {
+            $draft = $this->analyzeSingleImageWithCaption($item['url'], $item['data'], $combinedCaption);
+            if (!$draft || empty($draft['title'])) {
+                $failures++;
+                continue;
+            }
+            if (!empty($item['url'])) {
+                $mediaUrls[] = $item['url'];
+            }
+            if (!$merged) {
+                $merged = $draft;
+            } else {
+                foreach (['title','description','category','condition','location','notes','price_label','price_type'] as $k) {
+                    $newVal = trim((string) ($draft[$k] ?? ''));
+                    $oldVal = trim((string) ($merged[$k] ?? ''));
+                    if ($newVal !== '' && ($oldVal === '' || $oldVal === 'fix' || $oldVal === '-')) {
+                        $merged[$k] = $newVal;
+                    }
+                }
+                if ((empty($merged['price']) || $merged['price'] <= 0) && !empty($draft['price']) && $draft['price'] > 0) {
+                    $merged['price'] = $draft['price'];
+                }
+                $newDesc = trim((string) ($draft['description'] ?? ''));
+                $oldDesc = trim((string) ($merged['description'] ?? ''));
+                if ($newDesc !== '' && $oldDesc !== '' && stripos($oldDesc, mb_substr($newDesc, 0, 40)) === false) {
+                    $merged['description'] = $oldDesc . "\n\n" . $newDesc;
+                }
+            }
+        }
+
+        if (!$merged) {
+            return "❌ AI gagal menganalisa foto-foto Kakak. Coba ketik *batal* lalu mulai lagi dengan foto yang lebih jelas.";
+        }
+
+        $merged['media_urls'] = array_values(array_unique($mediaUrls));
+        $merged['media_url'] = $merged['media_urls'][0] ?? null;
+
+        $newState = ['step' => 'enriching', 'draft' => $merged];
+        if (!empty($state['on_behalf_pasmal'])) {
+            $newState['on_behalf_pasmal'] = true;
+        }
+        if (!empty($state['initial_caption']) && self::isOnBehalfPasmal($state['initial_caption'])) {
+            $newState['on_behalf_pasmal'] = true;
+        }
+        $this->putState($phone, $newState);
+
+        $this->pushPreview($phone, $merged, $this->formatEnrichPrompt($merged));
+
+        if ($failures > 0) {
+            return "ℹ️ {$failures} foto gagal dianalisa, draft tetap dibuat dari sisanya.";
+        }
+        return '';
+    }
+
+    /**
+     * Helper: analyze 1 image dengan Gemini, return parsed draft array atau null.
+     * Dipakai oleh processCollectedBatch.
+     */
+    private function analyzeSingleImageWithCaption(?string $url, ?array $data, string $caption): ?array
+    {
+        try {
+            if ($data && !$url) {
+                $base64 = $data['data'];
+                $mimeType = $data['mimetype'] ?? 'image/jpeg';
+            } elseif ($url) {
+                $resp = \Illuminate\Support\Facades\Http::timeout(15)->get($url);
+                if ($resp->failed()) {
+                    return null;
+                }
+                $base64 = base64_encode($resp->body());
+                $mimeType = $resp->header('Content-Type') ?: 'image/jpeg';
+            } else {
+                return null;
+            }
+
+            $categories = Category::where('is_active', true)->pluck('name')->implode(', ');
+            $promptTemplate = Setting::get('prompt_ad_builder_polish', '');
+            if ($promptTemplate === '') {
+                return null;
+            }
+            $prompt = str_replace(
+                ['{caption}', '{categories}'],
+                [$caption ?: 'tidak ada keterangan dari penjual', $categories],
+                $promptTemplate
+            );
+
+            $result = $this->gemini->analyzeImageWithText($base64, $mimeType, $prompt);
+            if (!$result) {
+                return null;
+            }
+            $clean = preg_replace('/```json\s*/i', '', $result);
+            $clean = preg_replace('/```\s*/i', '', $clean);
+            $draft = json_decode(trim($clean), true);
+            return is_array($draft) ? $draft : null;
+        } catch (\Throwable $e) {
+            Log::warning('AdBuilderAgent::analyzeSingleImageWithCaption failed', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
     /**
      * Re-show current draft preview. Dipanggil dari handleEnriching/handleReview
      * saat user ketik 'preview' / 'lihat' / 'tampilkan'.
