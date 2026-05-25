@@ -164,7 +164,12 @@ class AdBuilderAgent
             return '❌ Gagal menerima gambar. Silakan coba kirim ulang foto produkmu.';
         }
 
-        $this->whacenter->sendMessage($phone, '⏳ _Sedang menganalisa gambar dan menyiapkan draft iklan..._');
+        // Ack "Sedang menganalisa..." HANYA untuk foto pertama (belum ada draft).
+        // Foto kedua+ dalam batch: silent, hindari spam.
+        $hasExistingDraft = !empty(Cache::get(self::CACHE_PREFIX . $phone, [])['draft']['title'] ?? null);
+        if (!$hasExistingDraft) {
+            $this->whacenter->sendMessage($phone, '⏳ _Sedang menganalisa gambar dan menyiapkan draft iklan..._');
+        }
 
         try {
             if ($mediaData && !$mediaUrl) {
@@ -233,7 +238,7 @@ class AdBuilderAgent
                 // gagal di-analyze), jangan rusak draft yang ada. Cukup info silent.
                 $existing = Cache::get(self::CACHE_PREFIX . $phone, []);
                 if (!empty($existing['draft']['title'])) {
-                    return "⚠️ Foto tambahan gagal dianalisa, draft tetap pakai data sebelumnya. Ketik *preview* untuk lihat.";
+                    return "⚠️ Foto tambahan gagal dianalisa (draft aman).";
                 }
                 return '❌ AI gagal membuat draft iklan. Coba kirim foto yang lebih jelas, atau ketik *batal*.';
             }
@@ -289,19 +294,13 @@ class AdBuilderAgent
             $this->putState($phone, $newState);
 
             // Foto pertama → kirim preview penuh.
-            // Foto kedua+ → ack singkat saja, JANGAN spam preview (user bisa ketik
-            // *preview* / *lanjut* untuk lihat draft final setelah semua foto terkirim).
+            // Foto kedua+ → ack 1-baris saja, no sugesti spam.
             if ($isBatchFollowup) {
                 $count = count($draft['media_urls'] ?? []);
                 $priceInfo = !empty($draft['price']) && $draft['price'] > 0
-                    ? "💰 Harga terdeteksi: Rp " . number_format($draft['price'], 0, ',', '.')
+                    ? " — harga: Rp " . number_format($draft['price'], 0, ',', '.')
                     : '';
-                $reply = "✅ *Foto {$count} dicatat ke draft.*\n"
-                    . ($priceInfo ? $priceInfo . "\n" : '')
-                    . "\nKirim foto lagi kalau masih ada, atau ketik:\n"
-                    . "• *preview* → lihat draft saat ini\n"
-                    . "• *lanjut* → review & posting";
-                return $reply;
+                return "✅ Foto {$count} digabung ke draft{$priceInfo}.";
             }
 
             $this->pushPreview($phone, $draft, $this->formatEnrichPrompt($draft));
