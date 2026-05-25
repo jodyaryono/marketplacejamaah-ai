@@ -451,19 +451,20 @@ class AdBuilderAgent
         }
 
         // Foto PERTAMA: ack lengkap dengan instruksi + catatan bahwa foto ini
-        // jadi cover iklan. Foto kedua+: SILENT (return '') — sebelumnya tiap
-        // foto kirim "X foto terkumpul" yang bikin chat ramai & user bingung.
+        // jadi cover iklan.
         if ($count === 1) {
             $captionLine = $cleanCaption !== ''
                 ? "✏️ _Caption tercatat: \"" . mb_strimwidth($cleanCaption, 0, 80, '...') . "\"_\n"
                 : '';
-            return "📸 *Foto diterima — ini akan jadi cover iklan.*\n"
+            return "📸 *Foto ke-1 diterima — ini akan jadi cover iklan.*\n"
                 . $captionLine
                 . "\n"
                 . "Boleh kirim *foto/video lain* atau *info tambahan* (harga, lokasi, kontak, spek).\n\n"
                 . "Ketik *cukup* kalau sudah selesai upload, *batal* untuk membatalkan.";
         }
-        return '';
+        // Foto ke-2 dst: ack SINGKAT (1 baris) — user perlu konfirmasi tiap
+        // foto ke-capture, tapi jangan kirim teks panjang yang bikin chat ramai.
+        return "📸 Foto ke-{$count} diterima ✓";
     }
 
     /**
