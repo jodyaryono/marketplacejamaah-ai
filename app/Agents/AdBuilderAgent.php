@@ -536,8 +536,10 @@ class AdBuilderAgent
 
             $categories = Category::where('is_active', true)->pluck('name')->implode(', ');
             $promptTemplate = Setting::get('prompt_ad_builder_polish', '');
-            if ($promptTemplate === '') {
-                return null;
+            if (trim($promptTemplate) === '') {
+                // Fallback minimum supaya tidak gagal silent kalau setting kosong
+                $promptTemplate = 'Analisa foto + caption "{caption}". Buat draft iklan marketplace. Pertahankan URL produk & kontak, buang kalimat instruksi meta. Kategori tersedia: {categories}. Jawab JSON: {"title":"...","description":"...","price":0,"price_label":"","price_type":"fix","category":"...","condition":"baru","location":"","notes":""}';
+                Log::warning('AdBuilderAgent: prompt_ad_builder_polish empty, using fallback');
             }
             $prompt = str_replace(
                 ['{caption}', '{categories}'],
