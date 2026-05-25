@@ -482,6 +482,19 @@ class AdBuilderAgent
         $c = trim($caption);
         if ($c === '') return '';
 
+        // SELAMATKAN URL dan nomor HP SEBELUM strip — pattern di bawah pakai
+        // [^\n]* yang bisa melahap info penting yang nempel di kalimat meta.
+        // Contoh kasus: "saya mau buat iklan https://produk.com/abc" — sebelumnya
+        // URL ikut dibuang, AI lalu halu URL baru. Fix: kumpulkan URL & HP dulu,
+        // append ulang setelah strip.
+        $preserved = [];
+        if (preg_match_all('~https?://\S+~iu', $c, $m)) {
+            $preserved = array_merge($preserved, $m[0]);
+        }
+        if (preg_match_all('/\b(?:\+?62|0)8[1-9][0-9]{6,12}\b/u', $c, $m)) {
+            $preserved = array_merge($preserved, $m[0]);
+        }
+
         // Patterns kalimat meta-instruction
         $patterns = [
             '/\bsaya\s+mau\s+(buat|bikin|pasang|posting|post|tambah)\s+iklan\b[^\n]*/iu',
@@ -494,6 +507,15 @@ class AdBuilderAgent
             $c = preg_replace($p, '', $c);
         }
         $c = trim(preg_replace('/\s+/u', ' ', $c));
+
+        // Pastikan URL/HP yang sempat di-strip kembali ke caption (hanya kalau
+        // benar2 hilang — jangan duplikat kalau masih ada).
+        foreach ($preserved as $item) {
+            if (stripos($c, $item) === false) {
+                $c = trim($c . ' ' . $item);
+            }
+        }
+
         return $c;
     }
 
@@ -715,7 +737,12 @@ class AdBuilderAgent
                 . "\n- 'langganan' kalau ada indikasi BERLANGGANAN/RECURRING: kata kunci 'per bulan', '/bulan', 'monthly', 'tahunan', '/tahun', 'per tahun', 'subscription', 'langganan', 'mulai Rp X /bulan', 'starts from /month'."
                 . "\n- 'nego' kalau ada 'nego', 'negotiable', 'harga nego', 'hubungi penjual', 'PM/DM untuk harga'."
                 . "\n- 'lelang' kalau ada 'lelang', 'auction', 'bid'."
-                . "\n- 'fix' DEFAULT — hanya kalau benar2 harga tunggal sekali bayar dan tidak match di atas.";
+                . "\n- 'fix' DEFAULT — hanya kalau benar2 harga tunggal sekali bayar dan tidak match di atas."
+                . "\n\nATURAN URL & KONTAK (WAJIB):"
+                . "\n- HANYA pakai URL/link/nomor HP yang BENAR-BENAR terlihat di foto ATAU ada di caption penjual."
+                . "\n- JANGAN PERNAH menebak/menyusun/melengkapi URL sendiri. Kalau hanya tersirat brand 'USAHA KOPERASI' di foto, jangan tulis 'https://usaha.koperasi' — itu halusinasi."
+                . "\n- Kalau URL ada di caption (mis. 'https://produk.com/abc'), pertahankan PERSIS apa adanya di description."
+                . "\n- Kalau tidak ada URL nyata, jangan tulis URL di description.";
             $prompt = str_replace(
                 ['{caption}', '{categories}'],
                 [$caption ?: 'tidak ada keterangan dari penjual', $categories],
