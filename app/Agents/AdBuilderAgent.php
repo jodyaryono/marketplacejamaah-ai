@@ -556,7 +556,8 @@ class AdBuilderAgent
             // sebagai chat terpisah ketika job selesai.
             \App\Jobs\ProcessAdBuilderBatchJob::dispatch($phone);
 
-            return "⚡ *Sip, semua foto diterima!*\n\nAI sedang menyiapkan draft iklan. Bentar ya, drafnya akan menyusul di chat berikutnya...";
+            $extraNote = !empty($freshState['extra_caption']) ? "  + catatan tambahan" : '';
+            return "⚡ *Sip! {$batchCount} foto diterima{$extraNote}.*\n\nAI sedang menyiapkan draft iklan dari semua foto. Drafnya akan menyusul di chat berikutnya...";
         }
 
         // Append sebagai deskripsi tambahan (multiple entries digabung)
