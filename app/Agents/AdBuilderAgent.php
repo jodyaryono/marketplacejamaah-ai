@@ -511,8 +511,7 @@ class AdBuilderAgent
 
         if (preg_match('/^\s*(cukup|sudah|sudahin|analisa|analyze|proses|lanjut|next|ok|oke|sip|tidak\s*ada\s*lagi|tidak\s*ada|ga\s*ada|gak\s*ada|nggak\s*ada|tidak|gak|nggak|done|finish|selesai)\s*$/iu', $text)) {
             // Re-read state freshly DI DALAM lock supaya tidak race dengan
-            // image webhook yang masih push batch. Caller mengirim state lama
-            // dari handler text, tapi foto mungkin baru masuk milidetik lalu.
+            // image webhook yang masih push batch (foto bisa masuk milidetik lalu).
             $lock = Cache::lock(self::LOCK_PREFIX . $phone, 15);
             $freshState = $state;
             try {
@@ -523,7 +522,41 @@ class AdBuilderAgent
             } finally {
                 optional($lock)->release();
             }
-            return $this->processCollectedBatch($phone, $freshState);
+
+            $batchCount = count($freshState['batch'] ?? []);
+            if ($batchCount === 0) {
+                return "⚠️ Belum ada foto. Kirim foto produk dulu ya.";
+            }
+
+            // Tandai step=analyzing supaya handler text/image berikutnya tidak
+            // double-trigger analyze. Lock biar atomic dengan webhook lain.
+            $alreadyAnalyzing = false;
+            $lock = Cache::lock(self::LOCK_PREFIX . $phone, 10);
+            try {
+                $lock->block(5);
+                $s = Cache::get(self::CACHE_PREFIX . $phone, $freshState);
+                if (($s['step'] ?? '') === 'analyzing') {
+                    $alreadyAnalyzing = true;
+                } else {
+                    $s['step'] = 'analyzing';
+                    $this->putState($phone, $s);
+                }
+            } catch (\Illuminate\Contracts\Cache\LockTimeoutException) {
+                Log::warning('AdBuilderAgent::handleCollecting analyzing-flag lock timeout', ['phone' => $phone]);
+            } finally {
+                optional($lock)->release();
+            }
+
+            if ($alreadyAnalyzing) {
+                return "⏳ AI masih memproses foto-foto sebelumnya. Sebentar ya, drafnya menyusul...";
+            }
+
+            // Dispatch async job — analyze + preview dikerjakan di queue worker.
+            // Bot balas user INSTAN dengan ack di bawah, draft preview menyusul
+            // sebagai chat terpisah ketika job selesai.
+            \App\Jobs\ProcessAdBuilderBatchJob::dispatch($phone);
+
+            return "⚡ *Sip, semua foto diterima!*\n\nAI sedang menyiapkan draft iklan. Bentar ya, drafnya akan menyusul di chat berikutnya...";
         }
 
         // Append sebagai deskripsi tambahan (multiple entries digabung)
@@ -536,17 +569,18 @@ class AdBuilderAgent
     }
 
     /**
-     * Eksekusi batch analyze: loop semua foto, kirim ke Gemini bersama caption
-     * gabungan, merge hasil jadi 1 draft, masuk step=enriching, kirim preview.
+     * Eksekusi batch analyze SECARA SYNC (dipanggil oleh queue job).
+     * Memproses semua foto + caption → draft → preview. Tidak kirim ack di sini
+     * (ack instan sudah dikirim caller di main webhook thread sebelum dispatch).
      */
-    private function processCollectedBatch(string $phone, array $state): string
+    public function executeBatchAnalysis(string $phone): void
     {
+        $state = Cache::get(self::CACHE_PREFIX . $phone, []);
         $batch = $state['batch'] ?? [];
         if (empty($batch)) {
-            return "⚠️ Belum ada foto/video. Kirim foto produk dulu ya.";
+            $this->whacenter->sendMessage($phone, "⚠️ Belum ada foto. Kirim foto produk dulu ya.");
+            return;
         }
-
-        $this->whacenter->sendMessage($phone, "⚡ _Sebentar, AI sedang menganalisa..._");
 
         $combinedCaption = trim(
             ($state['initial_caption'] ?? '')
@@ -567,21 +601,23 @@ class AdBuilderAgent
         // lebih koheren karena AI lihat semua foto sekaligus.
         $images = $this->loadBatchImagesAsBase64($batch);
         if (empty($images)) {
-            Log::warning('AdBuilderAgent::processCollectedBatch no readable images', [
+            Log::warning('AdBuilderAgent::executeBatchAnalysis no readable images', [
                 'phone' => $phone,
                 'batch_count' => count($batch),
             ]);
-            return "❌ Foto-foto tidak bisa dibaca. Coba ketik *batal* lalu mulai lagi dengan foto yang lebih jelas.";
+            $this->whacenter->sendMessage($phone, "❌ Foto-foto tidak bisa dibaca. Ketik *batal* lalu mulai lagi dengan foto yang lebih jelas.");
+            return;
         }
 
         $merged = $this->analyzeBatchImages($images, $combinedCaption);
         if (!$merged || empty($merged['title'])) {
-            Log::warning('AdBuilderAgent::processCollectedBatch gemini multi-image failed', [
+            Log::warning('AdBuilderAgent::executeBatchAnalysis gemini multi-image failed', [
                 'phone' => $phone,
                 'batch_count' => count($batch),
                 'image_count' => count($images),
             ]);
-            return "❌ AI gagal menganalisa foto-foto Kakak. Coba ketik *batal* lalu mulai lagi dengan foto yang lebih jelas.";
+            $this->whacenter->sendMessage($phone, "❌ AI gagal menganalisa foto-foto Kakak. Ketik *batal* lalu mulai lagi dengan foto yang lebih jelas.");
+            return;
         }
         $failures = count($batch) - count($images);
 
@@ -597,17 +633,14 @@ class AdBuilderAgent
         }
         $this->putState($phone, $newState);
 
-        // Batch sudah berhasil dianalisa & merged ke draft. File-file media di
-        // disk sudah tidak diperlukan lagi (media_urls dipegang via WhaCenter URL
-        // untuk posting). Bebaskan storage.
+        // Cleanup file media di disk — sudah tidak diperlukan setelah merged.
         $this->cleanupBatchFiles($phone);
 
-        $this->pushPreview($phone, $merged, $this->formatEnrichPrompt($merged));
-
         if ($failures > 0) {
-            return "ℹ️ {$failures} foto gagal dianalisa, draft tetap dibuat dari sisanya.";
+            $this->whacenter->sendMessage($phone, "ℹ️ {$failures} foto gagal dianalisa, draft tetap dibuat dari sisanya.");
         }
-        return '';
+
+        $this->pushPreview($phone, $merged, $this->formatEnrichPrompt($merged));
     }
 
     /**
