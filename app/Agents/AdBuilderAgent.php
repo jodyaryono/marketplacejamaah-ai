@@ -347,19 +347,23 @@ class AdBuilderAgent
      */
     private function addToCollectingBatch(string $phone, ?string $url, ?array $data, string $caption, array $state): string
     {
+        // Filter caption: buang kalimat instruksi meta (mis. 'saya mau buat iklan')
+        // dan URL telanjang supaya tidak nempel sebagai 'caption produk'.
+        $cleanCaption = $this->stripMetaInstructions($caption);
+
         $batch = $state['batch'] ?? [];
-        $batch[] = ['url' => $url, 'data' => $data, 'caption' => $caption];
+        $batch[] = ['url' => $url, 'data' => $data, 'caption' => $cleanCaption];
 
         $state['step'] = 'collecting';
         $state['batch'] = $batch;
-        if ($caption !== '' && empty($state['initial_caption'])) {
-            $state['initial_caption'] = $caption;
+        if ($cleanCaption !== '' && empty($state['initial_caption'])) {
+            $state['initial_caption'] = $cleanCaption;
         }
         $this->putState($phone, $state);
 
         $count = count($batch);
-        $captionLine = $caption !== ''
-            ? "✏️ Caption tercatat: _\"" . mb_strimwidth($caption, 0, 80, '...') . "\"_\n\n"
+        $captionLine = $cleanCaption !== ''
+            ? "✏️ Caption tercatat: _\"" . mb_strimwidth($cleanCaption, 0, 80, '...') . "\"_\n\n"
             : '';
 
         if ($count === 1) {
@@ -372,8 +376,38 @@ class AdBuilderAgent
                 . "• Ketik *batal* → batalkan";
         }
         return "📸 *{$count} foto/video terkumpul.*"
-            . ($caption !== '' ? "\n✏️ _Caption foto ini: \"" . mb_strimwidth($caption, 0, 60, '...') . "\"_" : '')
+            . ($cleanCaption !== '' ? "\n✏️ _Caption foto ini: \"" . mb_strimwidth($cleanCaption, 0, 60, '...') . "\"_" : '')
             . "\n\nKirim lagi atau ketik *cukup* untuk mulai AI analisa.";
+    }
+
+    /**
+     * Buang kalimat instruksi meta dari caption supaya tidak salah dianggap
+     * info produk. Contoh yang dibuang:
+     *   "saya mau buat iklan https://..."  → ""
+     *   "tolong buatin iklan dari foto ini" → ""
+     *   "buatkan redaksional menarik"      → ""
+     *   "bikin iklan ya"                   → ""
+     * URL valid berdiri sendiri TANPA kalimat meta tetap dipertahankan sebagai
+     * info link produk.
+     */
+    private function stripMetaInstructions(string $caption): string
+    {
+        $c = trim($caption);
+        if ($c === '') return '';
+
+        // Patterns kalimat meta-instruction
+        $patterns = [
+            '/\bsaya\s+mau\s+(buat|bikin|pasang|posting|post|tambah)\s+iklan\b[^\n]*/iu',
+            '/\b(tolong|mohon|please|plz)\s+(buat|bikin|pasang|buatin|bikinin)\s+(iklan|redaksional|copy|deskripsi)\b[^\n]*/iu',
+            '/\b(buat|bikin|buatin|bikinin)\s+(iklan|redaksional|copy|deskripsi)\s+(dari|untuk|nya)?\b[^\n]*/iu',
+            '/\bsaya\s+mau\s+jualan\s+via\s+bot\b[^\n]*/iu',
+            '/\bcoba\s+(buat|bikin)\s+iklan\b[^\n]*/iu',
+        ];
+        foreach ($patterns as $p) {
+            $c = preg_replace($p, '', $c);
+        }
+        $c = trim(preg_replace('/\s+/u', ' ', $c));
+        return $c;
     }
 
     /**
