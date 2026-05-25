@@ -294,7 +294,7 @@ class AdBuilderAgent
 
             if ($isBatchFollowup) {
                 $merged = $existingDraft;
-                foreach (['title','description','category','condition','location','notes','price_label','price_type'] as $k) {
+                foreach (['title','description','category','condition','location','notes','price_label','price_type','product_url'] as $k) {
                     $newVal = trim((string) ($draft[$k] ?? ''));
                     $oldVal = trim((string) ($merged[$k] ?? ''));
                     if ($newVal !== '' && ($oldVal === '' || $oldVal === 'fix' || $oldVal === '-')) {
@@ -741,8 +741,11 @@ class AdBuilderAgent
                 . "\n\nATURAN URL & KONTAK (WAJIB):"
                 . "\n- HANYA pakai URL/link/nomor HP yang BENAR-BENAR terlihat di foto ATAU ada di caption penjual."
                 . "\n- JANGAN PERNAH menebak/menyusun/melengkapi URL sendiri. Kalau hanya tersirat brand 'USAHA KOPERASI' di foto, jangan tulis 'https://usaha.koperasi' — itu halusinasi."
-                . "\n- Kalau URL ada di caption (mis. 'https://produk.com/abc'), pertahankan PERSIS apa adanya di description."
-                . "\n- Kalau tidak ada URL nyata, jangan tulis URL di description.";
+                . "\n- Kalau URL ada di caption (mis. 'https://produk.com/abc'), pertahankan PERSIS apa adanya."
+                . "\n- URL TIDAK BOLEH dimasukkan ke field 'notes' atau 'description' lagi. Sediakan field tersendiri:"
+                . "\n  field 'product_url' (string) = URL utama produk apa adanya, ATAU '' kalau tidak ada."
+                . "\n- 'notes' khusus untuk catatan/saran AI (mis. 'kontak penjual belum tercantum'), bukan tempat link."
+                . "\n\nTambahkan field 'product_url' ke JSON jawaban kamu (boleh string kosong).";
             $prompt = str_replace(
                 ['{caption}', '{categories}'],
                 [$caption ?: 'tidak ada keterangan dari penjual', $categories],
@@ -767,12 +770,39 @@ class AdBuilderAgent
     }
 
     /**
-     * Safety net post-process untuk price & price_type. AI kadang masih salah
-     * meskipun prompt sudah explicit — di sini kita coba normalisasi
-     * deterministik berdasar price_label & description.
+     * Safety net post-process: extract URL ke field tersendiri, normalisasi
+     * price & price_type. AI kadang masih salah meskipun prompt explicit.
      */
     private function normalizeDraftPrice(array $draft): array
     {
+        // (0) Extract product_url dari notes/description/caption kalau AI masih
+        // taruh di tempat salah. Prioritas: product_url yang sudah ada → notes
+        // → description.
+        $urlCandidates = [];
+        foreach (['product_url', 'notes', 'description', 'caption'] as $f) {
+            $v = (string) ($draft[$f] ?? '');
+            if ($v === '') continue;
+            if (preg_match_all('~https?://\S+~iu', $v, $m)) {
+                foreach ($m[0] as $u) {
+                    $urlCandidates[] = ['url' => rtrim($u, ".,;)]\"'"), 'field' => $f];
+                }
+            }
+        }
+        if (!empty($urlCandidates)) {
+            $draft['product_url'] = $urlCandidates[0]['url'];
+            // Strip URL dari notes kalau notes-nya literally HANYA URL itu.
+            foreach (['notes', 'description'] as $f) {
+                if (!empty($draft[$f])) {
+                    $stripped = trim(preg_replace('~\s*https?://\S+\s*~iu', ' ', $draft[$f]));
+                    // Hanya replace kalau hasil masih ada teks bermakna,
+                    // jangan kosongkan description berisi info penting.
+                    if ($f === 'notes' && (strlen($stripped) < 5 || $stripped === '')) {
+                        $draft[$f] = '';
+                    }
+                }
+            }
+        }
+
         $label = (string) ($draft['price_label'] ?? '');
         $desc  = (string) ($draft['description'] ?? '');
         $combined = $label . ' ' . $desc;
@@ -1122,8 +1152,11 @@ class AdBuilderAgent
         $lines[] = "💰 Harga: " . ($priceStr ?: '_belum terdeteksi_');
         $lines[] = "🔖 Kondisi: " . ($draft['condition'] ?? '-');
 
+        if (!empty($draft['product_url'])) {
+            $lines[] = "🔗 URL: {$draft['product_url']}";
+        }
         if (!empty($draft['notes'])) {
-            $lines[] = "\n💬 _AI: {$draft['notes']}_";
+            $lines[] = "\n💬 _Catatan AI: {$draft['notes']}_";
         }
 
         $lines[] = "\n───────────────";
@@ -1215,6 +1248,7 @@ class AdBuilderAgent
         };
 
         $locLine = !empty($draft['location']) ? "\n📍 *Lokasi:* {$draft['location']}" : '';
+        $urlLine = !empty($draft['product_url']) ? "\n🔗 *URL:* {$draft['product_url']}" : '';
         $notesLine = !empty($draft['notes']) ? "\n\n💬 _Catatan AI: {$draft['notes']}_" : '';
         $hasImage = '';
         $onBehalfLine = $onBehalfPasmal ? "\n📋 *Atas nama:* Pasmal" : '';
@@ -1227,6 +1261,7 @@ class AdBuilderAgent
             . "📂 *Kategori:* " . ($draft['category'] ?? '-') . "\n"
             . "🔖 *Kondisi:* {$condition}"
             . $locLine
+            . $urlLine
             . $onBehalfLine
             . $hasImage
             . $notesLine
@@ -1280,6 +1315,13 @@ class AdBuilderAgent
             default                                   => 'unknown',
         };
 
+        // Append product_url ke description kalau ada (model Listing tidak punya
+        // kolom URL terpisah). Jangan duplikat kalau URL sudah ada di description.
+        $description = (string) ($draft['description'] ?? '');
+        if (!empty($draft['product_url']) && stripos($description, $draft['product_url']) === false) {
+            $description = trim($description) . "\n\n🔗 {$draft['product_url']}";
+        }
+
         // Create listing record — attach $message so BroadcastAgent can resolve group via listing->message->group fallback
         $listing = Listing::create([
             'message_id' => $message->id,
@@ -1287,7 +1329,7 @@ class AdBuilderAgent
             'category_id' => $category?->id,
             'contact_id' => $contact?->id,
             'title' => $draft['title'],
-            'description' => $draft['description'],
+            'description' => $description,
             'price' => $priceNumeric,
             'price_label' => $draft['price_label'] ?? null,
             'price_type' => $draft['price_type'] ?? 'fix',
