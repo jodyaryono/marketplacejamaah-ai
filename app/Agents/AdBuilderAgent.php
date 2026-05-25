@@ -229,6 +229,12 @@ class AdBuilderAgent
 
             if (!$draft || empty($draft['title'])) {
                 Log::warning('AdBuilderAgent: invalid JSON from Gemini', ['raw' => $result]);
+                // Kalau sudah ada draft sebelumnya (mis. foto kedua dalam batch yang
+                // gagal di-analyze), jangan rusak draft yang ada. Cukup info silent.
+                $existing = Cache::get(self::CACHE_PREFIX . $phone, []);
+                if (!empty($existing['draft']['title'])) {
+                    return "⚠️ Foto tambahan gagal dianalisa, draft tetap pakai data sebelumnya. Ketik *preview* untuk lihat.";
+                }
                 return '❌ AI gagal membuat draft iklan. Coba kirim foto yang lebih jelas, atau ketik *batal*.';
             }
 
@@ -239,12 +245,12 @@ class AdBuilderAgent
 
             // MULTI-IMAGE MERGE: kalau sudah ada draft (user kirim foto kedua/ketiga
             // dalam 1 batch ad — mis. banner + pricing page + spec), gabungkan info
-            // baru ke draft lama daripada overwrite. Foto kemudian biasanya membawa
-            // info pelengkap (harga, spec, dll) yang harus ditambah, bukan ganti.
+            // baru ke draft lama daripada overwrite.
             $existingDraft = $currentState['draft'] ?? null;
-            if ($existingDraft && !empty($existingDraft['title'])) {
+            $isBatchFollowup = $existingDraft && !empty($existingDraft['title']);
+
+            if ($isBatchFollowup) {
                 $merged = $existingDraft;
-                // Field non-empty dari analisa baru menang HANYA kalau field lama kosong/default.
                 foreach (['title','description','category','condition','location','notes','price_label','price_type'] as $k) {
                     $newVal = trim((string) ($draft[$k] ?? ''));
                     $oldVal = trim((string) ($merged[$k] ?? ''));
@@ -252,37 +258,51 @@ class AdBuilderAgent
                         $merged[$k] = $newVal;
                     }
                 }
-                // Price numeric: kalau lama 0/null dan baru > 0, ambil baru.
                 if ((empty($merged['price']) || $merged['price'] <= 0) && !empty($draft['price']) && $draft['price'] > 0) {
                     $merged['price'] = $draft['price'];
                 }
-                // Description: kalau berbeda dan baru bawa info pricing, append (tidak duplikat).
                 $newDesc = trim((string) ($draft['description'] ?? ''));
                 $oldDesc = trim((string) ($merged['description'] ?? ''));
                 if ($newDesc !== '' && $oldDesc !== '' && stripos($oldDesc, mb_substr($newDesc, 0, 40)) === false) {
                     $merged['description'] = $oldDesc . "\n\n" . $newDesc;
                 }
-                // Media: kumpulkan semua URL gambar ke array media_urls
                 $mediaUrls = $merged['media_urls'] ?? (isset($merged['media_url']) && $merged['media_url'] ? [$merged['media_url']] : []);
                 if ($mediaUrl && !in_array($mediaUrl, $mediaUrls, true)) {
                     $mediaUrls[] = $mediaUrl;
                 }
                 $merged['media_urls'] = $mediaUrls;
-                $merged['media_url'] = $mediaUrls[0] ?? $mediaUrl;  // primary stays first
+                $merged['media_url'] = $mediaUrls[0] ?? $mediaUrl;
                 $draft = $merged;
+            } else {
+                // First image — init media_urls dari single media
+                $draft['media_urls'] = $mediaUrl ? [$mediaUrl] : [];
             }
 
             $newState = ['step' => 'enriching', 'draft' => $draft];
             if (!empty($currentState['on_behalf_pasmal'])) {
                 $newState['on_behalf_pasmal'] = true;
             }
-            // Also detect "on behalf pasmal" in the photo caption
             if (!empty($caption) && self::isOnBehalfPasmal($caption)) {
                 $newState['on_behalf_pasmal'] = true;
             }
 
-            // Save draft and go to 'enriching' step — ask for extra details before finalizing
             $this->putState($phone, $newState);
+
+            // Foto pertama → kirim preview penuh.
+            // Foto kedua+ → ack singkat saja, JANGAN spam preview (user bisa ketik
+            // *preview* / *lanjut* untuk lihat draft final setelah semua foto terkirim).
+            if ($isBatchFollowup) {
+                $count = count($draft['media_urls'] ?? []);
+                $priceInfo = !empty($draft['price']) && $draft['price'] > 0
+                    ? "💰 Harga terdeteksi: Rp " . number_format($draft['price'], 0, ',', '.')
+                    : '';
+                $reply = "✅ *Foto {$count} dicatat ke draft.*\n"
+                    . ($priceInfo ? $priceInfo . "\n" : '')
+                    . "\nKirim foto lagi kalau masih ada, atau ketik:\n"
+                    . "• *preview* → lihat draft saat ini\n"
+                    . "• *lanjut* → review & posting";
+                return $reply;
+            }
 
             $this->pushPreview($phone, $draft, $this->formatEnrichPrompt($draft));
             return '';
@@ -312,6 +332,20 @@ class AdBuilderAgent
      * Handle text when user is in 'enriching' step (AI already has draft, waiting for extra info).
      * User can add price, description, or say "lanjut" to proceed to review.
      */
+    /**
+     * Re-show current draft preview. Dipanggil dari handleEnriching/handleReview
+     * saat user ketik 'preview' / 'lihat' / 'tampilkan'.
+     */
+    private function showCurrentPreview(string $phone, array $state): string
+    {
+        $draft = $state['draft'] ?? null;
+        if (!$draft || empty($draft['title'])) {
+            return '⚠️ Draft belum ada. Kirim foto produk dulu ya.';
+        }
+        $this->pushPreview($phone, $draft, $this->formatDraftPreview($draft, !empty($state['on_behalf_pasmal'])));
+        return '';
+    }
+
     public function handleEnriching(string $phone, string $text, array $state): string
     {
         $draft = $state['draft'] ?? [];
@@ -332,6 +366,11 @@ class AdBuilderAgent
         if ($this->isShowImageRequest($text)) {
             $this->pushPreview($phone, $draft, $this->formatEnrichPrompt($draft));
             return '';
+        }
+
+        // "preview" / "lihat" / "tampilkan" → re-send full preview
+        if (preg_match('/^\s*(preview|lihat|liat|tampilkan|tampilin|cek|show)\s*$/iu', $text)) {
+            return $this->showCurrentPreview($phone, $state);
         }
 
         // "lanjut", "skip", "tidak ada", "sudah ok" → proceed to review as-is
@@ -413,6 +452,11 @@ class AdBuilderAgent
         if ($this->isShowImageRequest($text)) {
             $this->pushPreview($phone, $draft, $this->formatDraftPreview($draft, $onBehalfPasmal));
             return '';
+        }
+
+        // "preview" / "lihat" / "tampilkan" → re-send full preview
+        if (preg_match('/^\s*(preview|lihat|liat|tampilkan|tampilin|cek|show)\s*$/iu', $text)) {
+            return $this->showCurrentPreview($phone, $state);
         }
 
         // Detect "on behalf pasmal" at review step
